@@ -33,6 +33,18 @@ const PORT = parseInt(process.env.PORT, 10) || 3000;
 const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
 const ROOM_TTL = 5 * 60 * 1000; // 房间内全员离线后保留时长，超时回收
 
+// ===================== 安全加固配置 =====================
+const MAX_ROOMS = 2;                 // 全服最多同时存在的房间数
+const MAX_PLAYERS_PER_ROOM = 4;      // 单房间最多人数
+const MAX_WS_PAYLOAD = 4096;         // 单条 WebSocket 消息最大字节数
+const RATE_LIMIT = 20;               // 每连接每秒最多消息条数
+const RATE_BURST = 40;               // 令牌桶初始容量（允许短时突发）
+const MAX_CONNECTIONS = 16;          // 全服最多同时挂着的 WebSocket 连接
+// 房间码字母表须与 public/net.js 完全一致：5 位，去掉易混的 I/O/0/1
+const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
+// 允许的浏览器来源（本地调试放行 localhost / 无 Origin 的非浏览器客户端）
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://g24-vs.onrender.com';
+
 /** roomCode -> room */
 const rooms = new Map();
 
@@ -146,18 +158,27 @@ function serveStatic(req, res) {
   const rel = path.normalize(urlPath).replace(/^(\.\.[\/\\])+/, '').replace(/^[\/\\]+/, '');
   const filePath = path.join(PUBLIC_DIR, rel);
   if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.writeHead(403, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff'
+    });
     res.end('Forbidden');
     return;
   }
   fs.readFile(filePath, function (err, data) {
     if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Content-Type-Options': 'nosniff'
+      });
       res.end('404 Not Found');
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff'
+    });
     res.end(data);
   });
 }
@@ -173,36 +194,88 @@ const server = http.createServer(function (req, res) {
 });
 
 // ===================== WebSocket =====================
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, maxPayload: MAX_WS_PAYLOAD });
 
-wss.on('connection', function (ws) {
+let liveConnections = 0;
+
+wss.on('connection', function (ws, req) {
+  // ---- 全服连接数上限：防连接洪泛 ----
+  if (liveConnections >= MAX_CONNECTIONS) {
+    ws.close(1013, 'too many connections');
+    return;
+  }
+  liveConnections++;
+
+  // ---- Origin 校验：只允许本站与本地调试（CSWSH 防护）----
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    const ok = origin === ALLOWED_ORIGIN ||
+               /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (!ok) { ws.close(1008, 'origin not allowed'); liveConnections--; return; }
+  }
+
+  // ---- 每连接速率限制（令牌桶）----
+  let tokens = RATE_BURST;
+  let lastRefill = Date.now();
+
   let player = null; // 该连接归属的玩家对象（join 后赋值）
 
   ws.on('message', function (data) {
+    const now = Date.now();
+    tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
+    lastRefill = now;
+    if (tokens < 1) { ws.close(1008, 'rate limit'); return; }
+    tokens -= 1;
+
     let m;
     try { m = JSON.parse(data.toString()); } catch (e) { return; }
     if (!m || typeof m.t !== 'string') return;
 
     if (m.t === 'join') {
+      // ---- 入参校验：格式不对直接丢弃，不给攻击者撑大内存的机会 ----
+      if (player) return; // 已加入过，忽略重复 join
       const code = String(m.room || '').toUpperCase();
-      if (!code) return;
+      if (!ROOM_CODE_RE.test(code)) return;
+      const cid = typeof m.cid === 'string' ? m.cid.slice(0, 32) : '';
+      if (!cid || cid.length < 4) return;
+      const nick = typeof m.nick === 'string' && m.nick.trim()
+        ? m.nick.trim().slice(0, 16) : '玩家';
+
+      const existing = rooms.get(code);
+      // ---- 全服房间数上限 ----
+      if (!existing && rooms.size >= MAX_ROOMS) {
+        send(ws, { t: 'err', msg: '服务器房间已满，请稍后再试' });
+        return;
+      }
       const room = getRoom(code);
-      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
-      let p = room.players.get(m.cid);
-      if (!p) {
+
+      let p = room.players.get(cid);
+      if (p) {
+        // ---- 防座位劫持：同 cid 已在线时拒绝新连接接管 ----
+        if (p.online && p.ws && p.ws !== ws) {
+          send(ws, { t: 'err', msg: '该身份已在线，请勿重复加入' });
+          return;
+        }
+        p.ws = ws;
+        p.nick = nick;
+        p.online = true;
+        p._room = room;
+      } else {
+        // ---- 单房间人数上限 ----
+        if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
+          send(ws, { t: 'err', msg: '该房间人数已满（最多' + MAX_PLAYERS_PER_ROOM + '人）' });
+          if (room.players.size === 0) rooms.delete(code); // 容错：空房间不占额度
+          return;
+        }
         p = {
-          cid: m.cid, nick: m.nick || '玩家', ws: ws, ready: false, online: true,
+          cid: cid, nick: nick, ws: ws, ready: false, online: true,
           prog: 0, done: false, finalMs: null, actualMs: null,
           correct: 0, wrong: 0, skip: 0, _room: room
         };
-        room.players.set(m.cid, p);
-        if (!room.hostCid) room.hostCid = m.cid;
-      } else {
-        p.ws = ws;
-        p.nick = m.nick || p.nick;
-        p.online = true;
-        p._room = room;
+        room.players.set(cid, p);
+        if (!room.hostCid) room.hostCid = cid;
       }
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
       player = p;
       broadcastState(room);
       return;
@@ -255,6 +328,7 @@ wss.on('connection', function (ws) {
   });
 
   ws.on('close', function () {
+    liveConnections--;
     if (!player) return;
     player.online = false;
     player.ws = null;

@@ -55,15 +55,15 @@ function ok(name) { passed++; console.log('  PASS  ' + name); }
   await A.open(); await B.open();
   console.log('connected A & B');
 
-  A.send({ t: 'join', room: 'TEST', nick: '小红', cid: 'A1' });
-  B.send({ t: 'join', room: 'TEST', nick: '小蓝', cid: 'B1' });
+  A.send({ t: 'join', room: 'TESTT', nick: '小红', cid: 'CID-A1' });
+  B.send({ t: 'join', room: 'TESTT', nick: '小蓝', cid: 'CID-B1' });
 
   // 1) 互见 + 房主
   const aState = await A.waitFor(function (m) {
-    return m.t === 'state' && m.players && m.players.length === 2 && m.host === 'A1';
+    return m.t === 'state' && m.players && m.players.length === 2 && m.host === 'CID-A1';
   });
   ok('双方互见、房主=A1');
-  if (!findP(aState, 'B1')) throw new Error('A 看不到 B1');
+  if (!findP(aState, 'CID-B1')) throw new Error('A 看不到 B1');
 
   // 2) 开始同步
   A.send({ t: 'start' });
@@ -74,7 +74,7 @@ function ok(name) { passed++; console.log('  PASS  ' + name); }
   // 3) A 答 1 题，B 实时看到 A 进度=1
   A.send({ t: 'prog', i: 0, ok: true, ms: 1200 });
   const bSeeA = await B.waitFor(function (m) {
-    const p = findP(m, 'A1'); return m.t === 'state' && p && p.prog === 1;
+    const p = findP(m, 'CID-A1'); return m.t === 'state' && p && p.prog === 1;
   });
   ok('A 答 1 题 → B 实时看到 A 进度=1');
 
@@ -82,15 +82,15 @@ function ok(name) { passed++; console.log('  PASS  ' + name); }
   B.send({ t: 'prog', i: 0, ok: true, ms: 1500 });
   B.send({ t: 'prog', i: 1, ok: true, ms: 3200 });
   const aSeeB = await A.waitFor(function (m) {
-    const p = findP(m, 'B1'); return m.t === 'state' && p && p.prog === 2;
+    const p = findP(m, 'CID-B1'); return m.t === 'state' && p && p.prog === 2;
   });
   ok('B 答 2 题 → A 实时看到 B 进度=2');
 
   // 5) A 完成
   A.send({ t: 'done', finalMs: 42000, actualMs: 40000, correct: 10, wrong: 0, skip: 0 });
   const bothSeeADone = await Promise.all([
-    A.waitFor(function (m) { const p = findP(m, 'A1'); return p && p.done; }),
-    B.waitFor(function (m) { const p = findP(m, 'A1'); return p && p.done; })
+    A.waitFor(function (m) { const p = findP(m, 'CID-A1'); return p && p.done; }),
+    B.waitFor(function (m) { const p = findP(m, 'CID-A1'); return p && p.done; })
   ]);
   ok('A 完成 → 双方看到 A.done');
 
