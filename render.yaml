@@ -1,0 +1,17 @@
+# Render 一键部署配置（一体化：前端静态托管 + WebSocket 联机中转 + 健康检查）
+# 用法：
+#   1. 把整个 server/ 目录（含 public/、server.js、package.json、本文件）作为一个 Git 仓库推到 GitHub。
+#   2. Render 控制台 → New → Blueprint → 连接该仓库 → 自动按此配置部署（Free 层，无需信用卡）。
+#   3. 部署完成后拿到 https://xxx.onrender.com，直接打开即玩，前端与中转同域、联机零配置。
+services:
+  - type: web
+    name: g24-vs
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "3000"

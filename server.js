@@ -1,0 +1,274 @@
+'use strict';
+/*
+ * server.js —— 24点大挑战·联机对战 WebSocket 中转服务器
+ *
+ * 作用：只做「房间内消息中转」，不存题、不算答案、不托管游戏前端。
+ *   - 房间码就是随机种子（见 html/net.js），双方题目天然一致、确定性可复现，
+ *     因此服务器无需下发题目，只负责把「进度 / 完成情况 / 开局」广播给同房间的其他人。
+ *   - 这样服务器极轻量：单文件、无数据库、任意支持 WebSocket 的 Node 平台（Render / Railway /
+ *     Fly / 本地）都能跑。
+ *
+ * 协议（JSON，UTF-8）
+ *   客户端 → 服务端：
+ *     {t:'join', room, nick, cid}        // 加入房间（cid 为客户端持久唯一 id）
+ *     {t:'ready', v:true|false}
+ *     {t:'start'}                        // 仅房主有效：开始本局
+ *     {t:'prog', i, ok, ms}              // 第 i 题完成（0 基），ok=是否答对（仅用于统计，不中转对错）
+ *     {t:'done', finalMs, actualMs, correct, wrong, skip}
+ *     {t:'again'}                        // 再来一局（房主有效，round+1 换题但双方一致）
+ *     {t:'ping'}
+ *   服务端 → 客户端：
+ *     {t:'state', round, phase, host, players:[{cid,nick,ready,online,prog,done,finalMs,actualMs,correct,wrong,skip}]}
+ *     {t:'start', round, at}             // at=服务器时间戳(ms)，客户端据此倒计时同步开局
+ *     {t:'pong'}
+ *     {t:'err', msg}
+ */
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const WebSocket = require('ws');
+
+const PORT = parseInt(process.env.PORT, 10) || 3000;
+const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
+const ROOM_TTL = 5 * 60 * 1000; // 房间内全员离线后保留时长，超时回收
+
+/** roomCode -> room */
+const rooms = new Map();
+
+function getRoom(code) {
+  let r = rooms.get(code);
+  if (!r) {
+    r = {
+      code: code,
+      round: 1,
+      phase: 'lobby',        // lobby | playing | done
+      hostCid: null,
+      players: new Map(),    // cid -> player
+      _gc: null
+    };
+    rooms.set(code, r);
+  }
+  return r;
+}
+
+function resetProgress(room) {
+  room.players.forEach(function (p) {
+    p.prog = 0;
+    p.done = false;
+    p.finalMs = null;
+    p.actualMs = null;
+    p.correct = 0;
+    p.wrong = 0;
+    p.skip = 0;
+  });
+}
+
+function playerList(room) {
+  return Array.from(room.players.values()).map(function (p) {
+    return {
+      cid: p.cid, nick: p.nick, ready: p.ready, online: p.online,
+      prog: p.prog, done: p.done,
+      finalMs: p.finalMs, actualMs: p.actualMs,
+      correct: p.correct, wrong: p.wrong, skip: p.skip
+    };
+  });
+}
+
+function send(ws, obj) {
+  if (ws && ws.readyState === 1) {
+    try {
+      // obj 既可能是对象（send 负责序列化），也可能是已序列化的字符串
+      // （broadcastState/broadcastStart 已先 JSON.stringify），避免双重编码。
+      ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj));
+      return true;
+    } catch (e) {}
+  }
+  return false;
+}
+
+function broadcastState(room) {
+  const msg = JSON.stringify({
+    t: 'state',
+    round: room.round,
+    phase: room.phase,
+    host: room.hostCid,
+    players: playerList(room)
+  });
+  room.players.forEach(function (p) { send(p.ws, msg); });
+}
+
+function broadcastStart(room) {
+  const at = Date.now() + SYNC_DELAY;
+  const msg = JSON.stringify({ t: 'start', round: room.round, at: at });
+  room.players.forEach(function (p) { send(p.ws, msg); });
+}
+
+function scheduleGC(room) {
+  if (room._gc) clearTimeout(room._gc);
+  room._gc = setTimeout(function () {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (!anyOnline) rooms.delete(room.code);
+  }, ROOM_TTL);
+}
+
+function pickNewHost(room) {
+  const next = Array.from(room.players.values()).find(function (p) { return p.online; });
+  room.hostCid = next ? next.cid : null;
+}
+
+// ===================== HTTP（静态托管前端 + 健康检查） =====================
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json'
+};
+
+function serveStatic(req, res) {
+  let urlPath;
+  try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); }
+  catch (e) { res.writeHead(400); res.end('Bad Request'); return; }
+  if (urlPath === '/') urlPath = '/index.html';
+  // 规范化并防目录穿越：只允许访问 PUBLIC_DIR 内
+  const rel = path.normalize(urlPath).replace(/^(\.\.[\/\\])+/, '').replace(/^[\/\\]+/, '');
+  const filePath = path.join(PUBLIC_DIR, rel);
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
+    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Forbidden');
+    return;
+  }
+  fs.readFile(filePath, function (err, data) {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('404 Not Found');
+      return;
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+}
+
+const server = http.createServer(function (req, res) {
+  const urlPath = (req.url || '/').split('?')[0];
+  if (urlPath === '/health' || urlPath === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, service: '24vs', rooms: rooms.size, ts: Date.now() }));
+    return;
+  }
+  serveStatic(req, res);
+});
+
+// ===================== WebSocket =====================
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', function (ws) {
+  let player = null; // 该连接归属的玩家对象（join 后赋值）
+
+  ws.on('message', function (data) {
+    let m;
+    try { m = JSON.parse(data.toString()); } catch (e) { return; }
+    if (!m || typeof m.t !== 'string') return;
+
+    if (m.t === 'join') {
+      const code = String(m.room || '').toUpperCase();
+      if (!code) return;
+      const room = getRoom(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+      let p = room.players.get(m.cid);
+      if (!p) {
+        p = {
+          cid: m.cid, nick: m.nick || '玩家', ws: ws, ready: false, online: true,
+          prog: 0, done: false, finalMs: null, actualMs: null,
+          correct: 0, wrong: 0, skip: 0, _room: room
+        };
+        room.players.set(m.cid, p);
+        if (!room.hostCid) room.hostCid = m.cid;
+      } else {
+        p.ws = ws;
+        p.nick = m.nick || p.nick;
+        p.online = true;
+        p._room = room;
+      }
+      player = p;
+      broadcastState(room);
+      return;
+    }
+
+    if (!player) return; // 其余指令需先 join
+    const room = player._room;
+
+    if (m.t === 'ready') {
+      player.ready = !!m.v;
+      broadcastState(room);
+    } else if (m.t === 'start') {
+      if (room.hostCid !== player.cid) {
+        send(ws, { t: 'err', msg: '只有房主可以开始对战' });
+        return;
+      }
+      room.phase = 'playing';
+      resetProgress(room);
+      broadcastState(room);
+      broadcastStart(room);
+    } else if (m.t === 'prog') {
+      player.prog = Math.max(player.prog || 0, (parseInt(m.i, 10) || 0) + 1);
+      broadcastState(room);
+    } else if (m.t === 'done') {
+      player.done = true;
+      player.finalMs = parseInt(m.finalMs, 10) || 0;
+      player.actualMs = parseInt(m.actualMs, 10) || 0;
+      player.correct = parseInt(m.correct, 10) || 0;
+      player.wrong = parseInt(m.wrong, 10) || 0;
+      player.skip = parseInt(m.skip, 10) || 0;
+      broadcastState(room);
+      const onlines = Array.from(room.players.values()).filter(function (p) { return p.online; });
+      if (onlines.length && onlines.every(function (p) { return p.done; })) {
+        room.phase = 'done';
+        broadcastState(room);
+      }
+    } else if (m.t === 'again') {
+      if (room.hostCid !== player.cid) {
+        send(ws, { t: 'err', msg: '只有房主可以开始下一局' });
+        return;
+      }
+      room.round = (room.round || 1) + 1;
+      room.phase = 'playing';
+      resetProgress(room);
+      broadcastState(room);
+      broadcastStart(room);
+    } else if (m.t === 'ping') {
+      send(ws, { t: 'pong' });
+    }
+  });
+
+  ws.on('close', function () {
+    if (!player) return;
+    player.online = false;
+    player.ws = null;
+    const room = player._room;
+    if (room) {
+      if (room.hostCid === player.cid) pickNewHost(room);
+      broadcastState(room);
+      scheduleGC(room);
+    }
+  });
+
+  ws.on('error', function () { /* close 会紧随处理 */ });
+});
+
+server.listen(PORT, function () {
+  console.log('[24vs] relay listening on :' + PORT + '  (wss 与 http 同端口)');
+});
