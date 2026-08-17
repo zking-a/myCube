@@ -210,6 +210,27 @@
   }
 
   // ====================================================================
+  //  连对 combo（闯关 / 竞速 / 联机 共用）
+  // ====================================================================
+  var combo = 0;
+  function bumpCombo() {
+    combo++;
+    if (combo >= 2) {
+      var el = $('combo-pop');
+      if (!el) return;
+      el.textContent = '🔥 ' + combo + ' 连对！';
+      el.classList.remove('show');
+      void el.offsetWidth; // 强制回流，重触发入场动画
+      el.classList.add('show');
+    }
+  }
+  function breakCombo() {
+    combo = 0;
+    var el = $('combo-pop');
+    if (el) el.classList.remove('show');
+  }
+
+  // ====================================================================
   //  合并式棋盘（闯关 / 竞速 共用）
   // ====================================================================
   function makeBoard(opts) {
@@ -248,7 +269,7 @@
           }
           var r = this.compute(a.value, this.op, b.value);
           var resId = this.nextId++;
-          var res = { id: resId, value: r, label: r.toString(), kind: 'res', alive: true, win: false, bad: false };
+          var res = { id: resId, value: r, label: r.toString(), kind: 'res', alive: true, win: false, bad: false, fresh: true };
           a.alive = false; b.alive = false;
           this.tokens.push(res);
           this.history.push({ resId: resId, aId: a.id, bId: b.id });
@@ -257,7 +278,7 @@
           if (this.aliveTokens().length === 1) {
             var only = this.aliveTokens()[0];
             if (only.value.eq(new Rational(24))) {
-              only.win = true; this.locked = true; this.render(); this.opts.onWin(only);
+              only.win = true; only.fresh = false; this.locked = true; this.render(); this.opts.onWin(only);
             } else {
               only.bad = true; this.locked = true; this.render(); this.opts.onStuck(only);
             }
@@ -290,10 +311,12 @@
         this.aliveTokens().forEach(function (t) {
           var d = document.createElement('div');
           d.className = 'tk ' + (t.kind === 'orig' ? 'tk-orig' : 'tk-res') +
-            (self.selId === t.id ? ' tk-sel' : '') + (t.win ? ' tk-win' : '') + (t.bad ? ' tk-bad' : '');
+            (self.selId === t.id ? ' tk-sel' : '') + (t.win ? ' tk-win' : '') + (t.bad ? ' tk-bad' : '') +
+            (t.fresh ? ' tk-fresh' : '');
           d.textContent = t.label;
           d.onclick = function () { self.clickToken(t.id); };
           c.appendChild(d);
+          t.fresh = false;
         });
         var st;
         if (this.locked) st = '本关已完成';
@@ -385,6 +408,7 @@
 
   function onChWin(tok) {
     stopChTimer();
+    bumpCombo();
     var timedOut = chState.elapsedMs > TIME_LIMIT_MS;
     var stars = chState.hintUsed ? 1 : (timedOut ? 2 : 3);
     saveStageResult(chState.level, chState.index, { stars: stars, timeMs: chState.elapsedMs, hintUsed: chState.hintUsed });
@@ -416,6 +440,7 @@
     $('ch-result').style.display = 'flex';
   }
   function onChStuck(tok) {
+    breakCombo();
     setChFeedback('bad', '结果不是 24（得到 ' + tok.label + '），点【重来】再试试');
   }
   function setChFeedback(type, text) {
@@ -488,6 +513,7 @@
     });
   }
   function startSpeed() {
+    breakCombo();
     spState.questions = buildQuestions();
     spState.current = 0; spState.elapsedMs = 0; spState.wrong = 0; spState.skip = 0; spState.correct = 0;
     spState.finished = false;
@@ -510,8 +536,8 @@
   function onSpResolved(correct) {
     var q = spState.questions[spState.current];
     q.correct = correct;
-    if (correct) { spState.correct++; spFeedback('success', '答对了！'); }
-    else { spState.wrong++; spFeedback('bad', '答错！+5 秒罚时'); }
+    if (correct) { spState.correct++; spFeedback('success', '答对了！'); bumpCombo(); }
+    else { spState.wrong++; spFeedback('bad', '答错！+5 秒罚时'); breakCombo(); }
     var delay = correct ? 650 : 950;
     setTimeout(function () {
       var next = spState.current + 1;
@@ -522,6 +548,7 @@
   function spSkip() {
     if (spState.finished) return;
     if (boardSp.locked) return;
+    breakCombo();
     spState.questions[spState.current].correct = false;
     spState.skip++;
     spFeedback('bad', '已跳过 +15 秒罚时');
@@ -697,10 +724,12 @@
     }
   }
   function startVsBoard() {
+    breakCombo();
     vsState.questions = Net.buildRoomQuestions(Net.roundSeed(vsState.room, vsState.round), TOTAL_VS, LEVELS);
     vsState.current = 0; vsState.elapsedMs = 0;
     vsState.wrong = 0; vsState.skip = 0; vsState.correct = 0;
     vsState.finished = false; vsState.started = true; vsState.myResult = null;
+    vsState._qStart = 0; // 当前题的起始计时（用于「逐题耗时」）
     vsSetQuestion(0);
     show('vsplay');
     startVsTimer();
@@ -710,13 +739,15 @@
     boardVs.init(q.numbers);
     $('vp-index').textContent = (i + 1);
     $('vp-total').textContent = TOTAL_VS;
+    vsState._qStart = vsState.elapsedMs; // 本题开始计时
     vsFeedback('', '');
   }
   function onVsResolved(correct) {
     var q = vsState.questions[vsState.current];
     q.correct = correct;
-    if (correct) { vsState.correct++; vsFeedback('success', '答对了！'); }
-    else { vsState.wrong++; vsFeedback('bad', '答错！+5 秒罚时'); }
+    q.ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
+    if (correct) { vsState.correct++; vsFeedback('success', '答对了！'); bumpCombo(); }
+    else { vsState.wrong++; vsFeedback('bad', '答错！+5 秒罚时'); breakCombo(); }
     if (vsState.online && vsState.client) vsState.client.progress(vsState.current, correct, vsState.elapsedMs);
     var delay = correct ? 650 : 950;
     setTimeout(function () {
@@ -728,7 +759,9 @@
   function vsSkip() {
     if (vsState.finished || !vsState.started) return;
     if (boardVs.locked) return;
+    breakCombo();
     vsState.questions[vsState.current].correct = false;
+    vsState.questions[vsState.current].ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
     vsState.skip++;
     vsFeedback('bad', '已跳过 +15 秒罚时');
     boardVs.locked = true;
@@ -755,14 +788,19 @@
     var wrongPenalty = vsState.wrong * WRONG_PENALTY;
     var skipPenalty = vsState.skip * SKIP_PENALTY;
     var finalMs = actualMs + wrongPenalty + skipPenalty;
+    // 逐题对错 + 逐题耗时，供结果页「逐题对决」与战报
+    var results = vsState.questions.map(function (q) { return q.correct ? 1 : 0; });
+    var qms = vsState.questions.map(function (q) { return Math.max(0, Math.round(q.ms || 0)); });
     vsState.myResult = {
       finalMs: finalMs, actualMs: actualMs,
-      correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
+      correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip,
+      results: results, qms: qms
     };
     if (vsState.online && vsState.client) {
       vsState.client.done({
         finalMs: finalMs, actualMs: actualMs,
-        correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
+        correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip,
+        results: results, qms: qms
       });
     }
     setTimeout(function () { show('vsresult'); renderVsResult(); }, vsState.online ? 450 : 0);
@@ -836,12 +874,24 @@
       if (b.done) return 1;
       return (b.prog || 0) - (a.prog || 0);
     });
+    // 只有「在线玩家都已完成」才定胜负，避免自己一提交就误报“你赢了”
+    var onlinePlayers = players.filter(function (p) { return p.online; });
+    var winnerReady = players.length === 1 || onlinePlayers.every(function (p) { return p.done; });
     var winner = null;
-    players.forEach(function (p) { if (p.done && (winner === null || p.finalMs < winner.finalMs)) winner = p; });
+    if (winnerReady) {
+      players.forEach(function (p) { if (p.done && (winner === null || p.finalMs < winner.finalMs)) winner = p; });
+    }
+    // 一次性入场动画闸门：未定胜负期间持续重置，定胜负那一刻只播一次，避免实时更新闪烁
+    var animate = false;
+    if (winnerReady) {
+      if (!vsState._resultAnimated) { animate = true; vsState._resultAnimated = true; }
+    } else {
+      vsState._resultAnimated = false;
+    }
     var rank = $('vres-rank'); rank.innerHTML = '';
     players.forEach(function (p, i) {
       var row = document.createElement('div');
-      row.className = 'rank-row';
+      row.className = 'rank-row' + (animate ? ' rank-in' + (i < 4 ? ' rank-' + (i + 1) : '') : '');
       var isMe = p.cid === vsState.myCid;
       var medal = (i === 0 && p.done) ? '🥇' : (i === 1 && p.done ? '🥈' : (i === 2 && p.done ? '🥉' : (i + 1)));
       row.innerHTML = '<div class="medal">' + medal + '</div>' +
@@ -850,12 +900,108 @@
       rank.appendChild(row);
     });
     var banner = $('vres-banner');
+    banner.className = 'win-banner' + (animate && winner ? ' win-pop' : '');
     if (players.length === 1) banner.textContent = '你的成绩';
+    else if (!winnerReady) banner.textContent = (vsState.finished ? '你已完成 ✅ 等待对手提交…' : '对战中…');
     else if (winner && winner.cid === vsState.myCid) banner.textContent = '🎉 你赢了！';
     else if (winner) banner.textContent = '本局冠军：' + escapeHtml(winner.nick || '玩家');
     else banner.textContent = '对战中…';
-    var waiting = players.filter(function (p) { return !p.done; });
-    $('vres-waiting').textContent = vsState.online ? (waiting.length ? ('等待 ' + waiting.length + ' 位玩家完成…') : '全部完成！') : '';
+    var waiting = players.filter(function (p) { return p.online && !p.done; });
+    $('vres-waiting').textContent = vsState.online ? (waiting.length ? ('等待 ' + waiting.length + ' 位玩家完成…') : (winnerReady ? '全部完成！' : '')) : '';
+
+    // ---- 对战对比表 + 胜负原因 ----
+    var body = $('vres-cmp-body'); body.innerHTML = '';
+    var reason = '';
+    if (winnerReady && winner) {
+      var second = null;
+      players.forEach(function (p) {
+        if (p.done && p !== winner) { if (second === null || p.finalMs < second.finalMs) second = p; }
+      });
+      if (second) {
+        var gap = second.finalMs - winner.finalMs;
+        var cd = winner.correct - second.correct;
+        if (winner.cid === vsState.myCid) {
+          reason = '你领先 ' + formatClock(gap) + (cd !== 0 ? ('（多答对 ' + Math.abs(cd) + ' 题）') : '') + ' 拿下本局！';
+        } else if (second.cid === vsState.myCid) {
+          reason = '你以 ' + formatClock(gap) + ' 之差惜败' + (cd !== 0 ? ('（少答对 ' + Math.abs(cd) + ' 题）') : '') + '。';
+        } else {
+          reason = escapeHtml(winner.nick || '玩家') + ' 领先 ' + formatClock(gap) + ' 获胜' + (cd !== 0 ? ('（多答对 ' + Math.abs(cd) + ' 题）') : '') + '。';
+        }
+      } else {
+        reason = winner.cid === vsState.myCid ? '全场你最快完成，本局你赢！' : (escapeHtml(winner.nick || '玩家') + ' 第一个完成，本局他赢。');
+      }
+    } else if (!winnerReady && vsState.finished) {
+      reason = '你已交卷，等对手也完成就能见分晓。';
+    }
+    players.forEach(function (p) {
+      var tr = document.createElement('tr');
+      if (winnerReady && winner && p.cid === winner.cid) tr.className = 'win' + (animate ? ' pulse' : '');
+      var isMe = p.cid === vsState.myCid;
+      var res = !p.done ? (p.online ? '…' : '离线') : (winnerReady && winner && p.cid === winner.cid ? '🏆 胜' : '—');
+      tr.innerHTML =
+        '<td class="name">' + (isMe ? (Net.getNick() || '我') : escapeHtml(p.nick || '玩家')) +
+          (isMe ? '<span class="me-tag">我</span>' : '') + '</td>' +
+        '<td>' + (p.done ? formatClock(p.actualMs) : (p.online ? '答题中' : '—')) + '</td>' +
+        '<td>' + (p.done ? '+' + formatClock(p.finalMs - p.actualMs) : '—') + '</td>' +
+        '<td>' + (p.done ? formatClock(p.finalMs) : '—') + '</td>' +
+        '<td>' + (p.done ? (p.correct + '/' + TOTAL_VS) : '—') + '</td>' +
+        '<td>' + (p.done ? (p.wrong || 0) : '—') + '</td>' +
+        '<td>' + (p.done ? (p.skip || 0) : '—') + '</td>' +
+        '<td class="' + (winnerReady && winner && p.cid === winner.cid ? 'cmp-win' : 'cmp-lose') + '">' + res + '</td>';
+      body.appendChild(tr);
+    });
+    // ---- 逐题对决 + 战报（针对「不知道谁哪里赢/输」）----
+    var opp = null;
+    players.forEach(function (p) {
+      if (p.cid !== vsState.myCid && p.results && p.results.length && (!opp || p.done)) opp = p;
+    });
+    var duelPanel = $('vres-duelpanel');
+    var duel = $('vres-duel');
+    if (me.results && me.results.length && opp && opp.results && opp.results.length) {
+      duelPanel.style.display = '';
+      var n = Math.min(me.results.length, opp.results.length);
+      var rows = '';
+      for (var di = 0; di < n; di++) {
+        var mine = me.results[di], his = opp.results[di];
+        var dcls = (mine && !his) ? 'win' : (!mine && his) ? 'loss' : '';
+        rows += '<tr class="' + dcls + '">' +
+          '<td class="name">第' + (di + 1) + '题</td>' +
+          '<td>' + (mine ? '✓' : '✗') + '</td>' +
+          '<td>' + (his ? '✓' : '✗') + '</td></tr>';
+      }
+      duel.innerHTML = '<thead><tr><th class="name">题</th><th>我</th><th>' +
+        escapeHtml(opp.nick || '对手') + '</th></tr></thead><tbody>' + rows + '</tbody>';
+    } else {
+      duelPanel.style.display = 'none';
+    }
+
+    // 战报：用时差 / 答对差 / 关键得失分题 / 最卡一题
+    var report = [];
+    if (winnerReady && winner && me.results && opp && opp.results) {
+      if (second) {
+        report.push('⏱ 用时：你 ' + formatClock(me.finalMs) + '，对手 ' + formatClock(second.finalMs) + '（差 ' + formatClock(gap) + '）');
+      }
+      report.push('✅ 答对：你 ' + me.correct + '/' + TOTAL_VS + '，对手 ' + (second ? second.correct : '?') + '/' + TOTAL_VS);
+      var loss = [], winp = [];
+      var cnt = Math.min(me.results.length, opp.results.length);
+      for (var ri = 0; ri < cnt; ri++) {
+        if (!me.results[ri] && opp.results[ri]) loss.push(ri + 1);
+        else if (me.results[ri] && !opp.results[ri]) winp.push(ri + 1);
+      }
+      if (loss.length) report.push('🔻 关键失分：第 ' + loss.join('、') + ' 题你错、对手对');
+      if (winp.length) report.push('🔺 关键得分：第 ' + winp.join('、') + ' 题你对、对手错');
+      if (me.qms && me.qms.length) {
+        var si = 0; for (var a = 1; a < me.qms.length; a++) if (me.qms[a] > me.qms[si]) si = a;
+        report.push('🐢 你最卡的一题：第 ' + (si + 1) + ' 题（' + (me.qms[si] / 1000).toFixed(1) + 's）');
+        if (opp.qms && opp.qms.length) {
+          var oi = 0; for (var b = 1; b < opp.qms.length; b++) if (opp.qms[b] > opp.qms[oi]) oi = b;
+          report.push('🐢 对手最卡：第 ' + (oi + 1) + ' 题（' + (opp.qms[oi] / 1000).toFixed(1) + 's）');
+        }
+      }
+    }
+    $('vres-report').innerHTML = report.map(function (r) { return '<div class="rpt-line">' + r + '</div>'; }).join('');
+
+    $('vres-reason').textContent = reason;
     $('vres-actual').textContent = formatClock(me.actualMs);
     $('vres-penalty').textContent = '+' + formatClock(me.finalMs - me.actualMs);
     $('vres-final').textContent = formatClock(me.finalMs);

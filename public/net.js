@@ -238,7 +238,8 @@
    *    {t:'ready', v:true|false}
    *    {t:'start'}                       // 仅房主有效
    *    {t:'prog', i, ok, ms}             // 第 i 题完成（0 基），ok=是否答对
-   *    {t:'done', finalMs, actualMs, correct, wrong, skip}
+   *    {t:'done', finalMs, actualMs, correct, wrong, skip, results:[0|1...], qms:[ms...]}
+   *         —— results/qms 为「逐题对错 / 逐题耗时」，用于结果页「逐题对决」与战报。
    *    {t:'again'}                       // 再来一局（换题，round+1）
    *    {t:'ping'}
    *  服务端 → 客户端：
@@ -351,7 +352,8 @@
       done: function (r) {
         return send({
           t: 'done', finalMs: r.finalMs, actualMs: r.actualMs,
-          correct: r.correct, wrong: r.wrong, skip: r.skip
+          correct: r.correct, wrong: r.wrong, skip: r.skip,
+          results: r.results, qms: r.qms
         });
       },
       again: function () { return send({ t: 'again' }); }

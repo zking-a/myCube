@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
@@ -20,13 +20,14 @@
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
+  html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
   body {
     font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
     background: linear-gradient(160deg, #dbeafe 0%, #eaf2ff 60%, #fff7e6 100%);
     color: var(--ink); min-height: 100vh;
     display: flex; justify-content: center;
   }
-  #app { width: 100%; max-width: 480px; padding: 16px 16px 40px; }
+  #app { width: 100%; max-width: 480px; padding: 16px 16px calc(40px + env(safe-area-inset-bottom)); }
   h1 { font-size: 26px; margin: 8px 0 2px; color: var(--blue); letter-spacing: 1px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .view { display: none; }
@@ -61,6 +62,22 @@
   .tk-win  { background: linear-gradient(135deg,#5fe39a,#27ae60); animation: pop .5s ease; font-size: 52px; }
   .tk-bad  { background: #b6c0cf; color: #fff; }
   @keyframes pop { 0%{transform:scale(.6);} 60%{transform:scale(1.18);} 100%{transform:scale(1);} }
+  /* 合并出新牌时弹一下 */
+  .tk-fresh { animation: pop .35s ease; }
+
+  /* 连对 combo 闪光 */
+  #combo-pop {
+    position: fixed; left: 50%; top: 16%; transform: translateX(-50%);
+    z-index: 80; pointer-events: none; opacity: 0; white-space: nowrap;
+    font-size: 24px; font-weight: 900; color: #fff;
+    background: linear-gradient(135deg,#ff9a3d,#ff5e62);
+    padding: 8px 20px; border-radius: 999px;
+    box-shadow: 0 8px 22px rgba(255,94,98,.55);
+    transition: opacity .25s ease;
+  }
+  #combo-pop.show { opacity: 1; animation: comboPop .42s cubic-bezier(.2,.8,.3,1.2); }
+  @keyframes comboPop { 0%{transform:translateX(-50%) scale(.5);} 60%{transform:translateX(-50%) scale(1.18);} 100%{transform:translateX(-50%) scale(1);} }
+  @media (max-width: 380px) { #combo-pop { font-size: 20px; padding: 7px 16px; } }
 
   .status { text-align: center; font-size: 17px; font-weight: 700; color: var(--muted); min-height: 24px; margin: 6px 0 12px; }
 
@@ -176,7 +193,50 @@
   .rank-row .rn { flex: 1; font-weight: 800; }
   .rank-row .rt { font-weight: 800; color: var(--orange); }
   .win-banner { text-align: center; font-size: 22px; font-weight: 900; margin: 4px 0 10px; }
+  .cmp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cmp-table th, .cmp-table td { padding: 8px 5px; text-align: center; border-bottom: 1px solid #f1f4f9; }
+  .cmp-table th { color: var(--muted); font-weight: 700; font-size: 12px; }
+  .cmp-table td.name { text-align: left; font-weight: 800; }
+  .cmp-table tr.win td { background: #f3fff8; }
+  .cmp-table tr.win td.name { color: var(--green); }
+  .cmp-table .me-tag { font-size: 11px; color: var(--blue); margin-left: 4px; }
+  .cmp-win { color: var(--green); font-weight: 900; }
+  .cmp-lose { color: var(--muted); }
+  .cmp-table tr.loss td { background: #fff4f4; }
+  .cmp-table tr.loss td.name { color: #eb5757; }
+  .report { font-size: 14px; line-height: 1.9; }
+  .rpt-line { padding: 2px 0; }
   .vs-mini { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 700; }
+
+  /* 移动端：宽表横向滚动，避免窄屏挤压变形 */
+  .cmp-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cmp-scroll .cmp-table { min-width: 540px; }
+
+  /* 特效：赢家横幅入场弹跳 */
+  .win-banner.win-pop { animation: pop .5s ease; color: var(--green); }
+
+  /* 特效：排名错峰蹦入 */
+  @keyframes rankIn { 0%{transform:scale(.5);opacity:0;} 65%{transform:scale(1.08);opacity:1;} 100%{transform:scale(1);} }
+  .rank-row.rank-in { animation: rankIn .42s cubic-bezier(.2,.8,.3,1.2) both; }
+  .rank-row.rank-1 { animation-delay: .05s; box-shadow: inset 3px 0 0 var(--yellow); border-radius: 8px; }
+  .rank-row.rank-2 { animation-delay: .13s; }
+  .rank-row.rank-3 { animation-delay: .21s; }
+  .rank-row.rank-4 { animation-delay: .29s; }
+
+  /* 特效：赢的那一行高亮脉冲（一次性） */
+  @keyframes winPulse { 0%,100%{ background:#f3fff8; } 50%{ background:#d6ffe9; } }
+  .cmp-table tr.win.pulse td { animation: winPulse 1.2s ease-in-out 1; }
+
+  /* 窄屏字号降档 */
+  @media (max-width: 380px) {
+    h1 { font-size: 23px; }
+    .cmp-table { font-size: 12px; }
+    .cmp-table th, .cmp-table td { padding: 6px 4px; }
+    .win-banner { font-size: 19px; }
+    .rank-row { font-size: 14px; }
+    .tk { width: 66px; height: 66px; font-size: 36px; }
+    .op-btn { font-size: 30px; }
+  }
 </style>
 </head>
 <body>
@@ -435,6 +495,32 @@
       <div class="stat-row"><span class="k">答对 / 总</span><span class="v" id="vres-correct">0/10</span></div>
     </div>
 
+    <div class="panel" id="vres-cmppanel">
+      <div class="sect-title">对战对比（谁赢在哪）</div>
+      <div class="cmp-scroll">
+      <table class="cmp-table">
+        <thead><tr>
+          <th class="name">玩家</th><th>用时</th><th>罚时</th><th>最终</th>
+          <th>答对</th><th>答错</th><th>跳过</th><th>结果</th>
+        </tr></thead>
+        <tbody id="vres-cmp-body"></tbody>
+      </table>
+      </div>
+      <div class="hintline" id="vres-reason" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="panel" id="vres-duelpanel" style="display:none;">
+      <div class="sect-title">逐题对决（绿色=你赢这题，红色=你输这题）</div>
+      <div class="cmp-scroll">
+      <table class="cmp-table" id="vres-duel"></table>
+      </div>
+    </div>
+
+    <div class="panel" id="vres-report-panel">
+      <div class="sect-title">战报</div>
+      <div id="vres-report" class="report"></div>
+    </div>
+
     <div class="panel" id="vres-codewrap">
       <div class="sect-title">成绩码对战（没联机也能比）</div>
       <div class="hintline">把下面这串发给朋友（微信直接粘贴），他也把他的发给你，粘进来点对比。</div>
@@ -460,6 +546,8 @@
 
   <div class="countdown" id="sr-countdown"><span>3</span></div>
 </div>
+
+  <div id="combo-pop"></div>
 
 <script src="core.js?v=20260814b"></script>
 <script src="data.js?v=20260814c"></script>

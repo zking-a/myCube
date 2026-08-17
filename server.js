@@ -40,6 +40,7 @@ const MAX_WS_PAYLOAD = 4096;         // 单条 WebSocket 消息最大字节数
 const RATE_LIMIT = 20;               // 每连接每秒最多消息条数
 const RATE_BURST = 40;               // 令牌桶初始容量（允许短时突发）
 const MAX_CONNECTIONS = 16;          // 全服最多同时挂着的 WebSocket 连接
+const JOIN_IDLE_MS = 15000;          // 连接后多久不 join 就断开（防空连接占额度）
 // 房间码字母表须与 public/net.js 完全一致：5 位，去掉易混的 I/O/0/1
 const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 // 允许的浏览器来源（本地调试放行 localhost / 无 Origin 的非浏览器客户端）
@@ -73,6 +74,8 @@ function resetProgress(room) {
     p.correct = 0;
     p.wrong = 0;
     p.skip = 0;
+    p.results = null;   // 逐题对错（新一局重置，避免上一局残留误导战报）
+    p.qms = null;       // 逐题耗时
   });
 }
 
@@ -82,7 +85,9 @@ function playerList(room) {
       cid: p.cid, nick: p.nick, ready: p.ready, online: p.online,
       prog: p.prog, done: p.done,
       finalMs: p.finalMs, actualMs: p.actualMs,
-      correct: p.correct, wrong: p.wrong, skip: p.skip
+      correct: p.correct, wrong: p.wrong, skip: p.skip,
+      results: p.results || null,   // 逐题对错（0/1 数组），供「逐题对决」展示
+      qms: p.qms || null           // 逐题耗时（ms 数组），供战报「最卡一题」
     };
   });
 }
@@ -220,6 +225,11 @@ wss.on('connection', function (ws, req) {
 
   let player = null; // 该连接归属的玩家对象（join 后赋值）
 
+  // ---- 未加入超时：防止空连接（只过 Origin 校验却从不 join）占满连接额度，导致拒服 ----
+  const joinTimer = setTimeout(function () {
+    if (!player) { try { ws.close(1000, 'join timeout'); } catch (e) {} }
+  }, JOIN_IDLE_MS);
+
   ws.on('message', function (data) {
     const now = Date.now();
     tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
@@ -277,6 +287,7 @@ wss.on('connection', function (ws, req) {
       }
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
       player = p;
+      clearTimeout(joinTimer); // 已加入，取消空连接超时
       broadcastState(room);
       return;
     }
@@ -306,6 +317,15 @@ wss.on('connection', function (ws, req) {
       player.correct = parseInt(m.correct, 10) || 0;
       player.wrong = parseInt(m.wrong, 10) || 0;
       player.skip = parseInt(m.skip, 10) || 0;
+      // 逐题对错 / 逐题耗时：校验后存储并下发，供结果页「逐题对决」与战报
+      player.results = Array.isArray(m.results)
+        ? m.results.slice(0, 64).map(function (v) { return v ? 1 : 0; })
+        : null;
+      player.qms = Array.isArray(m.qms)
+        ? m.qms.slice(0, 64).map(function (v) {
+            var n = parseInt(v, 10); return (n >= 0 && n <= 600000) ? n : 0;
+          })
+        : null;
       broadcastState(room);
       const onlines = Array.from(room.players.values()).filter(function (p) { return p.online; });
       if (onlines.length && onlines.every(function (p) { return p.done; })) {
@@ -328,6 +348,7 @@ wss.on('connection', function (ws, req) {
   });
 
   ws.on('close', function () {
+    clearTimeout(joinTimer);
     liveConnections--;
     if (!player) return;
     player.online = false;
