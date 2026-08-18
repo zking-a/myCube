@@ -1,6 +1,7 @@
 {
   "name": "g24-vs-relay",
   "version": "1.0.0",
+  "license": "MIT",
   "description": "24点大挑战·联机对战 WebSocket 中转服务器（房间码即种子，确定性同题；仅中转进度）",
   "main": "server.js",
   "scripts": {

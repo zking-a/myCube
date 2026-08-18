@@ -44,7 +44,7 @@ const JOIN_IDLE_MS = 15000;          // 连接后多久不 join 就断开（防�
 // 房间码字母表须与 public/net.js 完全一致：5 位，去掉易混的 I/O/0/1
 const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 // 允许的浏览器来源（本地调试放行 localhost / 无 Origin 的非浏览器客户端）
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://g24-vs.onrender.com';
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://gm24-03ll.onrender.com';
 
 /** roomCode -> room */
 const rooms = new Map();
@@ -212,9 +212,12 @@ wss.on('connection', function (ws, req) {
   liveConnections++;
 
   // ---- Origin 校验：只允许本站与本地调试（CSWSH 防护）----
+  // 同时接受「请求自身的 Host」，做到域名无关：换 onrender 子域也不会断
   const origin = req && req.headers && req.headers.origin;
   if (origin) {
+    const host = req.headers.host;
     const ok = origin === ALLOWED_ORIGIN ||
+               (host && (origin === 'https://' + host || origin === 'http://' + host)) ||
                /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     if (!ok) { ws.close(1008, 'origin not allowed'); liveConnections--; return; }
   }
