@@ -5,7 +5,7 @@
 #   3. 部署完成后拿到 https://xxx.onrender.com，直接打开即玩，前端与中转同域、联机零配置。
 services:
   - type: web
-    name: gm24-03ll
+    name: gm24-vs
     runtime: node
     plan: free
     rootDir: .

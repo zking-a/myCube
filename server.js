@@ -43,8 +43,9 @@ const MAX_CONNECTIONS = 16;          // 全服最多同时挂着的 WebSocket �
 const JOIN_IDLE_MS = 15000;          // 连接后多久不 join 就断开（防空连接占额度）
 // 房间码字母表须与 public/net.js 完全一致：5 位，去掉易混的 I/O/0/1
 const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
-// 允许的浏览器来源（本地调试放行 localhost / 无 Origin 的非浏览器客户端）
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://gm24-03ll.onrender.com';
+// 允许的浏览器来源：默认「域名无关」——接受请求自身的 Host（任何 *.onrender.com 子域均放行，无需随域名改代码）
+// 如需强制限定单一来源，设置环境变量 ALLOWED_ORIGIN=https://your-domain
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 
 /** roomCode -> room */
 const rooms = new Map();
