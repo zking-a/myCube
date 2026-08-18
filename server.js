@@ -47,6 +47,22 @@ const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 // 如需强制限定单一来源，设置环境变量 ALLOWED_ORIGIN=https://your-domain
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 
+// 大厅空闲回收：房间仅在大厅(未开局)且超过该时长无任何 join 活动，则回收（防占房拒服 DoS）
+const LOBBY_IDLE_MS = 90 * 1000;
+// 单 IP 建房限速：防单 IP 占满全部房间导致所有正常用户被拒
+const ROOM_CREATE_LIMIT = 5;          // 窗口内单 IP 最多创建房间数
+const ROOM_CREATE_WINDOW = 60 * 1000; // 限速窗口(ms)
+const roomCreateLog = new Map();      // ip -> [创建时间戳,...]
+
+// 安全响应头（CSP + 防点击劫持 + nosniff），全站点静态/健康检查统一下发
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" +
+    " img-src 'self' data:; connect-src 'self' wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+};
+
 /** roomCode -> room */
 const rooms = new Map();
 
@@ -59,7 +75,9 @@ function getRoom(code) {
       phase: 'lobby',        // lobby | playing | done
       hostCid: null,
       players: new Map(),    // cid -> player
-      _gc: null
+      _gc: null,
+      createdAt: Date.now(),
+      lastJoinTs: Date.now()
     };
     rooms.set(code, r);
   }
@@ -130,12 +148,42 @@ function scheduleGC(room) {
   }, ROOM_TTL);
 }
 
+// 单 IP 建房限速：滑动窗口内超过上限则拒绝（防单 IP 占满全部房间）
+function checkRoomCreateLimit(ip) {
+  if (!ip) return true; // 取不到 IP 时保守放行（不误伤）
+  const now = Date.now();
+  let arr = roomCreateLog.get(ip) || [];
+  arr = arr.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
+  if (arr.length >= ROOM_CREATE_LIMIT) { roomCreateLog.set(ip, arr); return false; }
+  arr.push(now);
+  roomCreateLog.set(ip, arr);
+  return true;
+}
+
+// 全服周期扫描：回收「全员离线」或「大厅长期空闲」的房间，防占房拒服 DoS
+setInterval(function () {
+  const now = Date.now();
+  rooms.forEach(function (room, code) {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (!anyOnline) { rooms.delete(code); return; }
+    if (room.phase === 'lobby' && now - (room.lastJoinTs || room.createdAt || now) > LOBBY_IDLE_MS) {
+      rooms.delete(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+    }
+  });
+}, 30 * 1000);
+
 function pickNewHost(room) {
   const next = Array.from(room.players.values()).find(function (p) { return p.online; });
   room.hostCid = next ? next.cid : null;
 }
 
 // ===================== HTTP（静态托管前端 + 健康检查） =====================
+// 统一下发安全响应头
+function writeHead(res, status, extra) {
+  res.writeHead(status, Object.assign({}, SECURITY_HEADERS, extra || {}));
+}
+
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const MIME = {
@@ -158,33 +206,24 @@ const MIME = {
 function serveStatic(req, res) {
   let urlPath;
   try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); }
-  catch (e) { res.writeHead(400); res.end('Bad Request'); return; }
+  catch (e) { writeHead(res, 400, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Bad Request'); return; }
   if (urlPath === '/') urlPath = '/index.html';
   // 规范化并防目录穿越：只允许访问 PUBLIC_DIR 内
   const rel = path.normalize(urlPath).replace(/^(\.\.[\/\\])+/, '').replace(/^[\/\\]+/, '');
   const filePath = path.join(PUBLIC_DIR, rel);
   if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
-    res.writeHead(403, {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'X-Content-Type-Options': 'nosniff'
-    });
+    writeHead(res, 403, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Forbidden');
     return;
   }
   fs.readFile(filePath, function (err, data) {
     if (err) {
-      res.writeHead(404, {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'X-Content-Type-Options': 'nosniff'
-      });
+      writeHead(res, 404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('404 Not Found');
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'X-Content-Type-Options': 'nosniff'
-    });
+    writeHead(res, 200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
     res.end(data);
   });
 }
@@ -192,7 +231,7 @@ function serveStatic(req, res) {
 const server = http.createServer(function (req, res) {
   const urlPath = (req.url || '/').split('?')[0];
   if (urlPath === '/health' || urlPath === '/healthz') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    writeHead(res, 200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, service: '24vs', rooms: rooms.size, ts: Date.now() }));
     return;
   }
@@ -211,6 +250,11 @@ wss.on('connection', function (ws, req) {
     return;
   }
   liveConnections++;
+
+  // 取客户端真实 IP（兼容反向代理 X-Forwarded-For，如 Render）
+  const clientIp = (req.headers && req.headers['x-forwarded-for']
+    ? String(req.headers['x-forwarded-for']).split(',')[0].trim()
+    : '') || (req.socket && req.socket.remoteAddress) || '';
 
   // ---- Origin 校验：只允许本站与本地调试（CSWSH 防护）----
   // 同时接受「请求自身的 Host」，做到域名无关：换 onrender 子域也不会断
@@ -256,10 +300,17 @@ wss.on('connection', function (ws, req) {
         ? m.nick.trim().slice(0, 16) : '玩家';
 
       const existing = rooms.get(code);
-      // ---- 全服房间数上限 ----
-      if (!existing && rooms.size >= MAX_ROOMS) {
-        send(ws, { t: 'err', msg: '服务器房间已满，请稍后再试' });
-        return;
+      if (!existing) {
+        // ---- 单 IP 建房限速：防单 IP 占满全部房间导致所有正常用户被拒 ----
+        if (!checkRoomCreateLimit(clientIp)) {
+          send(ws, { t: 'err', msg: '建房过于频繁，请稍后再试' });
+          return;
+        }
+        // ---- 全服房间数上限 ----
+        if (rooms.size >= MAX_ROOMS) {
+          send(ws, { t: 'err', msg: '服务器房间已满，请稍后再试' });
+          return;
+        }
       }
       const room = getRoom(code);
 
@@ -291,6 +342,7 @@ wss.on('connection', function (ws, req) {
       }
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
       player = p;
+      room.lastJoinTs = Date.now(); // 刷新大厅活跃时间，避免被空闲回收误删
       clearTimeout(joinTimer); // 已加入，取消空连接超时
       broadcastState(room);
       return;

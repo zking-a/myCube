@@ -72,10 +72,7 @@
     return {
       numbers: e.numbers.slice(),
       difficulty: e.difficulty,
-      standardAnswer: e.standardAnswer,
-      allSolutions: e.allSolutions,
-      solutionCount: e.solutionCount,
-      rationale: e.rationale
+      standardAnswer: e.standardAnswer
     };
   }
   function fixedForLevel(level) {
@@ -119,6 +116,51 @@
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+
+  // ---- 三模式共用的小工具（DRY：闯关/竞速/联机不再各写一遍）----
+  // 统一反馈条渲染（ch/sp/vs 仅元素 id 不同）
+  function setFeedback(elId, type, text) {
+    var el = $(elId); if (!el) return;
+    el.textContent = text;
+    el.className = 'feedback' + (type ? ' ' + type : '');
+  }
+  // 统一玩家行渲染（房间列表 / 对战进度共用）
+  function renderPlayerRow(p, opts) {
+    opts = opts || {};
+    var total = opts.total || TOTAL_VS;
+    var row = document.createElement('div');
+    row.className = 'prow' + (opts.isMe ? ' me' : '') + (p.done ? ' done' : '') + (p.online ? '' : ' offline');
+    var medal = p.done ? '🏁' : (opts.showCrown && opts.isMe && opts.host ? '👑' : '');
+    row.innerHTML = '<div class="medal">' + medal + '</div>' +
+      '<div class="pn">' + escapeHtml(p.nick || '玩家') + '</div>' +
+      '<div class="pbar"><i style="width:' + (Math.round((p.prog || 0) / total * 100)) + '%"></i></div>' +
+      '<div class="pv">' + (p.done ? '完成' : ((p.prog || 0) + '/' + total)) + '</div>';
+    return row;
+  }
+  // 统一结算回顾行渲染（竞速结算 / 联机结算共用）
+  function renderReviewRow(q, i) {
+    var row = document.createElement('div');
+    row.className = 'review-row ' + (q.correct ? 'ok' : 'no');
+    row.innerHTML = '<span class="rv-idx">' + (i + 1) + '</span>' +
+      '<span class="rv-nums">' + q.numbers.join(' · ') + '</span>' +
+      '<span class="rv-ans">' + (q.answer || '') + '</span>' +
+      '<span class="rv-mark">' + (q.correct ? '✓' : '✗') + '</span>';
+    return row;
+  }
+  // 统一“答完一题”的判定推进（竞速 / 联机共用；闯关无对错走 win/stuck 故不入此）
+  function resolve(state, correct, opts) {
+    var q = state.questions[state.current];
+    q.correct = correct;
+    if (opts.onTrack) opts.onTrack(correct); // 联机需记逐题耗时 + 上报进度
+    if (correct) { state.correct++; setFeedback(opts.fbEl, 'success', '答对了！'); bumpCombo(); }
+    else { state.wrong++; setFeedback(opts.fbEl, 'bad', '答错！+5 秒罚时'); breakCombo(); }
+    var delay = correct ? 650 : 950;
+    setTimeout(function () {
+      var next = state.current + 1;
+      if (next < opts.total) { state.current = next; opts.setQuestion(next); }
+      else opts.finish();
+    }, delay);
   }
   function copyText(t) {
     try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t); return; } } catch (e) {}
@@ -443,11 +485,7 @@
     breakCombo();
     setChFeedback('bad', '结果不是 24（得到 ' + tok.label + '），点【重来】再试试');
   }
-  function setChFeedback(type, text) {
-    var el = $('ch-feedback');
-    el.textContent = text;
-    el.className = 'feedback' + (type ? ' ' + type : '');
-  }
+  function setChFeedback(type, text) { setFeedback('ch-feedback', type, text); }
   function chHint() {
     if (chState.showResult) return;
     if (chState.hintLevel >= 3) return;
@@ -534,16 +572,10 @@
     spFeedback('', '');
   }
   function onSpResolved(correct) {
-    var q = spState.questions[spState.current];
-    q.correct = correct;
-    if (correct) { spState.correct++; spFeedback('success', '答对了！'); bumpCombo(); }
-    else { spState.wrong++; spFeedback('bad', '答错！+5 秒罚时'); breakCombo(); }
-    var delay = correct ? 650 : 950;
-    setTimeout(function () {
-      var next = spState.current + 1;
-      if (next < TOTAL_SPEED) { spState.current = next; spSetQuestion(next); }
-      else spFinish();
-    }, delay);
+    resolve(spState, correct, {
+      total: TOTAL_SPEED, fbEl: 'sp-feedback',
+      setQuestion: spSetQuestion, finish: spFinish
+    });
   }
   function spSkip() {
     if (spState.finished) return;
@@ -559,10 +591,7 @@
       else spFinish();
     }, 500);
   }
-  function spFeedback(type, text) {
-    var el = $('sp-feedback');
-    el.textContent = text; el.className = 'feedback' + (type ? ' ' + type : '');
-  }
+  function spFeedback(type, text) { setFeedback('sp-feedback', type, text); }
   function spFinish() {
     stopSpTimer();
     spState.finished = true;
@@ -585,15 +614,7 @@
     $('sr-record').textContent = isRecord ? '🏆 新纪录！' : ('历史最佳：' + (prevBest != null ? formatClock(prevBest) : '—'));
 
     var review = $('sr-review'); review.innerHTML = '';
-    spState.questions.forEach(function (q, i) {
-      var row = document.createElement('div');
-      row.className = 'review-row ' + (q.correct ? 'ok' : 'no');
-      row.innerHTML = '<span class="rv-idx">' + (i + 1) + '</span>' +
-        '<span class="rv-nums">' + q.numbers.join(' · ') + '</span>' +
-        '<span class="rv-ans">' + q.answer + '</span>' +
-        '<span class="rv-mark">' + (q.correct ? '✓' : '✗') + '</span>';
-      review.appendChild(row);
-    });
+    spState.questions.forEach(function (q, i) { review.appendChild(renderReviewRow(q, i)); });
     show('speedresult');
   }
 
@@ -615,10 +636,7 @@
     onStuck: function (tok) { onVsResolved(false); }
   });
 
-  function vsFeedback(type, text) {
-    var el = $('vp-feedback'); if (!el) return;
-    el.textContent = text; el.className = 'feedback' + (type ? ' ' + type : '');
-  }
+  function vsFeedback(type, text) { setFeedback('vp-feedback', type, text); }
   function vsSetNetBadge(elId, mode) {
     var el = $(elId); if (!el) return;
     if (mode === 'online') { el.className = 'net-badge net-on'; el.textContent = '已联机'; }
@@ -743,18 +761,15 @@
     vsFeedback('', '');
   }
   function onVsResolved(correct) {
-    var q = vsState.questions[vsState.current];
-    q.correct = correct;
-    q.ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
-    if (correct) { vsState.correct++; vsFeedback('success', '答对了！'); bumpCombo(); }
-    else { vsState.wrong++; vsFeedback('bad', '答错！+5 秒罚时'); breakCombo(); }
-    if (vsState.online && vsState.client) vsState.client.progress(vsState.current, correct, vsState.elapsedMs);
-    var delay = correct ? 650 : 950;
-    setTimeout(function () {
-      var next = vsState.current + 1;
-      if (next < TOTAL_VS) { vsState.current = next; vsSetQuestion(next); }
-      else vsFinishVs();
-    }, delay);
+    resolve(vsState, correct, {
+      total: TOTAL_VS, fbEl: 'vp-feedback',
+      setQuestion: vsSetQuestion, finish: vsFinishVs,
+      onTrack: function (c) {
+        var q = vsState.questions[vsState.current];
+        q.ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
+        if (vsState.online && vsState.client) vsState.client.progress(vsState.current, c, vsState.elapsedMs);
+      }
+    });
   }
   function vsSkip() {
     if (vsState.finished || !vsState.started) return;
@@ -814,14 +829,9 @@
     var players = vsState.players.length ? vsState.players
       : [{ cid: vsState.myCid, nick: Net.getNick() || '我', ready: false, online: true, prog: 0, done: false }];
     players.forEach(function (p) {
-      var row = document.createElement('div');
-      row.className = 'prow' + (p.cid === vsState.myCid ? ' me' : '') + (p.done ? ' done' : '') + (p.online ? '' : ' offline');
-      var medal = p.done ? '🏁' : (p.cid === vsState.myCid && vsState.host ? '👑' : '');
-      row.innerHTML = '<div class="medal">' + medal + '</div>' +
-        '<div class="pn">' + escapeHtml(p.nick || '玩家') + '</div>' +
-        '<div class="pbar"><i style="width:' + (Math.round((p.prog || 0) / TOTAL_VS * 100)) + '%"></i></div>' +
-        '<div class="pv">' + (p.done ? '完成' : ((p.prog || 0) + '/' + TOTAL_VS)) + '</div>';
-      list.appendChild(row);
+      list.appendChild(renderPlayerRow(p, {
+        isMe: p.cid === vsState.myCid, showCrown: true, host: vsState.host
+      }));
     });
     var startBtn = $('vr-start');
     if (vsState.online) {
@@ -847,13 +857,7 @@
     }
     (vsState.players || []).forEach(function (p) {
       if (p.cid === vsState.myCid) return;
-      var row = document.createElement('div');
-      row.className = 'prow' + (p.done ? ' done' : '') + (p.online ? '' : ' offline');
-      row.innerHTML = '<div class="medal">' + (p.done ? '🏁' : '') + '</div>' +
-        '<div class="pn">' + escapeHtml(p.nick || '玩家') + '</div>' +
-        '<div class="pbar"><i style="width:' + (Math.round((p.prog || 0) / TOTAL_VS * 100)) + '%"></i></div>' +
-        '<div class="pv">' + (p.done ? '完成' : ((p.prog || 0) + '/' + TOTAL_VS)) + '</div>';
-      wrap.appendChild(row);
+      wrap.appendChild(renderPlayerRow(p, { isMe: false, showCrown: false }));
     });
   }
   // ---- 渲染：结算 ----
@@ -939,7 +943,7 @@
       var isMe = p.cid === vsState.myCid;
       var res = !p.done ? (p.online ? '…' : '离线') : (winnerReady && winner && p.cid === winner.cid ? '🏆 胜' : '—');
       tr.innerHTML =
-        '<td class="name">' + (isMe ? (Net.getNick() || '我') : escapeHtml(p.nick || '玩家')) +
+        '<td class="name">' + (isMe ? escapeHtml(Net.getNick() || '我') : escapeHtml(p.nick || '玩家')) +
           (isMe ? '<span class="me-tag">我</span>' : '') + '</td>' +
         '<td>' + (p.done ? formatClock(p.actualMs) : (p.online ? '答题中' : '—')) + '</td>' +
         '<td>' + (p.done ? '+' + formatClock(p.finalMs - p.actualMs) : '—') + '</td>' +
@@ -1012,15 +1016,7 @@
     });
     $('vres-mycode').value = code;
     var review = $('vres-review'); review.innerHTML = '';
-    vsState.questions.forEach(function (q, i) {
-      var row = document.createElement('div');
-      row.className = 'review-row ' + (q.correct ? 'ok' : 'no');
-      row.innerHTML = '<span class="rv-idx">' + (i + 1) + '</span>' +
-        '<span class="rv-nums">' + q.numbers.join(' · ') + '</span>' +
-        '<span class="rv-ans">' + (q.answer || '') + '</span>' +
-        '<span class="rv-mark">' + (q.correct ? '✓' : '✗') + '</span>';
-      review.appendChild(row);
-    });
+    vsState.questions.forEach(function (q, i) { review.appendChild(renderReviewRow(q, i)); });
   }
 
   function vsAgain() {
