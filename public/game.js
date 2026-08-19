@@ -131,11 +131,20 @@
     var total = opts.total || TOTAL_VS;
     var row = document.createElement('div');
     row.className = 'prow' + (opts.isMe ? ' me' : '') + (p.done ? ' done' : '') + (p.online ? '' : ' offline');
-    var medal = p.done ? '🏁' : (opts.showCrown && opts.isMe && opts.host ? '👑' : '');
+    var isHost = opts.isHost || (opts.hostCid && opts.hostCid === p.cid);
+    var medal = p.done ? '🏁' : (opts.showCrown && isHost ? '👑' : '');
+    var status;
+    if (opts.lobby) {
+      if (!p.online) status = '离线';
+      else if (isHost) status = '房主';
+      else status = p.ready ? '已准备' : '未准备';
+    } else {
+      status = p.done ? '完成' : ((p.prog || 0) + '/' + total);
+    }
     row.innerHTML = '<div class="medal">' + medal + '</div>' +
       '<div class="pn">' + escapeHtml(p.nick || '玩家') + '</div>' +
       '<div class="pbar"><i style="width:' + (Math.round((p.prog || 0) / total * 100)) + '%"></i></div>' +
-      '<div class="pv">' + (p.done ? '完成' : ((p.prog || 0) + '/' + total)) + '</div>';
+      '<div class="pv">' + status + '</div>';
     return row;
   }
   // 统一结算回顾行渲染（竞速结算 / 联机结算共用）
@@ -152,9 +161,9 @@
   function resolve(state, correct, opts) {
     var q = state.questions[state.current];
     q.correct = correct;
-    if (opts.onTrack) opts.onTrack(correct); // 联机需记逐题耗时 + 上报进度
-    if (correct) { state.correct++; setFeedback(opts.fbEl, 'success', '答对了！'); bumpCombo(); }
-    else { state.wrong++; setFeedback(opts.fbEl, 'bad', '答错！+5 秒罚时'); breakCombo(); }
+    if (correct) { state.correct++; setFeedback(opts.fbEl, 'success', '答对了！'); }
+    else { state.wrong++; setFeedback(opts.fbEl, 'bad', '答错！+5 秒罚时'); }
+    if (opts.onTrack) opts.onTrack(correct); // 计数更新后再上报，断线恢复拿到的是完整状态
     var delay = correct ? 650 : 950;
     setTimeout(function () {
       var next = state.current + 1;
@@ -249,27 +258,6 @@
     // 提示③：直接给出答案
     var l3 = '提示③（答案）：' + sa + ' = 24';
     return { 1: l1, 2: l2, 3: l3 };
-  }
-
-  // ====================================================================
-  //  连对 combo（闯关 / 竞速 / 联机 共用）
-  // ====================================================================
-  var combo = 0;
-  function bumpCombo() {
-    combo++;
-    if (combo >= 2) {
-      var el = $('combo-pop');
-      if (!el) return;
-      el.textContent = '🔥 ' + combo + ' 连对！';
-      el.classList.remove('show');
-      void el.offsetWidth; // 强制回流，重触发入场动画
-      el.classList.add('show');
-    }
-  }
-  function breakCombo() {
-    combo = 0;
-    var el = $('combo-pop');
-    if (el) el.classList.remove('show');
   }
 
   // ====================================================================
@@ -450,7 +438,6 @@
 
   function onChWin(tok) {
     stopChTimer();
-    bumpCombo();
     var timedOut = chState.elapsedMs > TIME_LIMIT_MS;
     var stars = chState.hintUsed ? 1 : (timedOut ? 2 : 3);
     saveStageResult(chState.level, chState.index, { stars: stars, timeMs: chState.elapsedMs, hintUsed: chState.hintUsed });
@@ -482,7 +469,6 @@
     $('ch-result').style.display = 'flex';
   }
   function onChStuck(tok) {
-    breakCombo();
     setChFeedback('bad', '结果不是 24（得到 ' + tok.label + '），点【重来】再试试');
   }
   function setChFeedback(type, text) { setFeedback('ch-feedback', type, text); }
@@ -551,7 +537,6 @@
     });
   }
   function startSpeed() {
-    breakCombo();
     spState.questions = buildQuestions();
     spState.current = 0; spState.elapsedMs = 0; spState.wrong = 0; spState.skip = 0; spState.correct = 0;
     spState.finished = false;
@@ -580,7 +565,6 @@
   function spSkip() {
     if (spState.finished) return;
     if (boardSp.locked) return;
-    breakCombo();
     spState.questions[spState.current].correct = false;
     spState.skip++;
     spFeedback('bad', '已跳过 +15 秒罚时');
@@ -623,10 +607,12 @@
   // ====================================================================
   var TOTAL_VS = 10;
   var vsState = {
-    room: '', round: 1, online: false, host: false, myCid: '',
+    room: '', round: 1, phase: 'lobby', online: false, connection: 'idle',
+    host: false, hostCid: '', myCid: '', intent: 'join', lastError: null,
     questions: [], current: 0,
     elapsedMs: 0, timer: null, wrong: 0, skip: 0, correct: 0,
-    finished: false, started: false, myResult: null, client: null, players: []
+    finished: false, started: false, myResult: null, client: null, players: [],
+    playRound: 0, startingRound: 0, countdownTimer: null, startedAtLocal: 0
   };
   var boardVs = makeBoard({
     containerId: 'vp-board', statusId: 'vp-status',
@@ -641,7 +627,9 @@
     var el = $(elId); if (!el) return;
     if (mode === 'online') { el.className = 'net-badge net-on'; el.textContent = '已联机'; }
     else if (mode === 'reconnecting') { el.className = 'net-badge net-wait'; el.textContent = '重连中…'; }
-    else { el.className = 'net-badge net-off'; el.textContent = '离线模式'; }
+    else if (mode === 'connecting') { el.className = 'net-badge net-wait'; el.textContent = '连接中…'; }
+    else if (mode === 'error') { el.className = 'net-badge net-off'; el.textContent = '连接失败'; }
+    else { el.className = 'net-badge net-off'; el.textContent = '离线练习'; }
   }
 
   // ---- 大厅 ----
@@ -650,17 +638,24 @@
     var invite = Net.readInviteCode();
     if (invite) {
       $('vs-code').value = invite;
-      $('vs-code').focus();
+      $('vs-join').textContent = '🚪 加入房间 ' + invite;
+    } else {
+      $('vs-join').textContent = '🚪 加入房间';
     }
     var srv = Net.getServerUrl(); if (srv) $('vs-server').value = srv;
-    if (srv) { $('vs-netstate').className = 'net-badge net-wait'; $('vs-netstate').textContent = '已配置服务器'; }
-    else { $('vs-netstate').className = 'net-badge net-off'; $('vs-netstate').textContent = '离线模式'; }
+    if (Net.canUseOnline()) {
+      $('vs-netstate').className = 'net-badge net-wait';
+      $('vs-netstate').textContent = srv ? '自定义服务器' : '本站自动联机';
+    } else {
+      $('vs-netstate').className = 'net-badge net-off';
+      $('vs-netstate').textContent = '本地文件';
+    }
     show('vs');
   }
   function createVsRoom() {
     var nick = ($('vs-nick').value || '').trim() || '玩家'; Net.setNick(nick);
     var code = Net.randomRoomCode();
-    enterVsRoom(code);
+    enterVsRoom(code, 'create');
   }
   function joinVsRoom() {
     var nick = ($('vs-nick').value || '').trim() || '玩家'; Net.setNick(nick);
@@ -669,88 +664,218 @@
       alert('房间码不正确，请检查（5 位字母数字，不含 I / O / 0 / 1）');
       return;
     }
-    enterVsRoom(code);
+    enterVsRoom(code, 'join');
   }
-  function enterVsRoom(code) {
+  function enterVsRoom(code, intent) {
+    if (vsState.client) { try { vsState.client.close(false); } catch (e) {} }
     vsState.room = code;
     vsState.round = 1;
+    vsState.phase = 'lobby';
+    vsState.intent = intent === 'create' ? 'create' : 'join';
     vsState.myCid = Net.getCid();
     vsState.players = [];
+    vsState.connection = Net.canUseOnline() ? 'connecting' : 'offline';
+    vsState.lastError = null;
     vsState.finished = false; vsState.started = false; vsState.myResult = null;
-    var url = Net.getServerUrl();
-    if (url) {
-      setupVsClient();
-      vsState.client.open(code, Net.getNick());
-    } else {
-      vsState.online = false; vsState.client = null; vsState.host = false;
-    }
+    vsState.playRound = 0; vsState.startingRound = 0;
+    Net.rememberInviteCode(code);
     $('vr-code').textContent = code;
     $('vr-link').value = Net.inviteLink(code);
     $('vp-room').textContent = code;
-    renderVsRoom();
+    if ($('vr-error')) { $('vr-error').textContent = ''; $('vr-error').style.display = 'none'; }
     show('vsroom');
+    if (Net.canUseOnline()) {
+      setupVsClient();
+      vsState.client.open(code, Net.getNick(), vsState.intent);
+    } else {
+      vsState.online = false; vsState.client = null; vsState.host = false;
+      renderVsRoom();
+    }
+  }
+
+  function getVsMe() {
+    for (var i = 0; i < vsState.players.length; i++) {
+      if (vsState.players[i].cid === vsState.myCid) return vsState.players[i];
+    }
+    return null;
   }
 
   function setupVsClient() {
     vsState.client = Net.createClient({
       onMode: function (mode) {
+        vsState.connection = mode;
         vsState.online = (mode === 'online');
         vsSetNetBadge('vr-netstate', mode);
         vsSetNetBadge('vres-netstate', mode);
-        if (mode === 'online') $('vr-share-tip').textContent = '已连接服务器，可实时看到对手进度。';
-        else $('vr-share-tip').textContent = '未连接服务器：各自打完这套题，用「成绩码」对比也能比出胜负。';
+        if (mode === 'online') $('vr-share-tip').textContent = '已连接。分享邀请后，等朋友准备好即可同时开局。';
+        else if (mode === 'connecting' || mode === 'reconnecting') $('vr-share-tip').textContent = '正在连接服务器；首次唤醒免费服务器可能需要几秒。';
+        else if (mode === 'error') $('vr-share-tip').textContent = '连接没有成功，请按下方提示检查后重试。';
+        else $('vr-share-tip').textContent = '本地文件模式：可各自作答，再用成绩码对比。';
         renderVsRoom();
       },
       onState: function (m) {
+        var previousRound = vsState.round;
         vsState.players = m.players || [];
         vsState.round = m.round || vsState.round;
+        vsState.phase = m.phase || vsState.phase;
+        vsState.hostCid = m.host || '';
         vsState.host = (m.host === vsState.myCid);
+        vsState.lastError = null;
+        if ($('vr-error')) { $('vr-error').textContent = ''; $('vr-error').style.display = 'none'; }
+
+        if (vsState.phase === 'lobby' && previousRound !== vsState.round) {
+          stopVsTimer();
+          cancelVsCountdown();
+          vsState.started = false; vsState.finished = false; vsState.myResult = null;
+          vsState.playRound = 0; vsState.startingRound = 0;
+          show('vsroom');
+        } else if (vsState.phase === 'playing') {
+          beginVsPlay(m.startedAtLocal || Date.now(), getVsMe());
+        } else if (vsState.phase === 'done') {
+          var me = getVsMe();
+          if (me && me.done && !vsState.myResult) restoreVsResult(me);
+          else if (me && !me.done) {
+            stopVsTimer(); cancelVsCountdown();
+            vsState.started = false; vsState.finished = false;
+            vsState.lastError = '你错过了本局结算，请等待房主发起下一局。';
+            if ($('vr-error')) { $('vr-error').textContent = vsState.lastError; $('vr-error').style.display = 'block'; }
+            show('vsroom');
+          }
+        }
         renderVsRoom(); renderVsPlay(); renderVsResult();
       },
       onStart: function (m) {
         vsState.round = m.round || vsState.round;
-        beginVsPlay(m.at);
+        vsState.phase = 'playing';
+        // start 通知通常晚于 state 几毫秒，此时已拿到更准确的时钟采样，刷新倒计时截止点。
+        if (vsState.startingRound === vsState.round && !vsState.started) {
+          vsState.startingRound = 0;
+          cancelVsCountdown();
+        }
+        beginVsPlay(m.localAt || Date.now(), getVsMe());
+      },
+      onError: function (m) {
+        if (m.code === 'ROOM_EXISTS' && vsState.intent === 'create') {
+          enterVsRoom(Net.randomRoomCode(), 'create');
+          return;
+        }
+        vsState.lastError = m.msg || '服务器暂时无法处理请求';
+        if ($('vr-error')) {
+          $('vr-error').textContent = vsState.lastError;
+          $('vr-error').style.display = 'block';
+        }
+        renderVsRoom();
       }
     });
   }
 
   function vsStart() {
     if (vsState.online && vsState.client) {
-      if (vsState.host) vsState.client.start();
-      else alert('等待房主开始…');
-    } else {
+      if (vsState.host) {
+        if (vsState.phase === 'done') vsState.client.again();
+        else vsState.client.start();
+      }
+      else {
+        var me = getVsMe();
+        vsState.client.ready(!(me && me.ready));
+      }
+    } else if (vsState.connection === 'error' && vsState.client) {
+      vsState.lastError = null;
+      vsState.client.reconnect();
+    } else if (vsState.connection === 'offline') {
       beginVsPlay(Date.now());
     }
   }
 
   // ---- 开局（带同步倒计时）----
-  function beginVsPlay(atMs) {
-    atMs = atMs || Date.now();
-    var delay = Math.max(0, atMs - Date.now());
-    if (delay > 500) {
-      var cd = $('sr-countdown'); var span = cd.querySelector('span');
+  function cancelVsCountdown() {
+    if (vsState.countdownTimer) { clearInterval(vsState.countdownTimer); vsState.countdownTimer = null; }
+    var cd = $('sr-countdown'); if (cd) cd.style.display = 'none';
+  }
+
+  function beginVsPlay(atMs, resumePlayer) {
+    if ((vsState.playRound === vsState.round && (vsState.started || vsState.finished)) ||
+        vsState.startingRound === vsState.round) return;
+    vsState.startingRound = vsState.round;
+    atMs = Number(atMs) || Date.now();
+    vsState.startedAtLocal = atMs;
+    cancelVsCountdown();
+    var cd = $('sr-countdown');
+    function tick() {
+      var left = atMs - Date.now();
+      if (left <= 50) {
+        cancelVsCountdown();
+        startVsBoard(resumePlayer, atMs);
+        return;
+      }
       cd.style.display = 'flex';
-      var n = Math.max(1, Math.ceil(delay / 1000));
-      span.textContent = String(n);
-      var t = setInterval(function () {
-        n--;
-        if (n <= 0) { clearInterval(t); cd.style.display = 'none'; startVsBoard(); }
-        else span.textContent = String(n);
-      }, 1000);
+      cd.innerHTML = '<span>' + Math.max(1, Math.ceil(left / 1000)) + '</span>';
+    }
+    if (atMs - Date.now() > 100) {
+      tick();
+      vsState.countdownTimer = setInterval(tick, 100);
     } else {
-      startVsBoard();
+      startVsBoard(resumePlayer, atMs);
     }
   }
-  function startVsBoard() {
-    breakCombo();
+
+  function startVsBoard(resumePlayer, atMs) {
+    if (vsState.playRound === vsState.round && vsState.started) return;
     vsState.questions = Net.buildRoomQuestions(Net.roundSeed(vsState.room, vsState.round), TOTAL_VS, LEVELS);
-    vsState.current = 0; vsState.elapsedMs = 0;
-    vsState.wrong = 0; vsState.skip = 0; vsState.correct = 0;
+    var resumeAt = resumePlayer && resumePlayer.participant ? Math.max(0, Math.min(TOTAL_VS, resumePlayer.prog || 0)) : 0;
+    var priorResults = resumePlayer && resumePlayer.results || [];
+    var priorQms = resumePlayer && resumePlayer.qms || [];
+    for (var i = 0; i < resumeAt; i++) {
+      vsState.questions[i].correct = !!priorResults[i];
+      vsState.questions[i].ms = Math.max(0, Number(priorQms[i]) || 0);
+    }
+    vsState.current = resumeAt;
+    vsState.correct = resumePlayer ? (resumePlayer.correct || 0) : 0;
+    vsState.wrong = resumePlayer ? (resumePlayer.wrong || 0) : 0;
+    vsState.skip = resumePlayer ? (resumePlayer.skip || 0) : 0;
     vsState.finished = false; vsState.started = true; vsState.myResult = null;
-    vsState._qStart = 0; // 当前题的起始计时（用于「逐题耗时」）
-    vsSetQuestion(0);
+    vsState.playRound = vsState.round; vsState.startingRound = 0;
+    vsState.startedAtLocal = Number(atMs) || Date.now();
+    vsState.elapsedMs = Math.max(0, Date.now() - vsState.startedAtLocal);
+    vsState._qStart = resumePlayer ? (resumePlayer.lastProgressMs || vsState.elapsedMs) : 0;
+    if (resumeAt >= TOTAL_VS) {
+      if (resumePlayer && resumePlayer.done) restoreVsResult(resumePlayer);
+      else vsFinishVs(); // 最后一题进度已到服务器、done 包尚未送达时也能安全续交卷
+      return;
+    }
+    vsSetQuestion(resumeAt);
+    // 恢复时从服务器记录的上一题完成时刻继续累计当前题耗时。
+    vsState._qStart = resumePlayer ? (resumePlayer.lastProgressMs || vsState.elapsedMs) : vsState.elapsedMs;
     show('vsplay');
     startVsTimer();
+  }
+
+  function restoreVsResult(player) {
+    stopVsTimer();
+    if (!vsState.questions.length || vsState.playRound !== vsState.round) {
+      vsState.questions = Net.buildRoomQuestions(Net.roundSeed(vsState.room, vsState.round), TOTAL_VS, LEVELS);
+    }
+    var results = player.results || [];
+    var qms = player.qms || [];
+    vsState.questions.forEach(function (q, i) {
+      q.correct = !!results[i];
+      q.ms = Math.max(0, Number(qms[i]) || 0);
+    });
+    vsState.elapsedMs = player.actualMs || player.lastProgressMs || 0;
+    vsState.correct = player.correct || 0;
+    vsState.wrong = player.wrong || 0;
+    vsState.skip = player.skip || 0;
+    vsState.current = TOTAL_VS;
+    vsState.started = false; vsState.finished = true;
+    vsState.playRound = vsState.round; vsState.startingRound = 0;
+    vsState.myResult = {
+      finalMs: player.finalMs || vsState.elapsedMs,
+      actualMs: player.actualMs || vsState.elapsedMs,
+      correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip,
+      results: results.slice(), qms: qms.slice()
+    };
+    show('vsresult');
+    renderVsResult();
   }
   function vsSetQuestion(i) {
     var q = vsState.questions[i];
@@ -767,20 +892,27 @@
       onTrack: function (c) {
         var q = vsState.questions[vsState.current];
         q.ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
-        if (vsState.online && vsState.client) vsState.client.progress(vsState.current, c, vsState.elapsedMs);
+        if (vsState.online && vsState.client) {
+          vsState.client.progress(vsState.current, c, q.ms, vsState.elapsedMs, {
+            correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
+          });
+        }
       }
     });
   }
   function vsSkip() {
     if (vsState.finished || !vsState.started) return;
     if (boardVs.locked) return;
-    breakCombo();
     vsState.questions[vsState.current].correct = false;
     vsState.questions[vsState.current].ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
     vsState.skip++;
     vsFeedback('bad', '已跳过 +15 秒罚时');
     boardVs.locked = true;
-    if (vsState.online && vsState.client) vsState.client.progress(vsState.current, false, vsState.elapsedMs);
+    if (vsState.online && vsState.client) {
+      vsState.client.progress(vsState.current, false, vsState.questions[vsState.current].ms, vsState.elapsedMs, {
+        correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
+      });
+    }
     setTimeout(function () {
       var next = vsState.current + 1;
       if (next < TOTAL_VS) { vsState.current = next; vsSetQuestion(next); }
@@ -789,14 +921,17 @@
   }
   function startVsTimer() {
     stopVsTimer();
-    vsState.timer = setInterval(function () {
-      vsState.elapsedMs += 100;
+    function updateTimer() {
+      vsState.elapsedMs = Math.max(0, Date.now() - vsState.startedAtLocal);
       $('vp-timer').textContent = formatClock(vsState.elapsedMs);
-    }, 100);
+    }
+    updateTimer();
+    vsState.timer = setInterval(updateTimer, 100);
   }
   function stopVsTimer() { if (vsState.timer) { clearInterval(vsState.timer); vsState.timer = null; } }
 
   function vsFinishVs() {
+    if (vsState.startedAtLocal) vsState.elapsedMs = Math.max(0, Date.now() - vsState.startedAtLocal);
     stopVsTimer();
     vsState.finished = true; vsState.started = false;
     var actualMs = vsState.elapsedMs;
@@ -818,32 +953,55 @@
         results: results, qms: qms
       });
     }
-    setTimeout(function () { show('vsresult'); renderVsResult(); }, vsState.online ? 450 : 0);
+    setTimeout(function () { show('vsresult'); renderVsResult(); }, vsState.online ? 180 : 0);
   }
 
   // ---- 渲染：房间 ----
   function renderVsRoom() {
-    $('vr-count').textContent = (vsState.players.length || 1);
+    var onlineCount = vsState.players.filter(function (p) { return p.online; }).length;
+    $('vr-count').textContent = vsState.players.length ? (onlineCount + ' 在线') : '1';
     $('vr-round').textContent = vsState.round;
     var list = $('vr-players'); list.innerHTML = '';
     var players = vsState.players.length ? vsState.players
       : [{ cid: vsState.myCid, nick: Net.getNick() || '我', ready: false, online: true, prog: 0, done: false }];
     players.forEach(function (p) {
       list.appendChild(renderPlayerRow(p, {
-        isMe: p.cid === vsState.myCid, showCrown: true, host: vsState.host
+        isMe: p.cid === vsState.myCid, showCrown: true, lobby: true,
+        isHost: p.cid === (vsState.hostCid || (vsState.host ? vsState.myCid : ''))
       }));
     });
     var startBtn = $('vr-start');
-    if (vsState.online) {
-      if (vsState.host) {
-        startBtn.textContent = '▶ 开始对战'; startBtn.disabled = false; startBtn.style.opacity = '1';
-        $('vr-role').textContent = '你是房主，点开始让大家同时答题。';
+    startBtn.style.opacity = '1';
+    if (vsState.connection === 'connecting' || vsState.connection === 'reconnecting') {
+      startBtn.textContent = vsState.connection === 'reconnecting' ? '正在重连…' : '正在连接房间…';
+      startBtn.disabled = true; startBtn.style.opacity = '0.6';
+      $('vr-role').textContent = '连接成功后会自动恢复房间和对局进度。';
+    } else if (vsState.connection === 'error') {
+      startBtn.textContent = '↻ 重新连接';
+      startBtn.disabled = false;
+      $('vr-role').textContent = vsState.lastError || '连接失败，请重试。';
+    } else if (vsState.online) {
+      var me = getVsMe();
+      if (vsState.phase === 'done') {
+        startBtn.textContent = vsState.host ? '🔁 发起下一局' : '等待房主发起下一局…';
+        startBtn.disabled = !vsState.host;
+        if (startBtn.disabled) startBtn.style.opacity = '0.6';
+        $('vr-role').textContent = '本局已经结束，下一局会重新准备再开场。';
+      } else if (vsState.host) {
+        var waiting = players.filter(function (p) { return p.online && p.cid !== vsState.myCid && !p.ready; });
+        var canStart = onlineCount >= 2 && waiting.length === 0 && vsState.phase === 'lobby';
+        startBtn.textContent = onlineCount < 2 ? '等待朋友加入…' : (waiting.length ? ('等待 ' + waiting.length + ' 人准备…') : '▶ 同步开始对战');
+        startBtn.disabled = !canStart;
+        if (!canStart) startBtn.style.opacity = '0.6';
+        $('vr-role').textContent = onlineCount < 2 ? '你是房主。先把邀请发给朋友。' : (waiting.length ? '朋友点“我准备好了”后，你就能开局。' : '全员已准备，所有人会同时倒计时开局。');
       } else {
-        startBtn.textContent = '⌛ 等待房主开始…'; startBtn.disabled = true; startBtn.style.opacity = '0.6';
-        $('vr-role').textContent = '房主开始后才能答题。';
+        startBtn.textContent = me && me.ready ? '✓ 已准备（点击取消）' : '✓ 我准备好了';
+        startBtn.disabled = vsState.phase !== 'lobby';
+        if (startBtn.disabled) startBtn.style.opacity = '0.6';
+        $('vr-role').textContent = me && me.ready ? '已通知房主，等房主同步开局。' : '准备好后点一下，避免朋友还没进来就开局。';
       }
     } else {
-      startBtn.textContent = '▶ 开始对战（离线·各自计分）'; startBtn.disabled = false; startBtn.style.opacity = '1';
+      startBtn.textContent = '▶ 开始练习（稍后用成绩码对比）'; startBtn.disabled = false; startBtn.style.opacity = '1';
       $('vr-role').textContent = '离线模式：你和朋友用同一房间码会得到相同题目，打完用成绩码对比。';
     }
   }
@@ -878,9 +1036,8 @@
       if (b.done) return 1;
       return (b.prog || 0) - (a.prog || 0);
     });
-    // 只有「在线玩家都已完成」才定胜负，避免自己一提交就误报“你赢了”
-    var onlinePlayers = players.filter(function (p) { return p.online; });
-    var winnerReady = players.length === 1 || onlinePlayers.every(function (p) { return p.done; });
+    // 由服务器统一结束本局：掉线玩家有 30 秒重连窗口，避免一闪断就被判负。
+    var winnerReady = !vsState.online || vsState.phase === 'done';
     var winner = null;
     if (winnerReady) {
       players.forEach(function (p) { if (p.done && (winner === null || p.finalMs < winner.finalMs)) winner = p; });
@@ -910,8 +1067,11 @@
     else if (winner && winner.cid === vsState.myCid) banner.textContent = '🎉 你赢了！';
     else if (winner) banner.textContent = '本局冠军：' + escapeHtml(winner.nick || '玩家');
     else banner.textContent = '对战中…';
-    var waiting = players.filter(function (p) { return p.online && !p.done; });
-    $('vres-waiting').textContent = vsState.online ? (waiting.length ? ('等待 ' + waiting.length + ' 位玩家完成…') : (winnerReady ? '全部完成！' : '')) : '';
+    var waiting = players.filter(function (p) { return p.participant !== false && p.online && !p.done; });
+    var reconnecting = players.filter(function (p) { return p.participant && !p.online && !p.done; });
+    $('vres-waiting').textContent = vsState.online
+      ? (winnerReady ? '本局已结算' : (waiting.length ? ('等待 ' + waiting.length + ' 位玩家完成…') : (reconnecting.length ? '对手掉线，等待重连（最多 30 秒）…' : '等待服务器结算…')))
+      : '';
 
     // ---- 对战对比表 + 胜负原因 ----
     var body = $('vres-cmp-body'); body.innerHTML = '';
@@ -924,12 +1084,13 @@
       if (second) {
         var gap = second.finalMs - winner.finalMs;
         var cd = winner.correct - second.correct;
+        var correctDiff = cd > 0 ? ('（多答对 ' + cd + ' 题）') : (cd < 0 ? ('（少答对 ' + Math.abs(cd) + ' 题，但总成绩更快）') : '');
         if (winner.cid === vsState.myCid) {
-          reason = '你领先 ' + formatClock(gap) + (cd !== 0 ? ('（多答对 ' + Math.abs(cd) + ' 题）') : '') + ' 拿下本局！';
+          reason = '你领先 ' + formatClock(gap) + correctDiff + ' 拿下本局！';
         } else if (second.cid === vsState.myCid) {
-          reason = '你以 ' + formatClock(gap) + ' 之差惜败' + (cd !== 0 ? ('（少答对 ' + Math.abs(cd) + ' 题）') : '') + '。';
+          reason = '你以 ' + formatClock(gap) + ' 之差惜败' + correctDiff + '。';
         } else {
-          reason = escapeHtml(winner.nick || '玩家') + ' 领先 ' + formatClock(gap) + ' 获胜' + (cd !== 0 ? ('（多答对 ' + Math.abs(cd) + ' 题）') : '') + '。';
+          reason = escapeHtml(winner.nick || '玩家') + ' 领先 ' + formatClock(gap) + ' 获胜' + correctDiff + '。';
         }
       } else {
         reason = winner.cid === vsState.myCid ? '全场你最快完成，本局你赢！' : (escapeHtml(winner.nick || '玩家') + ' 第一个完成，本局他赢。');
@@ -1015,25 +1176,52 @@
       finalMs: me.finalMs, actualMs: me.actualMs, correct: me.correct, wrong: me.wrong, skip: me.skip
     });
     $('vres-mycode').value = code;
+    var againBtn = $('vres-again');
+    if (vsState.online) {
+      if (vsState.host) {
+        againBtn.textContent = vsState.phase === 'done' ? '🔁 发起下一局' : '等待本局结算…';
+        againBtn.disabled = vsState.phase !== 'done';
+      } else {
+        againBtn.textContent = '等待房主发起下一局…';
+        againBtn.disabled = true;
+      }
+      againBtn.style.opacity = againBtn.disabled ? '0.6' : '1';
+    } else {
+      againBtn.textContent = '🔁 再来一局（换新题）';
+      againBtn.disabled = false; againBtn.style.opacity = '1';
+    }
     var review = $('vres-review'); review.innerHTML = '';
     vsState.questions.forEach(function (q, i) { review.appendChild(renderReviewRow(q, i)); });
   }
 
   function vsAgain() {
     if (vsState.online && vsState.client) {
-      if (vsState.host) vsState.client.again();
-      vsState.round = (vsState.round || 1) + 1;
-      show('vsroom'); renderVsRoom();
+      if (vsState.host && vsState.phase === 'done') vsState.client.again();
     } else {
       vsState.round = (vsState.round || 1) + 1;
       beginVsPlay(Date.now());
     }
   }
   function leaveVs() {
+    if (vsState.started && !vsState.finished && typeof confirm === 'function' && !confirm('正在对战，确定要退出吗？')) return;
     stopVsTimer();
-    if (vsState.client) { try { vsState.client.close(); } catch (e) {} vsState.client = null; }
-    vsState.online = false; vsState.started = false; vsState.finished = false;
+    cancelVsCountdown();
+    if (vsState.client) { try { vsState.client.close(true); } catch (e) {} vsState.client = null; }
+    Net.clearInviteCode();
+    vsState.online = false; vsState.connection = 'idle'; vsState.started = false; vsState.finished = false;
     show('home');
+  }
+
+  function shareVsInvite() {
+    var link = $('vr-link').value;
+    var text = '来和我玩 24 点！房间码 ' + vsState.room;
+    if (navigator.share && !/^\(本地文件/.test(link)) {
+      navigator.share({ title: '24点联机对战', text: text, url: link }).catch(function () {});
+    } else {
+      copyText(text + ' ' + link);
+      $('vr-copy').textContent = '已复制';
+      setTimeout(function () { $('vr-copy').textContent = '分享邀请'; }, 1500);
+    }
   }
   function vsTestServer() {
     var base = Net.normalizeServerBase($('vs-server') ? $('vs-server').value : '');
@@ -1062,10 +1250,11 @@
     if (!d) { out.textContent = '成绩码无效，请检查是否复制完整。'; out.style.color = '#eb5757'; return; }
     var me = vsState.myResult || { finalMs: 0 };
     var myFinal = me.finalMs || 0;
-    var iWin = myFinal <= d.finalMs;
-    out.style.color = iWin ? 'var(--green)' : '#eb5757';
+    var tie = myFinal === d.finalMs;
+    var iWin = myFinal < d.finalMs;
+    out.style.color = tie ? 'var(--blue)' : (iWin ? 'var(--green)' : '#eb5757');
     out.innerHTML = '对方 ' + escapeHtml(d.nick) + '：最终 ' + formatClock(d.finalMs) + '（对 ' + d.correct + '/' + TOTAL_VS + '）　｜　你：' + formatClock(myFinal) +
-      '<br/>' + (iWin ? '🎉 你更快，赢了！' : '你慢了 ' + ((d.finalMs - myFinal) / 1000).toFixed(1) + ' 秒。');
+      '<br/>' + (tie ? '难分高下，本局平局！' : (iWin ? '🎉 你更快，赢了！' : '你慢了 ' + ((myFinal - d.finalMs) / 1000).toFixed(1) + ' 秒。'));
   }
 
   // ====================================================================
@@ -1095,12 +1284,12 @@
     $('ch-replay').onclick = function () { openChallenge(chState.level, chState.index); };
     // 竞速准备
     $('sr-start').onclick = function () {
-      var cd = $('sr-countdown'); cd.style.display = 'flex'; cd.textContent = '3';
+      var cd = $('sr-countdown'); cd.style.display = 'flex'; cd.innerHTML = '<span>3</span>';
       var n = 3;
       var t = setInterval(function () {
         n--;
         if (n <= 0) { clearInterval(t); cd.style.display = 'none'; startSpeed(); }
-        else cd.textContent = String(n);
+        else cd.innerHTML = '<span>' + n + '</span>';
       }, 1000);
     };
     $('sr-back').onclick = function () { show('home'); };
@@ -1122,9 +1311,12 @@
     $('vs-back').onclick = leaveVs;
     $('vs-create').onclick = createVsRoom;
     $('vs-join').onclick = joinVsRoom;
+    $('vs-code').oninput = function () { this.value = Net.normalizeRoomCode(this.value); };
+    $('vs-code').onkeydown = function (e) { if (e.key === 'Enter') joinVsRoom(); };
+    $('vs-nick').onkeydown = function (e) { if (e.key === 'Enter' && Net.isValidRoomCode(Net.normalizeRoomCode($('vs-code').value))) joinVsRoom(); };
     $('vr-back').onclick = leaveVs;
     $('vr-start').onclick = vsStart;
-    $('vr-copy').onclick = function () { copyText($('vr-link').value); };
+    $('vr-copy').onclick = shareVsInvite;
     $('vp-back').onclick = leaveVs;
     $('vp-skip').onclick = vsSkip;
     $('vp-undo').onclick = function () { boardVs.undo(); };
@@ -1133,7 +1325,11 @@
     $('vp-op-sub').onclick = function () { boardVs.clickOp('−'); };
     $('vp-op-mul').onclick = function () { boardVs.clickOp('×'); };
     $('vp-op-div').onclick = function () { boardVs.clickOp('÷'); };
-    $('vs-server-save').onclick = function () { Net.setServerUrl($('vs-server').value); $('vs-server-msg').textContent = '已保存。下次创建/加入房间时生效。'; };
+    $('vs-server-save').onclick = function () {
+      var saved = Net.setServerUrl($('vs-server').value);
+      $('vs-server-msg').textContent = saved ? '已保存自定义服务器。' : '已恢复自动连接当前站点。';
+      openVsLobby();
+    };
     $('vs-server-test').onclick = vsTestServer;
     $('vres-again').onclick = vsAgain;
     $('vres-home').onclick = leaveVs;
@@ -1172,6 +1368,12 @@
 
   window.addEventListener('DOMContentLoaded', function () {
     bind();
-    show('home');
+    var invite = Net.readInviteCode();
+    if (invite) {
+      openVsLobby();
+      if (Net.getNick()) enterVsRoom(invite, 'join');
+    } else {
+      show('home');
+    }
   });
 })();

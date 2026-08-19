@@ -3,10 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#eef3ff" />
+<meta name="description" content="用四个数字凑出 24，支持闯关、竞速和好友实时联机对战。" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<title>24点大挑战 · 测试版</title>
+<title>24点大挑战 · 好友实时对战</title>
 <style>
   :root {
     --blue: #2f80ed;
@@ -64,20 +66,6 @@
   @keyframes pop { 0%{transform:scale(.6);} 60%{transform:scale(1.18);} 100%{transform:scale(1);} }
   /* 合并出新牌时弹一下 */
   .tk-fresh { animation: pop .35s ease; }
-
-  /* 连对 combo 闪光 */
-  #combo-pop {
-    position: fixed; left: 50%; top: 16%; transform: translateX(-50%);
-    z-index: 80; pointer-events: none; opacity: 0; white-space: nowrap;
-    font-size: 24px; font-weight: 900; color: #fff;
-    background: linear-gradient(135deg,#ff9a3d,#ff5e62);
-    padding: 8px 20px; border-radius: 999px;
-    box-shadow: 0 8px 22px rgba(255,94,98,.55);
-    transition: opacity .25s ease;
-  }
-  #combo-pop.show { opacity: 1; animation: comboPop .42s cubic-bezier(.2,.8,.3,1.2); }
-  @keyframes comboPop { 0%{transform:translateX(-50%) scale(.5);} 60%{transform:translateX(-50%) scale(1.18);} 100%{transform:translateX(-50%) scale(1);} }
-  @media (max-width: 380px) { #combo-pop { font-size: 20px; padding: 7px 16px; } }
 
   .status { text-align: center; font-size: 17px; font-weight: 700; color: var(--muted); min-height: 24px; margin: 6px 0 12px; }
 
@@ -164,6 +152,7 @@
   .code-input { text-align: center; letter-spacing: 8px; text-transform: uppercase; font-size: 30px !important; }
   .room-code { text-align: center; font-size: 42px; font-weight: 900; color: var(--blue); letter-spacing: 8px; margin: 4px 0 2px; }
   .hintline { font-size: 13px; color: var(--muted); line-height: 1.65; }
+  .room-error { display:none; margin-top:10px; padding:10px 12px; border-radius:12px; background:#fff1f1; color:#c0392b; font-size:13px; font-weight:700; line-height:1.5; }
   .net-badge { display: inline-block; font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 20px; }
   .net-on { background: #e6f8ee; color: var(--green); }
   .net-off { background: #fff3e0; color: var(--orange); }
@@ -179,6 +168,7 @@
   .prow.me { background: #f6faff; border-radius: 8px; }
   .prow.done .pbar i { background: linear-gradient(90deg,#5fe39a,#27ae60); }
   .prow.offline .pn { color: #b6c0cf; }
+  .prow .pv { white-space: nowrap; }
 
   .copybox { display: flex; gap: 8px; margin-top: 8px; }
   .copybox input {
@@ -237,6 +227,175 @@
     .tk { width: 66px; height: 66px; font-size: 36px; }
     .op-btn { font-size: 30px; }
   }
+
+  /* ---------------- 视觉升级：轻量竞技游戏主题 ---------------- */
+  :root {
+    --blue: #5668f5;
+    --blue-deep: #3347d8;
+    --orange: #ff8a4c;
+    --green: #18ad78;
+    --yellow: #f6c84c;
+    --bg: #f2f5ff;
+    --card: rgba(255,255,255,.94);
+    --ink: #18233d;
+    --muted: #71809a;
+    --line: #e4e9f5;
+  }
+  html { background: #eef3ff; }
+  body {
+    position: relative; overflow-x: hidden;
+    background:
+      radial-gradient(circle at 10% 6%, rgba(91,108,255,.18), transparent 28%),
+      radial-gradient(circle at 92% 18%, rgba(255,159,100,.16), transparent 30%),
+      linear-gradient(155deg, #edf2ff 0%, #f7f9ff 52%, #fff7ef 100%);
+  }
+  body::before, body::after {
+    content: ""; position: fixed; pointer-events: none; border-radius: 999px;
+    filter: blur(2px); opacity: .65; z-index: 0;
+  }
+  body::before { width: 180px; height: 180px; left: -92px; top: 34%; background: rgba(88,107,245,.09); }
+  body::after { width: 220px; height: 220px; right: -130px; bottom: 5%; background: rgba(255,138,76,.1); }
+  #app { position: relative; z-index: 1; max-width: 540px; padding: 20px 18px calc(42px + env(safe-area-inset-bottom)); }
+  .view { animation: viewIn .26s ease both; }
+  @keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+
+  .home-hero { display: flex; align-items: center; gap: 17px; margin: 8px 2px 24px; }
+  .brand-mark {
+    width: 80px; height: 88px; flex: 0 0 auto; display: grid; place-items: center;
+    border-radius: 24px; color: #fff; font-size: 36px; font-weight: 950; letter-spacing: -2px;
+    background: linear-gradient(145deg, #7180ff 0%, #4d60ef 55%, #3448d7 100%);
+    box-shadow: 0 18px 34px rgba(70,87,215,.28), inset 0 1px 0 rgba(255,255,255,.45);
+    transform: rotate(-3deg); position: relative;
+  }
+  .brand-mark::before { content: ""; position: absolute; inset: 8px; border: 1px solid rgba(255,255,255,.3); border-radius: 18px; }
+  .brand-mark::after { content: "× ÷"; position: absolute; bottom: 8px; font-size: 9px; letter-spacing: 4px; opacity: .7; }
+  .home-heading { min-width: 0; }
+  .eyebrow { color: var(--blue); font-size: 11px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 3px; }
+  h1 { color: var(--ink); font-size: 29px; letter-spacing: -.6px; margin: 0 0 5px; line-height: 1.15; }
+  .sub { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+
+  .panel {
+    background: var(--card); border: 1px solid rgba(225,231,245,.9); border-radius: 22px;
+    box-shadow: 0 14px 38px rgba(45,61,112,.09), inset 0 1px 0 rgba(255,255,255,.75);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .home-modes { display: grid; gap: 11px; margin-bottom: 16px; }
+  .big-btn {
+    min-height: 58px; padding: 15px 18px; border-radius: 17px; margin-bottom: 11px;
+    font-size: 17px; letter-spacing: .1px; box-shadow: none;
+  }
+  .big-btn:focus-visible, .back:focus-visible, .op-btn:focus-visible, .act-btn:focus-visible,
+  .copybox button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 3px solid rgba(86,104,245,.28); outline-offset: 3px;
+  }
+  .big-btn:disabled { cursor: not-allowed; filter: saturate(.7); }
+  .home-mode {
+    display: flex; align-items: center; text-align: left; gap: 13px; min-height: 78px; margin: 0;
+    box-shadow: 0 12px 24px rgba(38,52,103,.12); overflow: hidden; position: relative;
+  }
+  .home-mode::after { content: ""; position: absolute; width: 115px; height: 115px; right: -60px; top: -52px; border-radius: 50%; background: rgba(255,255,255,.12); }
+  .mode-icon { width: 45px; height: 45px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 14px; font-size: 23px; background: rgba(255,255,255,.18); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+  .mode-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .mode-copy strong { font-size: 18px; line-height: 1.15; }
+  .mode-copy small { font-size: 12px; font-weight: 600; opacity: .82; }
+  .mode-arrow { font-size: 22px; opacity: .8; transform: translateX(0); transition: transform .15s ease; }
+  .home-mode:hover .mode-arrow { transform: translateX(3px); }
+  .btn-blue { background: linear-gradient(135deg,#6678ff,#4459e6); box-shadow: 0 10px 22px rgba(68,89,230,.25); }
+  .btn-orange { background: linear-gradient(135deg,#ffa667,#f47a42); box-shadow: 0 10px 22px rgba(244,122,66,.23); }
+  .btn-green { background: linear-gradient(135deg,#28c98c,#139b6a); box-shadow: 0 10px 22px rgba(19,155,106,.23); }
+  .btn-ghost { background: #eef1fb; color: var(--blue-deep); border: 1px solid #e2e7f5; }
+  .home-rules { padding: 16px 18px; }
+  .rule-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; font-weight: 900; margin-bottom: 12px; }
+  .rule-title span { width: 26px; height: 26px; display: grid; place-items: center; color: var(--blue); background: #edf0ff; border-radius: 9px; }
+  .rule-steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 11px; }
+  .rule-step { background: #f6f8fd; border: 1px solid #edf0f7; border-radius: 12px; padding: 9px 7px; text-align: center; font-size: 11px; color: var(--muted); font-weight: 700; }
+  .rule-step b { display: grid; place-items: center; width: 21px; height: 21px; margin: 0 auto 5px; border-radius: 7px; color: #fff; background: var(--blue); font-size: 11px; }
+  .home-rules p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--muted); }
+
+  .topbar {
+    position: sticky; top: max(8px, env(safe-area-inset-top)); z-index: 20; padding: 8px;
+    border: 1px solid rgba(224,230,243,.85); border-radius: 17px; margin-bottom: 14px;
+    background: rgba(255,255,255,.84); box-shadow: 0 8px 24px rgba(40,55,102,.08);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  }
+  .back { background: #eef1fb; color: var(--blue-deep); border: 1px solid #e3e7f4; border-radius: 11px; padding: 9px 12px; }
+  .title { color: var(--ink); font-size: 17px; font-weight: 900; letter-spacing: -.2px; }
+
+  .timer {
+    width: fit-content; min-width: 96px; margin: 2px auto 13px; padding: 7px 15px;
+    border-radius: 999px; color: var(--blue-deep); background: #eef1ff; border: 1px solid #dfe4ff;
+    font-size: 23px; font-variant-numeric: tabular-nums; letter-spacing: .7px;
+  }
+  .board { gap: 11px; margin: 15px 0 11px; min-height: 92px; }
+  .tk {
+    width: 82px; height: 88px; border-radius: 21px; font-size: 40px; position: relative; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.42); box-shadow: 0 11px 20px rgba(36,49,91,.16), inset 0 1px 0 rgba(255,255,255,.38);
+  }
+  .tk::after { content: ""; position: absolute; width: 70px; height: 70px; right: -36px; top: -42px; border-radius: 50%; background: rgba(255,255,255,.18); }
+  .tk-orig { background: linear-gradient(150deg,#ffbd6f,#f0803f); }
+  .tk-res { background: linear-gradient(150deg,#7d8cff,#4c60e9); }
+  .tk-sel { outline: 4px solid #ffd76c; outline-offset: 3px; box-shadow: 0 14px 25px rgba(56,72,175,.25); }
+  .tk-win { background: linear-gradient(145deg,#41dca3,#119c6c); }
+  .tk-bad { background: linear-gradient(145deg,#bec8d9,#8e9bb0); }
+  .status { width: fit-content; max-width: 100%; margin: 6px auto 14px; padding: 7px 12px; border-radius: 10px; background: #f6f8fc; color: var(--muted); font-size: 14px; }
+  .op-row { gap: 9px; }
+  .op-btn { height: 60px; border: 1px solid #e3e7f4; background: #f0f3fb; color: var(--blue-deep); font-size: 31px; box-shadow: inset 0 1px 0 #fff; }
+  .op-btn:hover { background: #e7ebfb; }
+  .act-btn { min-height: 52px; padding: 13px; border-radius: 14px; font-size: 15px; }
+  .feedback { font-size: 14px; margin: 10px 0; }
+
+  .grid { gap: 10px; }
+  .level-cell, .stage-cell { border: 1px solid var(--line); box-shadow: 0 8px 19px rgba(38,52,103,.08); transition: transform .15s ease, box-shadow .15s ease; }
+  .level-cell:not(.locked):hover, .stage-cell:not(.locked):hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(38,52,103,.12); }
+  .lv-num, .st-num { color: var(--blue-deep); }
+
+  .field label { color: #5f6e88; letter-spacing: .1px; }
+  .field input, .copybox input {
+    border: 1px solid #dfe5f2; background: #f8faff; box-shadow: inset 0 1px 2px rgba(36,50,91,.035);
+  }
+  .field input:focus, .copybox input:focus { border-color: #8996ff; box-shadow: 0 0 0 4px rgba(86,104,245,.1); }
+  .room-code {
+    width: fit-content; margin: 7px auto 10px; padding: 10px 17px; border-radius: 16px;
+    color: var(--blue-deep); background: linear-gradient(135deg,#f0f2ff,#f8f9ff); border: 1px dashed #aeb8ff;
+    font-size: 39px; font-variant-numeric: tabular-nums;
+  }
+  .net-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid transparent; }
+  .net-badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px rgba(113,128,154,.1); }
+  .net-on { background: #eaf9f3; border-color: #d1f0e3; }
+  .net-off { background: #fff4eb; border-color: #ffe2cf; }
+  .net-wait { background: #f0f2f8; border-color: #e5e8f0; }
+  .prow { padding: 11px 7px; border-bottom-color: #edf0f6; }
+  .prow.me { background: #f1f3ff; border: 1px solid #e2e6ff; padding-left: 9px; padding-right: 9px; }
+  .prow .pbar { height: 11px; background: #e9edf5; }
+  .prow .pbar i { background: linear-gradient(90deg,#7d8cff,#4b5fe8); }
+  .copybox button { background: linear-gradient(135deg,#6577fa,#4559df); border-radius: 11px; }
+  .room-error { border: 1px solid #ffd8d5; }
+
+  .win-banner { padding: 12px; border-radius: 14px; background: #f5f7fc; color: var(--ink); }
+  .win-banner.win-pop { background: #ecfaf4; border: 1px solid #d2f2e4; }
+  .rank-row { border-bottom-color: #edf0f6; }
+  .cmp-table th { background: #f6f8fc; }
+  .cmp-table th:first-child { border-radius: 9px 0 0 9px; }
+  .cmp-table th:last-child { border-radius: 0 9px 9px 0; }
+  .countdown { background: rgba(19,29,57,.72); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
+  .countdown span { width: 150px; height: 150px; display: grid; place-items: center; border-radius: 45px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.24); text-shadow: 0 10px 28px rgba(0,0,0,.22); }
+
+  @media (max-width: 420px) {
+    #app { padding: 14px 12px calc(34px + env(safe-area-inset-bottom)); }
+    .home-hero { gap: 13px; margin-top: 4px; }
+    .brand-mark { width: 68px; height: 76px; border-radius: 21px; font-size: 31px; }
+    h1 { font-size: 25px; }
+    .home-mode { min-height: 72px; padding: 13px 15px; }
+    .panel { padding: 15px; border-radius: 19px; }
+    .tk { width: 66px; height: 74px; border-radius: 18px; font-size: 34px; }
+    .board { gap: 8px; }
+    .op-btn { height: 55px; min-width: 48px; }
+    .room-code { font-size: 34px; letter-spacing: 6px; }
+    .rule-steps { gap: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
 </style>
 </head>
 <body>
@@ -244,16 +403,33 @@
 
   <!-- 首页 -->
   <section id="view-home" class="view">
-    <h1>24点大挑战</h1>
-    <div class="sub">测试版 · 用 4 个数字凑出 24</div>
-    <button id="btn-challenge" class="big-btn btn-blue">🎯 闯关模式</button>
-    <button id="btn-speed" class="big-btn btn-orange">⚡ 竞速模式</button>
-    <button id="btn-vs" class="big-btn btn-green">👥 联机对战</button>
-    <div class="panel rules">
-      <b>玩法</b>：点两张数字牌，选 <b>+ − × ÷</b>，按你点的顺序算出结果；结果变成新的一张牌，
-      继续合并，最后只剩 <b>24</b> 就过关！<br/>
-      闯关 <b>80 大关</b>（难度递进，顶级以中外数学家命名），竞速连续 10 题比速度，
-      联机对战可以和朋友<b>同一套题</b>比拼。
+    <div class="home-hero">
+      <div class="brand-mark" aria-hidden="true">24</div>
+      <div class="home-heading">
+        <div class="eyebrow">Make Twenty Four</div>
+        <h1>24点大挑战</h1>
+        <div class="sub">四张牌，一次脑力冲刺<br/>单人闯关，也能和好友实时开战</div>
+      </div>
+    </div>
+    <div class="home-modes">
+      <button id="btn-challenge" class="big-btn btn-blue home-mode">
+        <span class="mode-icon">🎯</span><span class="mode-copy"><strong>闯关模式</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
+      </button>
+      <button id="btn-speed" class="big-btn btn-orange home-mode">
+        <span class="mode-icon">⚡</span><span class="mode-copy"><strong>竞速模式</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
+      </button>
+      <button id="btn-vs" class="big-btn btn-green home-mode">
+        <span class="mode-icon">👥</span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
+      </button>
+    </div>
+    <div class="panel rules home-rules">
+      <div class="rule-title"><span>✦</span> 三步凑出 24</div>
+      <div class="rule-steps">
+        <div class="rule-step"><b>1</b>选择数字牌</div>
+        <div class="rule-step"><b>2</b>选择运算符</div>
+        <div class="rule-step"><b>3</b>继续合并</div>
+      </div>
+      <p>每个数字只能使用一次，支持 + − × ÷。最后只剩下 24，即可通关。</p>
     </div>
   </section>
 
@@ -398,14 +574,14 @@
       <div class="sect-title">怎么和朋友比拼？</div>
       <div class="hintline">
         同一个<b>房间码</b>会生成<b>完全相同的 10 道题</b>（难度由易到难），所以比的是真本事。<br/>
-        · <b>已联机</b>：能实时看到对手答到第几题，全部答完自动排名。<br/>
-        · <b>未联机</b>：也能玩！各自打完同一套题，把「成绩码」发给对方即可分出胜负。
+        · 网页版会<b>自动连接当前服务器</b>，实时同步准备、开局、进度和排名。<br/>
+        · 网络短暂中断会自动重连，并恢复当前题目与计时。
       </div>
       <details class="setting">
-        <summary>⚙️ 联机服务器设置（可留空）</summary>
+        <summary>⚙️ 高级：自定义联机服务器</summary>
         <div class="field" style="margin-top:8px;">
           <label>WebSocket 地址（部署后填入，如 wss://xxx.onrender.com）</label>
-          <input id="vs-server" placeholder="留空 = 使用离线成绩码对战" style="font-size:14px;" />
+          <input id="vs-server" placeholder="留空 = 自动使用当前站点（推荐）" style="font-size:14px;" />
         </div>
         <div class="copybox">
           <button id="vs-server-save" style="flex:1;">保存</button>
@@ -425,13 +601,14 @@
     </div>
 
     <div class="panel">
-      <div class="hintline" style="text-align:center;">房间码（告诉朋友这 5 个字）</div>
+      <div class="hintline" style="text-align:center;">好友房间码</div>
       <div class="room-code" id="vr-code">—</div>
       <div class="copybox">
         <input id="vr-link" readonly />
-        <button id="vr-copy">复制</button>
+        <button id="vr-copy">分享邀请</button>
       </div>
       <div class="hintline" style="margin-top:8px;" id="vr-share-tip"></div>
+      <div class="room-error" id="vr-error" role="alert"></div>
     </div>
 
     <div class="panel">
@@ -547,11 +724,9 @@
   <div class="countdown" id="sr-countdown"><span>3</span></div>
 </div>
 
-  <div id="combo-pop"></div>
-
 <script src="core.js?v=20260814b"></script>
 <script src="data.js?v=20260814c"></script>
-<script src="net.js?v=20260814a"></script>
-<script src="game.js?v=20260814d"></script>
+<script src="net.js?v=20260819b"></script>
+<script src="game.js?v=20260819d"></script>
 </body>
 </html>

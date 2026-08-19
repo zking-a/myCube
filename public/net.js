@@ -200,6 +200,20 @@
   function getNick() { return lsGet(K_NICK); }
   function setNick(n) { lsSet(K_NICK, String(n || '').slice(0, 10)); }
 
+  // 网页部署时默认连接当前站点；只有 file:// 才是真正的离线模式。
+  // 这条规则必须同时用于大厅状态和实际 open，避免界面说“可联机”但根本没发起连接。
+  function resolveServerBase() {
+    var saved = normalizeServerBase(getServerUrl());
+    if (saved) return saved;
+    try {
+      if (location && location.protocol && !/^file:/i.test(location.protocol)) {
+        return normalizeServerBase(location.origin);
+      }
+    } catch (e) {}
+    return '';
+  }
+  function canUseOnline() { return !!resolveServerBase(); }
+
   // 客户端唯一 id（同一浏览器刷新后保持不变，便于断线重连回到原座位）
   var K_CID = 'g24_cid';
   function getCid() {
@@ -228,22 +242,34 @@
       return base + '#r=' + roomCode;
     } catch (e) { return ''; }
   }
+  function rememberInviteCode(roomCode) {
+    try {
+      if (/^file:/i.test(location.protocol) || !history || !history.replaceState) return;
+      history.replaceState(null, '', location.pathname + location.search + '#r=' + roomCode);
+    } catch (e) {}
+  }
+  function clearInviteCode() {
+    try {
+      if (/^file:/i.test(location.protocol) || !history || !history.replaceState) return;
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) {}
+  }
 
   // ==================================================================
   //  7. WebSocket 房间客户端
   // ==================================================================
   /* 协议（JSON）
    *  客户端 → 服务端：
-   *    {t:'join', room, nick, cid}
+   *    {t:'join', room, nick, cid, intent:'create'|'join'}
    *    {t:'ready', v:true|false}
    *    {t:'start'}                       // 仅房主有效
    *    {t:'prog', i, ok, ms}             // 第 i 题完成（0 基），ok=是否答对
    *    {t:'done', finalMs, actualMs, correct, wrong, skip, results:[0|1...], qms:[ms...]}
    *         —— results/qms 为「逐题对错 / 逐题耗时」，用于结果页「逐题对决」与战报。
-   *    {t:'again'}                       // 再来一局（换题，round+1）
+   *    {t:'again'}                       // 房主发起下一局，回到准备大厅
    *    {t:'ping'}
    *  服务端 → 客户端：
-   *    {t:'state', round, phase, host, players:[...]}
+   *    {t:'state', round, phase, startedAt, serverNow, host, players:[...]}
    *    {t:'start', round, at}            // at=服务器时间戳，用于同步开局
    *    {t:'pong'}
    *    {t:'err', msg}
@@ -252,12 +278,22 @@
     var h = handlers || {};
     var ws = null;
     var closedByUser = false;
+    var terminalError = false;
     var retry = 0;
     var retryTimer = null;
     var pingTimer = null;
-    var state = { connected: false, room: '', nick: '', mode: 'offline' };
+    var connectTimer = null;
+    var socketSeq = 0;
+    var clockOffset = 0; // serverNow - localNow
+    var clockSamples = 0;
+    var state = { connected: false, room: '', nick: '', intent: 'join', mode: 'offline' };
 
     function log(msg) { if (h.onLog) h.onLog(msg); }
+
+    function setMode(mode) {
+      state.mode = mode;
+      if (h.onMode) h.onMode(mode);
+    }
 
     function send(obj) {
       if (ws && ws.readyState === 1) {
@@ -266,78 +302,126 @@
       return false;
     }
 
+    function clearTimers() {
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    }
+
+    function sampleClock(clientSentAt, serverAt) {
+      var now = Date.now();
+      var sent = Number(clientSentAt);
+      var server = Number(serverAt);
+      if (!isFinite(sent) || !isFinite(server) || sent <= 0) return;
+      var sample = server - ((sent + now) / 2);
+      clockOffset = clockSamples ? (clockOffset * 0.7 + sample * 0.3) : sample;
+      clockSamples++;
+    }
+
+    function toLocalTime(serverAt) {
+      var n = Number(serverAt);
+      return isFinite(n) && n > 0 ? n - clockOffset : Date.now();
+    }
+
+    function ping() { send({ t: 'ping', c: Date.now() }); }
+
     function scheduleRetry() {
-      if (closedByUser) return;
+      if (closedByUser || terminalError) return;
       if (retryTimer) return;
       retry++;
-      var delay = Math.min(1000 * Math.pow(1.6, retry - 1), 10000);
+      var delay = Math.min(800 * Math.pow(1.7, retry - 1), 10000);
       log('连接断开，' + Math.round(delay / 1000) + ' 秒后重连…');
       retryTimer = setTimeout(function () {
         retryTimer = null;
-        open(state.room, state.nick);
+        open(state.room, state.nick, state.intent);
       }, delay);
     }
 
-    function open(room, nick) {
-      var url = normalizeServerBase(getServerUrl());
+    function open(room, nick, intent) {
+      var url = resolveServerBase();
       if (!url) {
-        // 同域兜底：非 file:// 时，默认当前站点即中转服务器（一体化部署，零配置）
-        try {
-          if (location && location.protocol && !/^file:/i.test(location.protocol)) {
-            url = normalizeServerBase(location.origin);
-          }
-        } catch (e) {}
-      }
-      if (!url) {
-        state.mode = 'offline';
         state.connected = false;
-        if (h.onMode) h.onMode('offline');
+        setMode('offline');
         return false;
       }
+      socketSeq++;
+      var mySeq = socketSeq;
+      if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+      clearTimers();
       closedByUser = false;
+      terminalError = false;
       state.room = room;
       state.nick = nick;
-      state.mode = 'online';
+      state.intent = intent === 'create' ? 'create' : 'join';
+      state.connected = false;
+      setMode(retry ? 'reconnecting' : 'connecting');
       try {
         ws = new WebSocket(url + '/ws');
       } catch (e) {
-        state.mode = 'offline';
-        if (h.onMode) h.onMode('offline');
         log('服务器地址无效：' + e.message);
+        setMode('error');
         return false;
       }
+      connectTimer = setTimeout(function () {
+        if (mySeq !== socketSeq || !ws || ws.readyState === 1) return;
+        try { ws.close(); } catch (e) {}
+      }, 10000);
       ws.onopen = function () {
-        retry = 0;
-        state.connected = true;
-        if (h.onMode) h.onMode('online');
-        send({ t: 'join', room: room, nick: nick, cid: getCid() });
-        if (pingTimer) clearInterval(pingTimer);
-        pingTimer = setInterval(function () { send({ t: 'ping' }); }, 25000);
+        if (mySeq !== socketSeq) return;
+        if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+        send({ t: 'join', room: room, nick: nick, cid: getCid(), intent: state.intent });
+        ping();
+        pingTimer = setInterval(ping, 20000);
       };
       ws.onmessage = function (ev) {
+        if (mySeq !== socketSeq) return;
         var m;
         try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.t === 'state' && h.onState) h.onState(m);
-        else if (m.t === 'start' && h.onStart) h.onStart(m);
-        else if (m.t === 'err') log(m.msg || '服务器错误');
+        if (m.t === 'pong') {
+          sampleClock(m.c, m.s);
+        } else if (m.t === 'state') {
+          if (!clockSamples && Number(m.serverNow)) clockOffset = Number(m.serverNow) - Date.now();
+          retry = 0;
+          state.connected = true;
+          // 建房只用于首包；一旦拿到房间状态，后续掉线都应按“重返原房间”处理。
+          state.intent = 'join';
+          setMode('online');
+          m.startedAtLocal = m.startedAt ? toLocalTime(m.startedAt) : null;
+          if (h.onState) h.onState(m);
+        } else if (m.t === 'start') {
+          m.localAt = toLocalTime(m.at);
+          if (h.onStart) h.onStart(m);
+        } else if (m.t === 'err') {
+          log(m.msg || '服务器错误');
+          if (h.onError) h.onError(m);
+          if (/^(ROOM_NOT_FOUND|ROOM_EXISTS|ROOM_FULL|ROOM_EXPIRED|ROUND_IN_PROGRESS|ROUND_FINISHED|DUPLICATE_ID|SERVER_FULL|CREATE_RATE_LIMIT)$/.test(m.code || '')) {
+            terminalError = true;
+            closedByUser = true;
+            setMode('error');
+            try { ws.close(1000, 'terminal error'); } catch (e) {}
+          }
+        }
       };
       ws.onclose = function () {
+        if (mySeq !== socketSeq) return;
+        clearTimers();
         state.connected = false;
-        if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
-        if (h.onMode) h.onMode(closedByUser ? 'offline' : 'reconnecting');
+        if (!terminalError) setMode(closedByUser ? 'offline' : 'reconnecting');
         scheduleRetry();
       };
       ws.onerror = function () { /* onclose 会紧随其后，统一在那里处理 */ };
       return true;
     }
 
-    function close() {
+    function close(leaveRoom) {
       closedByUser = true;
+      terminalError = false;
+      socketSeq++;
       if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
-      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+      clearTimers();
+      if (leaveRoom) send({ t: 'leave' });
       if (ws) { try { ws.close(); } catch (e) {} ws = null; }
       state.connected = false;
-      state.mode = 'offline';
+      setMode('offline');
     }
 
     return {
@@ -346,9 +430,16 @@
       close: close,
       send: send,
       isOnline: function () { return state.connected; },
+      toLocalTime: toLocalTime,
       ready: function (v) { return send({ t: 'ready', v: !!v }); },
       start: function () { return send({ t: 'start' }); },
-      progress: function (i, ok, ms) { return send({ t: 'prog', i: i, ok: !!ok, ms: ms }); },
+      progress: function (i, ok, ms, elapsedMs, stats) {
+        stats = stats || {};
+        return send({
+          t: 'prog', i: i, ok: !!ok, ms: ms, elapsedMs: elapsedMs,
+          correct: stats.correct, wrong: stats.wrong, skip: stats.skip
+        });
+      },
       done: function (r) {
         return send({
           t: 'done', finalMs: r.finalMs, actualMs: r.actualMs,
@@ -356,7 +447,8 @@
           results: r.results, qms: r.qms
         });
       },
-      again: function () { return send({ t: 'again' }); }
+      again: function () { return send({ t: 'again' }); },
+      reconnect: function () { return open(state.room, state.nick, state.intent); }
     };
   }
 
@@ -381,12 +473,16 @@
     normalizeServerBase: normalizeServerBase,
     getServerUrl: getServerUrl,
     setServerUrl: setServerUrl,
+    resolveServerBase: resolveServerBase,
+    canUseOnline: canUseOnline,
     getNick: getNick,
     setNick: setNick,
     getCid: getCid,
     // 邀请
     readInviteCode: readInviteCode,
     inviteLink: inviteLink,
+    rememberInviteCode: rememberInviteCode,
+    clearInviteCode: clearInviteCode,
     // 客户端
     createClient: createClient
   };
