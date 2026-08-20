@@ -182,6 +182,22 @@
     var s = Math.floor(ms / 1000), m = Math.floor(s / 60), ss = s % 60;
     return (m < 10 ? '0' : '') + m + ':' + (ss < 10 ? '0' : '') + ss;
   }
+  function toSafeMs(v) {
+    var n = Number(v);
+    return (typeof n === 'number' && isFinite(n) && n > -1) ? Math.round(n) : 0;
+  }
+  function countCorrectFromResults(results) {
+    if (!results || !results.length) return 0;
+    var c = 0;
+    for (var i = 0; i < results.length; i++) if (results[i]) c++;
+    return c;
+  }
+  function getCorrect(p) {
+    if (!p) return 0;
+    if (p.results && p.results.length) return countCorrectFromResults(p.results);
+    var c = parseInt(p.correct, 10);
+    return isFinite(c) && c > -1 ? c : 0;
+  }
   function shuffle(a) {
     for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
@@ -1024,6 +1040,10 @@
   function renderVsResult() {
     if (!$('view-vsresult') || $('view-vsresult').style.display !== 'block') return;
     var me = vsState.myResult || { finalMs: vsState.elapsedMs, actualMs: vsState.elapsedMs, correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip };
+    var meCorrect = getCorrect(me);
+    var meActual = toSafeMs(me.actualMs);
+    var meFinal = toSafeMs(me.finalMs);
+    var mePenalty = Math.max(0, meFinal - meActual);
     var players = (vsState.players || []).slice();
     var selfIdx = -1;
     for (var k = 0; k < players.length; k++) if (players[k].cid === vsState.myCid) { selfIdx = k; break; }
@@ -1075,11 +1095,10 @@
       ? (winnerReady ? '本局已结算' : (waiting.length ? ('等待 ' + waiting.length + ' 位玩家完成…') : (reconnecting.length ? '对手掉线，等待重连（最多 30 秒）…' : '等待服务器结算…')))
       : '';
 
-    // ---- 对战对比表 + 胜负原因 ----
-    var body = $('vres-cmp-body'); body.innerHTML = '';
+    // ---- 胜负归因：最终差 = 基础用时差 + 罚时差 ----
     var reason = '';
+    var second = null;
     if (winnerReady && winner) {
-      var second = null;
       players.forEach(function (p) {
         if (p.done && p !== winner) { if (second === null || p.finalMs < second.finalMs) second = p; }
       });
@@ -1100,84 +1119,123 @@
     } else if (!winnerReady && vsState.finished) {
       reason = '你已交卷，等对手也完成就能见分晓。';
     }
-    players.forEach(function (p) {
-      var tr = document.createElement('tr');
-      if (winnerReady && winner && p.cid === winner.cid) tr.className = 'win' + (animate ? ' pulse' : '');
-      var isMe = p.cid === vsState.myCid;
-      var res = !p.done ? (p.online ? '…' : '离线') : (winnerReady && winner && p.cid === winner.cid ? '🏆 胜' : '—');
-      tr.innerHTML =
-        '<td class="name">' + (isMe ? escapeHtml(Net.getNick() || '我') : escapeHtml(p.nick || '玩家')) +
-          (isMe ? '<span class="me-tag">我</span>' : '') + '</td>' +
-        '<td>' + (p.done ? formatClock(p.actualMs) : (p.online ? '答题中' : '—')) + '</td>' +
-        '<td>' + (p.done ? '+' + formatClock(p.finalMs - p.actualMs) : '—') + '</td>' +
-        '<td>' + (p.done ? formatClock(p.finalMs) : '—') + '</td>' +
-        '<td>' + (p.done ? (p.correct + '/' + TOTAL_VS) : '—') + '</td>' +
-        '<td>' + (p.done ? (p.wrong || 0) : '—') + '</td>' +
-        '<td>' + (p.done ? (p.skip || 0) : '—') + '</td>' +
-        '<td class="' + (winnerReady && winner && p.cid === winner.cid ? 'cmp-win' : 'cmp-lose') + '">' + res + '</td>';
-      body.appendChild(tr);
-    });
-    // ---- 逐题对决 + 战报（针对「不知道谁哪里赢/输」）----
     var opp = null;
     players.forEach(function (p) {
-      if (p.cid !== vsState.myCid && p.results && p.results.length && (!opp || p.done)) opp = p;
+      if (p.cid === vsState.myCid) return;
+      if (!opp || (p.done && !opp.done) || (p.done && opp.done && Math.abs(toSafeMs(p.finalMs) - meFinal) < Math.abs(toSafeMs(opp.finalMs) - meFinal))) opp = p;
     });
+    var comparisonReady = !!(winnerReady && opp && opp.done);
+    var compareMain = $('vres-compare-main');
+    var compareBadge = $('vres-compare-badge');
+    var oppActual = comparisonReady ? toSafeMs(opp.actualMs) : 0;
+    var oppFinal = comparisonReady ? toSafeMs(opp.finalMs) : 0;
+    var oppPenalty = Math.max(0, oppFinal - oppActual);
+    var oppCorrect = comparisonReady ? getCorrect(opp) : 0;
+    var speedDelta = oppActual - meActual;
+    var penaltyDelta = oppPenalty - mePenalty;
+    var finalDelta = oppFinal - meFinal;
+    function gapText(ms) {
+      var raw = Number(ms);
+      var n = isFinite(raw) ? Math.max(0, Math.round(Math.abs(raw))) : 0;
+      return n < 60000 ? (n / 1000).toFixed(1) + ' 秒' : formatClock(n);
+    }
+    function attrRow(label, delta, maxAbs, total) {
+      var side = delta > 0 ? 'me' : (delta < 0 ? 'opp' : 'tie');
+      var width = delta === 0 ? 0 : Math.max(3, Math.min(48, Math.abs(delta) / maxAbs * 48));
+      var desc = delta > 0 ? ('为你赢得 ' + gapText(delta)) : (delta < 0 ? ('让你落后 ' + gapText(delta)) : '双方持平');
+      return '<div class="attr-row' + (total ? ' total' : '') + '">' +
+        '<div class="attr-row-head"><span>' + label + '</span><b class="' + side + '">' + desc + '</b></div>' +
+        '<div class="attr-track">' + (side === 'tie' ? '' : '<i class="attr-fill ' + side + '" style="width:' + width.toFixed(1) + '%"></i>') + '</div></div>';
+    }
+    function metricCard(label, mine, his, higherWins) {
+      var mineLead = higherWins ? mine > his : mine < his;
+      var hisLead = higherWins ? his > mine : his < mine;
+      return '<div class="metric-card"><span class="metric-name">' + label + '</span><div class="metric-values">' +
+        '<b' + (mineLead ? ' class="lead"' : '') + '>' + mine + '</b><span>我 : 对手</span><b' + (hisLead ? ' class="lead"' : '') + '>' + his + '</b></div></div>';
+    }
+    if (comparisonReady) {
+      var maxAbs = Math.max(1000, Math.abs(speedDelta), Math.abs(penaltyDelta), Math.abs(finalDelta));
+      var badgeClass = finalDelta > 0 ? 'me' : (finalDelta < 0 ? 'opp' : 'tie');
+      compareBadge.className = 'compare-badge ' + badgeClass;
+      compareBadge.textContent = finalDelta > 0 ? '你占优' : (finalDelta < 0 ? '对手占优' : '势均力敌');
+      compareMain.className = '';
+      compareMain.innerHTML =
+        '<div class="compare-score"><div class="compare-player"><span>我</span><b>' + formatClock(meFinal) + '</b></div>' +
+        '<div class="compare-vs">VS</div><div class="compare-player"><span>' + escapeHtml(opp.nick || '对手') + '</span><b>' + formatClock(oppFinal) + '</b></div></div>' +
+        '<div class="attr-chart"><div class="attr-axis"><span>← 对手优势</span><span>我的优势 →</span></div>' +
+        attrRow('基础用时影响', speedDelta, maxAbs, false) + attrRow('罚时影响', penaltyDelta, maxAbs, false) + attrRow('最终成绩差', finalDelta, maxAbs, true) + '</div>' +
+        '<div class="battle-metrics">' + metricCard('答对', meCorrect, oppCorrect, true) + metricCard('答错', me.wrong || 0, opp.wrong || 0, false) + metricCard('跳过', me.skip || 0, opp.skip || 0, false) + '</div>';
+      var dominant = Math.abs(speedDelta) >= Math.abs(penaltyDelta) ? '基础用时' : '罚时控制';
+      $('vres-reason').innerHTML = '<div class="reason-card">' + (finalDelta === 0 ? '双方最终成绩完全相同。' : ('你最终' + (finalDelta > 0 ? '快 ' : '慢 ') + gapText(finalDelta) + '，影响最大的是' + dominant + '。')) + '</div>';
+    } else {
+      compareBadge.className = 'compare-badge';
+      compareBadge.textContent = winnerReady ? '暂无对手成绩' : '等待结算';
+      compareMain.className = 'attribution-empty';
+      compareMain.textContent = winnerReady ? '当前只有你的成绩，收到对手成绩后才能生成归因图。' : '对手提交成绩后，将自动拆解基础用时与罚时的胜负影响。';
+      $('vres-reason').innerHTML = reason ? '<div class="reason-card">' + reason + '</div>' : '';
+    }
+
+    // ---- 逐题对决改为紧凑轨迹：保留关键题信息，去掉横向表格 ----
     var duelPanel = $('vres-duelpanel');
     var duel = $('vres-duel');
     if (me.results && me.results.length && opp && opp.results && opp.results.length) {
       duelPanel.style.display = '';
       var n = Math.min(me.results.length, opp.results.length);
-      var rows = '';
+      var points = '';
       for (var di = 0; di < n; di++) {
         var mine = me.results[di], his = opp.results[di];
-        var dcls = (mine && !his) ? 'win' : (!mine && his) ? 'loss' : '';
-        rows += '<tr class="' + dcls + '">' +
-          '<td class="name">第' + (di + 1) + '题</td>' +
-          '<td>' + (mine ? '✓' : '✗') + '</td>' +
-          '<td>' + (his ? '✓' : '✗') + '</td></tr>';
+        var dcls = (mine && !his) ? 'me' : (!mine && his) ? 'opp' : (mine && his) ? 'both' : 'none';
+        var mark = dcls === 'me' ? '+1' : (dcls === 'opp' ? '-1' : (dcls === 'both' ? '✓✓' : '××'));
+        var note = dcls === 'me' ? '你得分' : (dcls === 'opp' ? '对手得分' : (dcls === 'both' ? '都答对' : '都未对'));
+        points += '<div class="duel-point ' + dcls + '"><span>第' + (di + 1) + '题</span><b>' + mark + '</b><small>' + note + '</small></div>';
       }
-      duel.innerHTML = '<thead><tr><th class="name">题</th><th>我</th><th>' +
-        escapeHtml(opp.nick || '对手') + '</th></tr></thead><tbody>' + rows + '</tbody>';
+      duel.innerHTML = points;
     } else {
       duelPanel.style.display = 'none';
     }
 
-    // 战报：用时差 / 答对差 / 关键得失分题 / 最卡一题
+    // 战术复盘：只保留可行动的信息，避免与归因图重复报数。
     var report = [];
-    if (winnerReady && winner && me.results && opp && opp.results) {
-      if (second) {
-        report.push('⏱ 用时：你 ' + formatClock(me.finalMs) + '，对手 ' + formatClock(second.finalMs) + '（差 ' + formatClock(gap) + '）');
-      }
-      report.push('✅ 答对：你 ' + me.correct + '/' + TOTAL_VS + '，对手 ' + (second ? second.correct : '?') + '/' + TOTAL_VS);
+    if (comparisonReady && me.results && opp.results) {
       var loss = [], winp = [];
       var cnt = Math.min(me.results.length, opp.results.length);
       for (var ri = 0; ri < cnt; ri++) {
         if (!me.results[ri] && opp.results[ri]) loss.push(ri + 1);
         else if (me.results[ri] && !opp.results[ri]) winp.push(ri + 1);
       }
-      if (loss.length) report.push('🔻 关键失分：第 ' + loss.join('、') + ' 题你错、对手对');
-      if (winp.length) report.push('🔺 关键得分：第 ' + winp.join('、') + ' 题你对、对手错');
-      if (me.qms && me.qms.length) {
-        var si = 0; for (var a = 1; a < me.qms.length; a++) if (me.qms[a] > me.qms[si]) si = a;
-        report.push('🐢 你最卡的一题：第 ' + (si + 1) + ' 题（' + (me.qms[si] / 1000).toFixed(1) + 's）');
-        if (opp.qms && opp.qms.length) {
-          var oi = 0; for (var b = 1; b < opp.qms.length; b++) if (opp.qms[b] > opp.qms[oi]) oi = b;
-          report.push('🐢 对手最卡：第 ' + (oi + 1) + ' 题（' + (opp.qms[oi] / 1000).toFixed(1) + 's）');
-        }
-      }
+      var turnText = loss.length && winp.length ? ('你在第 ' + winp.join('、') + ' 题抢回优势，但第 ' + loss.join('、') + ' 题被对手拉开。') :
+        (loss.length ? ('第 ' + loss.join('、') + ' 题是主要失分点。') : (winp.length ? ('第 ' + winp.join('、') + ' 题是你拉开差距的关键。') : '双方逐题结果完全一致，胜负由用时决定。'));
+      report.push({ icon: '🎯', title: '关键转折', text: turnText });
+      var advice = mePenalty > oppPenalty ? ('本局罚时比对手多 ' + gapText(mePenalty - oppPenalty) + '，优先减少错误和跳过。') :
+        (meActual > oppActual ? ('基础用时慢 ' + gapText(meActual - oppActual) + '，下一局重点提升计算与操作速度。') : '速度与罚时控制都不错，继续保持稳定作答。');
+      report.push({ icon: '💡', title: '下一局建议', text: advice });
     }
-    $('vres-report').innerHTML = report.map(function (r) { return '<div class="rpt-line">' + r + '</div>'; }).join('');
+    if (me.qms && me.qms.length) {
+      var si = 0; for (var a = 1; a < me.qms.length; a++) if (me.qms[a] > me.qms[si]) si = a;
+      report.splice(Math.min(1, report.length), 0, { icon: '⏱', title: '耗时瓶颈', text: '第 ' + (si + 1) + ' 题用时 ' + (toSafeMs(me.qms[si]) / 1000).toFixed(1) + ' 秒，是你本局最需要提速的一题。' });
+    }
+    $('vres-report').innerHTML = report.length ? report.map(function (r) {
+      return '<div class="rpt-card"><span class="rpt-icon">' + r.icon + '</span><div><b>' + r.title + '</b><p>' + r.text + '</p></div></div>';
+    }).join('') : '<div class="report-empty">完成对战后，这里会给出关键转折和下一局建议。</div>';
 
-    $('vres-reason').textContent = reason;
-    $('vres-actual').textContent = formatClock(me.actualMs);
-    $('vres-penalty').textContent = '+' + formatClock(me.finalMs - me.actualMs);
-    $('vres-final').textContent = formatClock(me.finalMs);
-    $('vres-correct').textContent = me.correct + '/' + TOTAL_VS;
-    var code = Net.encodeScore({
-      room: vsState.room, round: vsState.round, nick: Net.getNick() || '我',
-      finalMs: me.finalMs, actualMs: me.actualMs, correct: me.correct, wrong: me.wrong, skip: me.skip
-    });
-    $('vres-mycode').value = code;
+    $('vres-actual').textContent = formatClock(meActual);
+    $('vres-penalty').textContent = '+' + formatClock(mePenalty);
+    $('vres-final').textContent = formatClock(meFinal);
+    $('vres-correct').textContent = meCorrect + '/' + TOTAL_VS;
+    // 实时联机由服务器统一结算；成绩码只作为断网/离线模式的兜底，避免玩家误以为还要手动提交一次。
+    var codeWrap = $('vres-codewrap');
+    if (vsState.online) {
+      codeWrap.style.display = 'none';
+      $('vres-mycode').value = '';
+      $('vres-theircode').value = '';
+      $('vres-compare-out').textContent = '';
+    } else {
+      codeWrap.style.display = '';
+      $('vres-mycode').value = Net.encodeScore({
+        room: vsState.room, round: vsState.round, nick: Net.getNick() || '我',
+        finalMs: meFinal, actualMs: meActual, correct: meCorrect, wrong: me.wrong || 0, skip: me.skip || 0
+      });
+    }
     var againBtn = $('vres-again');
     if (vsState.online) {
       if (vsState.host) {
@@ -1250,6 +1308,11 @@
     var d = Net.decodeScore(code);
     var out = $('vres-compare-out');
     if (!d) { out.textContent = '成绩码无效，请检查是否复制完整。'; out.style.color = '#eb5757'; return; }
+    if (d.room !== vsState.room || d.round !== vsState.round) {
+      out.textContent = '这不是当前房间、当前局的成绩码，请确认双方使用相同房间码并完成同一局。';
+      out.style.color = '#eb5757';
+      return;
+    }
     var me = vsState.myResult || { finalMs: 0 };
     var myFinal = me.finalMs || 0;
     var tie = myFinal === d.finalMs;
