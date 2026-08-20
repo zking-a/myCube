@@ -30,13 +30,13 @@ const sandbox = {
     setItem: (key, value) => storage.set(key, String(value))
   },
   location: {
-    protocol: 'https:', origin: 'https://game.test', pathname: '/', search: '', hash: '#r=ABCDE'
+    protocol: 'https:', origin: 'https://game.test', pathname: '/24/', search: '', hash: '#r=ABCDE'
   },
   history: { replaceState() {} }
 };
 sandbox.window = sandbox;
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync('public/net.js', 'utf8'), sandbox, { filename: 'net.js' });
+vm.runInContext(fs.readFileSync('public/24/net.js', 'utf8'), sandbox, { filename: 'net.js' });
 
 const Net = sandbox.Net;
 let passed = 0;

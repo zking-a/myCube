@@ -52,7 +52,7 @@ const MAX_CONNECTIONS_PER_IP = Math.max(1, parseInt(process.env.MAX_CONNECTIONS_
 const JOIN_IDLE_MS = 8000;           // 未 join 的连接尽快释放，避免占满全局名额
 const CONNECTION_ATTEMPT_LIMIT = Math.max(4, parseInt(process.env.CONNECTION_ATTEMPT_LIMIT, 10) || 12);
 const CONNECTION_ATTEMPT_WINDOW = 60 * 1000;
-// 房间码字母表须与 public/net.js 完全一致：5 位，去掉易混的 I/O/0/1
+// 房间码字母表须与 public/24/net.js 完全一致：5 位，去掉易混的 I/O/0/1
 const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 // 允许的浏览器来源：默认「域名无关」——接受请求自身的 Host（任何 *.onrender.com 子域均放行，无需随域名改代码）
 // 如需强制限定单一来源，设置环境变量 ALLOWED_ORIGIN=https://your-domain
@@ -313,7 +313,7 @@ function serveStatic(req, res) {
   let urlPath;
   try { urlPath = decodeURIComponent((req.url || '/').split('?')[0]); }
   catch (e) { writeHead(res, 400, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Bad Request'); return; }
-  if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath.endsWith('/')) urlPath += 'index.html';
   // 规范化并防目录穿越：只允许访问 PUBLIC_DIR 内
   const rel = path.normalize(urlPath).replace(/^(\.\.[\/\\])+/, '').replace(/^[\/\\]+/, '');
   const filePath = path.join(PUBLIC_DIR, rel);
@@ -367,6 +367,14 @@ const server = http.createServer(function (req, res) {
   if (urlPath === '/health' || urlPath === '/healthz') {
     writeHead(res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ ok: true, service: '24vs', rooms: rooms.size, connections: liveConnections, ts: Date.now() }));
+    return;
+  }
+  // 游戏目录使用稳定的尾斜杠 URL；旧数独入口继续可用。
+  const routeRedirects = { '/24': '/24/', '/sudoku': '/sudoku/', '/sudoku.html': '/sudoku/' };
+  if (routeRedirects[urlPath]) {
+    const query = (req.url || '').slice(urlPath.length);
+    writeHead(res, 308, { Location: routeRedirects[urlPath] + query, 'Cache-Control': 'no-store' });
+    res.end();
     return;
   }
   serveStatic(req, res);
