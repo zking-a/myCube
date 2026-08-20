@@ -16,7 +16,7 @@ const CONFIG = {
   TOAST_DURATION    : 3000,
   TIMER_INTERVAL    : 1000,
   PROGRESS_DELAY    : 80,
-  AUTO_SAVE_INTERVAL: 1000,
+  AUTO_SAVE_INTERVAL: 5000,
 
   // ③ 动画特效
   FIREWORK_PARTICLES: 40,
@@ -92,6 +92,8 @@ let history      = [];
 let seconds      = 0;
 let timerInterval= null;
 let timerStartedAt = 0;
+let autoSaveTimer = null;
+let saveDirty = false;
 let toastTimer   = null;
 let isDragging  = false;
 let dragStart    = -1;
@@ -1356,7 +1358,7 @@ function createParticle(container, color) {
   | showStats    | —               | 打开统计弹窗并渲染表格    |
 */
 
-function autoSave() {
+function writeSaveNow() {
   if (finished) return;
   try {
     const data = {
@@ -1366,6 +1368,27 @@ function autoSave() {
     };
     localStorage.setItem(CONFIG.STORAGE_SAVE, JSON.stringify(data));
   } catch(e) {}
+}
+
+// 高频操作只标记为脏并合并写入；切后台/离页时通过 force 立即落盘。
+function autoSave(force) {
+  if (finished) return;
+  saveDirty = true;
+  if (force) {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+    saveDirty = false;
+    writeSaveNow();
+    return;
+  }
+  if (!autoSaveTimer) {
+    autoSaveTimer = setTimeout(() => {
+      autoSaveTimer = null;
+      if (!saveDirty || finished) return;
+      saveDirty = false;
+      writeSaveNow();
+    }, CONFIG.AUTO_SAVE_INTERVAL);
+  }
 }
 
 function getSave() {
@@ -1394,6 +1417,9 @@ function getSavedDifficulty(save) {
 }
 
 function clearSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+  saveDirty = false;
   try { localStorage.removeItem(CONFIG.STORAGE_SAVE); } catch(e) {}
 }
 
@@ -1731,10 +1757,10 @@ function bindUiEvents() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && !finished && timerStartedAt) {
       seconds = Math.max(0, Math.floor((Date.now() - timerStartedAt) / 1000));
-      autoSave();
+      autoSave(true);
     }
   });
-  window.addEventListener("pagehide", () => { if (!finished) autoSave(); });
+  window.addEventListener("pagehide", () => { if (!finished) autoSave(true); });
 }
 
 function initApp() {
@@ -1759,6 +1785,8 @@ window.__sudokuTest = {
   normalizeDifficulty,
   formatDuration,
   restoreHistoryEntry,
+  autoSave,
+  clearSave,
 };
 
 window.addEventListener("DOMContentLoaded", initApp);

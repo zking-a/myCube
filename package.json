@@ -8,7 +8,8 @@
     "start": "node server.js",
     "test": "node test_net.js",
     "test:e2e": "node test_local.js",
-    "test:sudoku": "node test_sudoku.js"
+    "test:sudoku": "node test_sudoku.js",
+    "test:security": "node test_security.js"
   },
   "engines": {
     "node": ">=18"

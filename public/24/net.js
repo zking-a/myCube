@@ -216,13 +216,54 @@
 
   // 客户端唯一 id（同一浏览器刷新后保持不变，便于断线重连回到原座位）
   var K_CID = 'g24_cid';
+  var K_ROOM_TOKENS = 'g24_room_tokens_v1';
+  function createCid() {
+    try {
+      var bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      var out = '';
+      for (var i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0');
+      return out;
+    } catch (e) {
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-8);
+    }
+  }
   function getCid() {
     var c = lsGet(K_CID);
     if (!c) {
-      c = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      c = createCid();
       lsSet(K_CID, c);
     }
     return c;
+  }
+  function rotateCid() {
+    var c = createCid();
+    lsSet(K_CID, c);
+    return c;
+  }
+  function loadRoomTokens() {
+    try {
+      var data = JSON.parse(lsGet(K_ROOM_TOKENS) || '{}');
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    } catch (e) { return {}; }
+  }
+  function getRoomToken(room) {
+    var token = loadRoomTokens()[normalizeRoomCode(room)];
+    return typeof token === 'string' && /^[A-Za-z0-9_-]{20,128}$/.test(token) ? token : '';
+  }
+  function setRoomToken(room, token) {
+    room = normalizeRoomCode(room);
+    if (!room || typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,128}$/.test(token)) return;
+    var data = loadRoomTokens();
+    data[room] = token;
+    var keys = Object.keys(data);
+    while (keys.length > 20) delete data[keys.shift()];
+    lsSet(K_ROOM_TOKENS, JSON.stringify(data));
+  }
+  function clearRoomToken(room) {
+    var data = loadRoomTokens();
+    delete data[normalizeRoomCode(room)];
+    lsSet(K_ROOM_TOKENS, JSON.stringify(data));
   }
 
   // ==================================================================
@@ -260,15 +301,15 @@
   // ==================================================================
   /* 协议（JSON）
    *  客户端 → 服务端：
-   *    {t:'join', room, nick, cid, intent:'create'|'join'}
+   *    {t:'join', room, nick, cid, token, intent:'create'|'join'}
    *    {t:'ready', v:true|false}
    *    {t:'start'}                       // 仅房主有效
-   *    {t:'prog', i, ok, ms}             // 第 i 题完成（0 基），ok=是否答对
-   *    {t:'done', finalMs, actualMs, correct, wrong, skip, results:[0|1...], qms:[ms...]}
-   *         —— results/qms 为「逐题对错 / 逐题耗时」，用于结果页「逐题对决」与战报。
+   *    {t:'prog', i, outcome, proof}      // 服务端验证表达式并累计逐题成绩
+   *    {t:'done'}                         // 不上传客户端自报用时和汇总成绩
    *    {t:'again'}                       // 房主发起下一局，回到准备大厅
    *    {t:'ping'}
    *  服务端 → 客户端：
+   *    {t:'session', cid, token}          // 私密重连令牌，仅当前连接可见
    *    {t:'state', round, phase, startedAt, serverNow, host, players:[...]}
    *    {t:'start', round, at}            // at=服务器时间戳，用于同步开局
    *    {t:'pong'}
@@ -368,7 +409,7 @@
       ws.onopen = function () {
         if (mySeq !== socketSeq) return;
         if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
-        send({ t: 'join', room: room, nick: nick, cid: getCid(), intent: state.intent });
+        send({ t: 'join', room: room, nick: nick, cid: getCid(), token: getRoomToken(room), intent: state.intent });
         ping();
         pingTimer = setInterval(ping, 20000);
       };
@@ -376,7 +417,9 @@
         if (mySeq !== socketSeq) return;
         var m;
         try { m = JSON.parse(ev.data); } catch (e) { return; }
-        if (m.t === 'pong') {
+        if (m.t === 'session') {
+          if (m.cid === getCid()) setRoomToken(state.room, m.token);
+        } else if (m.t === 'pong') {
           sampleClock(m.c, m.s);
         } else if (m.t === 'state') {
           if (!clockSamples && Number(m.serverNow)) clockOffset = Number(m.serverNow) - Date.now();
@@ -393,7 +436,11 @@
         } else if (m.t === 'err') {
           log(m.msg || '服务器错误');
           if (h.onError) h.onError(m);
-          if (/^(ROOM_NOT_FOUND|ROOM_EXISTS|ROOM_FULL|ROOM_EXPIRED|ROUND_IN_PROGRESS|ROUND_FINISHED|DUPLICATE_ID|SERVER_FULL|CREATE_RATE_LIMIT)$/.test(m.code || '')) {
+          if (m.code === 'SESSION_INVALID') {
+            clearRoomToken(state.room);
+            rotateCid();
+          }
+          if (/^(ROOM_NOT_FOUND|ROOM_EXISTS|ROOM_FULL|ROOM_EXPIRED|ROUND_IN_PROGRESS|ROUND_FINISHED|DUPLICATE_ID|SESSION_INVALID|CLIENT_OUTDATED|INVALID_PROOF|SERVER_FULL|CREATE_RATE_LIMIT|IP_PLAYER_LIMIT)$/.test(m.code || '')) {
             terminalError = true;
             closedByUser = true;
             setMode('error');
@@ -433,20 +480,10 @@
       toLocalTime: toLocalTime,
       ready: function (v) { return send({ t: 'ready', v: !!v }); },
       start: function () { return send({ t: 'start' }); },
-      progress: function (i, ok, ms, elapsedMs, stats) {
-        stats = stats || {};
-        return send({
-          t: 'prog', i: i, ok: !!ok, ms: ms, elapsedMs: elapsedMs,
-          correct: stats.correct, wrong: stats.wrong, skip: stats.skip
-        });
+      progress: function (i, outcome, proof) {
+        return send({ t: 'prog', i: i, outcome: outcome, proof: proof || '' });
       },
-      done: function (r) {
-        return send({
-          t: 'done', finalMs: r.finalMs, actualMs: r.actualMs,
-          correct: r.correct, wrong: r.wrong, skip: r.skip,
-          results: r.results, qms: r.qms
-        });
-      },
+      done: function () { return send({ t: 'done' }); },
       again: function () { return send({ t: 'again' }); },
       reconnect: function () { return open(state.room, state.nick, state.intent); }
     };
@@ -478,6 +515,8 @@
     getNick: getNick,
     setNick: setNick,
     getCid: getCid,
+    getRoomToken: getRoomToken,
+    clearRoomToken: clearRoomToken,
     // 邀请
     readInviteCode: readInviteCode,
     inviteLink: inviteLink,

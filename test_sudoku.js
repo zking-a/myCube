@@ -3,12 +3,13 @@
 const fs = require('fs');
 const vm = require('vm');
 
+let storageWrites = 0;
 const sandbox = {
   console, Math, Date, JSON, Number, String, Array, Object, Set, Map, RegExp, Error,
   parseInt, isFinite,
   setTimeout, clearTimeout, setInterval, clearInterval,
   document: {},
-  localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+  localStorage: { getItem() { return null; }, setItem() { storageWrites++; }, removeItem() {} },
 };
 sandbox.window = sandbox;
 sandbox.addEventListener = function () {};
@@ -62,4 +63,11 @@ const historyNotes = { 0: [1, 2] };
 S.restoreHistoryEntry(historyBoard, historyNotes, { index: 0, prevValue: 0, prevNotes: null });
 ok('撤销普通填数会同时恢复数字与笔记', historyBoard[0] === 0 && historyNotes[0] === undefined);
 
-console.log('\n✅ 数独核心测试全部通过（' + passed + ' 项，给定数：' + clueCounts.join('/') + '）');
+S.CONFIG.AUTO_SAVE_INTERVAL = 20;
+S.autoSave(); S.autoSave(); S.autoSave();
+ok('连续存档请求不会同步反复写 localStorage', storageWrites === 0);
+setTimeout(function () {
+  ok('存档请求合并后只执行一次写入', storageWrites === 1);
+  S.clearSave();
+  console.log('\n✅ 数独核心测试全部通过（' + passed + ' 项，给定数：' + clueCounts.join('/') + '）');
+}, 40);

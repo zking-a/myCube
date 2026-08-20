@@ -58,9 +58,11 @@ node server.js
 ## 四、注意事项
 
 - **Render 免费层可能休眠**：下次访问会经历冷启动。房间页会明确显示「连接中」，服务恢复后自动加入，不会悄悄退成假联机。
-- **房间状态存内存**：适合 2–4 人小局。重启/休眠会清空房间，但对局通常几分钟内结束，无影响。
-- **题目公平性不依赖服务器**：房间码即随机种子，双方题目天然一致，服务器只中转进度、不算题、不判答案。
-- **容量可调**：默认最多 2 个房间、4 个 WebSocket 连接、同一 IP 最多 2 条连接；可用 `MAX_ROOMS`、`MAX_CONNECTIONS`、`MAX_CONNECTIONS_PER_IP`、`MAX_PLAYERS_PER_ROOM` 环境变量调整。
+- **房间状态存内存**：默认适合两个双人房间。重启/休眠会清空房间，但对局通常几分钟内结束，无影响。
+- **服务端校验成绩**：房间码仍是确定性题目种子；客户端逐题提交运算表达式，服务端验证是否正确，并自行累计用时、正确、错误、跳过和罚时。
+- **身份与重连**：服务端为每个座位签发私密重连令牌，令牌只发给本人、不向房间广播；有效令牌可立即替换移动网络留下的旧半开连接。
+- **容量可调**：默认最多 2 个房间、每房 2 人、全服 4 个玩家席位；底层允许 8 条 Socket，为握手和重连留余量。同一 IP 默认最多 2 个玩家席位、4 条 Socket。分别通过 `MAX_ROOMS`、`MAX_PLAYERS_PER_ROOM`、`MAX_CONNECTIONS`、`MAX_SOCKET_CONNECTIONS`、`MAX_CONNECTIONS_PER_IP`、`MAX_SOCKET_CONNECTIONS_PER_IP` 调整。
+- **可信代理**：本地默认不信任任何转发 IP 头；Render Blueprint 显式设置 `TRUST_PROXY_HOPS=1`。部署到其他代理层时，应按实际代理跳数配置，切勿直接信任客户端提供的 `CF-Connecting-IP`。
 - **自动释放**：等待大厅默认 5 分钟无操作后关闭，进行中或结算房间默认 15 分钟无操作后关闭；可通过 `LOBBY_IDLE_MS`、`ONLINE_ROOM_IDLE_MS` 修改。
 - **跨域中转**：CSP 默认只允许当前站点的 WebSocket。确需自定义中转时，用 `ALLOWED_CONNECT_SRC=wss://relay.example.com` 显式放行；中转服务同时应设置 `ALLOWED_ORIGIN=https://game.example.com`。
 
@@ -71,9 +73,10 @@ node server.js
 ```bash
 npm test
 npm run test:sudoku
+npm run test:security
 ```
 
-第一项检查默认同域联机、建/加房意图、服务器时钟换算、准备协议和主动离房；第二项检查数独终盘规则、随机性、唯一解、难度、计时和撤销。
+三项分别检查网络协议、数独核心规则，以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
 
 需要验证完整双人流程时，先启动服务，再在另一个终端运行：
 
@@ -81,7 +84,7 @@ npm run test:sudoku
 npm run test:e2e
 ```
 
-端到端测试覆盖双人加入、准备、同步开局、实时进度、掉线续局、结算和下一局回大厅。
+端到端测试覆盖双人加入、私密重连令牌、座位防冒用、同步开局、表达式证明、服务端权威成绩、半开连接替换、结算和下一局回大厅。
 
 ---
 
@@ -90,6 +93,7 @@ npm run test:e2e
 ```
 server/
 ├── server.js          # 一体化服务：静态托管 public/ + WebSocket 中转 + /health
+├── server_questions.js # 服务端确定性出题与运算证明校验
 ├── package.json       # 依赖、启动与测试脚本
 ├── render.yaml        # Render Blueprint 一键部署配置
 ├── public/            # 小游戏平台前端
@@ -108,5 +112,6 @@ server/
 │       └── sudoku.js
 ├── test_local.js      # 24点联机协议单元测试
 ├── test_e2e.js        # 24点双人联机端到端测试
-└── test_sudoku.js     # 数独核心规则回归测试
+├── test_sudoku.js     # 数独核心规则回归测试
+└── test_security.js   # 代理 IP、Origin、连接余量与静态缓存回归
 ```

@@ -2,22 +2,21 @@
 /*
  * server.js —— 24点大挑战·联机对战 WebSocket 中转服务器
  *
- * 作用：只做「房间内消息中转」，不存题、不算答案、不托管游戏前端。
- *   - 房间码就是随机种子（见 html/net.js），双方题目天然一致、确定性可复现，
- *     因此服务器无需下发题目，只负责把「进度 / 完成情况 / 开局」广播给同房间的其他人。
- *   - 这样服务器极轻量：单文件、无数据库、任意支持 WebSocket 的 Node 平台（Render / Railway /
- *     Fly / 本地）都能跑。
+ * 作用：静态托管小游戏，并为 24 点联机提供房间、私密重连令牌、运算证明校验和权威计时。
+ *   - 房间码就是随机种子，双方题目天然一致；服务端按同一规则复现题目并验证表达式。
+ *   - 房间仍只保存在内存，不需要数据库，适合轻量双人对局。
  *
  * 协议（JSON，UTF-8）
  *   客户端 → 服务端：
- *     {t:'join', room, nick, cid, intent:'create'|'join'}
+ *     {t:'join', room, nick, cid, token, intent:'create'|'join'}
  *     {t:'ready', v:true|false}
  *     {t:'start'}                        // 仅房主有效：开始本局
- *     {t:'prog', i, ok, ms}              // 第 i 题完成（0 基），ok=是否答对（仅用于统计，不中转对错）
- *     {t:'done', finalMs, actualMs, correct, wrong, skip}
+ *     {t:'prog', i, outcome, proof}       // outcome=correct|wrong|skip；proof=四数运算表达式
+ *     {t:'done'}                          // 成绩由服务端按收到时间和逐题记录计算
  *     {t:'again'}                        // 房主发起下一局：round+1 并回到准备大厅
  *     {t:'ping'}
  *   服务端 → 客户端：
+ *     {t:'session', cid, token}           // 仅发给当前连接，不广播
  *     {t:'state', round, phase, startedAt, serverNow, host, players:[...]}
  *     {t:'start', round, at}             // at=服务器时间戳(ms)，客户端据此倒计时同步开局
  *     {t:'pong'}
@@ -30,6 +29,7 @@ const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const WebSocket = require('ws');
+const Questions = require('./server_questions');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
@@ -43,15 +43,20 @@ const SKIP_PENALTY = 15000;
 
 // ===================== 安全加固配置 =====================
 const MAX_ROOMS = Math.max(1, parseInt(process.env.MAX_ROOMS, 10) || 2); // 默认 2，可按实例规格调整
-const MAX_PLAYERS_PER_ROOM = Math.max(2, parseInt(process.env.MAX_PLAYERS_PER_ROOM, 10) || 4);
+const MAX_PLAYERS_PER_ROOM = Math.max(2, parseInt(process.env.MAX_PLAYERS_PER_ROOM, 10) || 2);
 const MAX_WS_PAYLOAD = 4096;         // 单条 WebSocket 消息最大字节数
 const RATE_LIMIT = 20;               // 每连接每秒最多消息条数
 const RATE_BURST = 40;               // 令牌桶初始容量（允许短时突发）
-const MAX_CONNECTIONS = Math.max(1, parseInt(process.env.MAX_CONNECTIONS, 10) || 4); // 默认 4，可通过环境变量覆盖
+// MAX_CONNECTIONS 表示玩家席位，不再等同于底层 Socket 数；额外 Socket 专供握手与重连。
+const MAX_CONNECTIONS = Math.max(1, parseInt(process.env.MAX_CONNECTIONS, 10) || 4);
 const MAX_CONNECTIONS_PER_IP = Math.max(1, parseInt(process.env.MAX_CONNECTIONS_PER_IP, 10) || 2);
+const MAX_SOCKET_CONNECTIONS = Math.max(MAX_CONNECTIONS + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS, 10) || (MAX_CONNECTIONS + 4));
+const MAX_SOCKET_CONNECTIONS_PER_IP = Math.max(MAX_CONNECTIONS_PER_IP + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS_PER_IP, 10) || (MAX_CONNECTIONS_PER_IP + 2));
 const JOIN_IDLE_MS = 8000;           // 未 join 的连接尽快释放，避免占满全局名额
 const CONNECTION_ATTEMPT_LIMIT = Math.max(4, parseInt(process.env.CONNECTION_ATTEMPT_LIMIT, 10) || 12);
 const CONNECTION_ATTEMPT_WINDOW = 60 * 1000;
+const TRUST_PROXY_HOPS = Math.max(0, parseInt(process.env.TRUST_PROXY_HOPS, 10) || 0);
+const MAX_RATE_LOG_IPS = Math.max(128, parseInt(process.env.MAX_RATE_LOG_IPS, 10) || 2048);
 // 房间码字母表须与 public/24/net.js 完全一致：5 位，去掉易混的 I/O/0/1
 const ROOM_CODE_RE = /^[A-HJ-NP-Z2-9]{5}$/;
 // 允许的浏览器来源：默认「域名无关」——接受请求自身的 Host（任何 *.onrender.com 子域均放行，无需随域名改代码）
@@ -109,6 +114,7 @@ function createRoom(code) {
     players: new Map(),    // cid -> player
     _gc: null,
     _finishTimer: null,
+    questions: null,
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     lastLobbyActivityAt: Date.now()
@@ -129,8 +135,34 @@ function resetProgress(room) {
     p.results = null;   // 逐题对错（新一局重置，避免上一局残留误导战报）
     p.qms = null;       // 逐题耗时
     p.lastProgressMs = 0;
+    p.lastProgressAt = null;
     p.participant = false;
   });
+}
+
+function countSeats() {
+  let total = 0;
+  rooms.forEach(function (room) { total += room.players.size; });
+  return total;
+}
+
+function countSeatsForIp(ip) {
+  let total = 0;
+  rooms.forEach(function (room) {
+    room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
+  });
+  return total;
+}
+
+function createReconnectToken() {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
+function tokenMatches(expected, received) {
+  if (typeof expected !== 'string' || typeof received !== 'string') return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
 }
 
 function playerList(room) {
@@ -231,6 +263,7 @@ function checkRoomCreateLimit(ip) {
   let arr = roomCreateLog.get(ip) || [];
   arr = arr.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
   if (arr.length >= ROOM_CREATE_LIMIT) { roomCreateLog.set(ip, arr); return false; }
+  if (!roomCreateLog.has(ip) && roomCreateLog.size >= MAX_RATE_LOG_IPS) return false;
   arr.push(now);
   roomCreateLog.set(ip, arr);
   return true;
@@ -242,9 +275,26 @@ function checkConnectionAttemptLimit(ip) {
   let arr = connectionAttemptLog.get(ip) || [];
   arr = arr.filter(function (t) { return now - t < CONNECTION_ATTEMPT_WINDOW; });
   if (arr.length >= CONNECTION_ATTEMPT_LIMIT) { connectionAttemptLog.set(ip, arr); return false; }
+  if (!connectionAttemptLog.has(ip) && connectionAttemptLog.size >= MAX_RATE_LOG_IPS) return false;
   arr.push(now);
   connectionAttemptLog.set(ip, arr);
   return true;
+}
+
+function normalizeIp(value) {
+  let ip = String(value || '').trim();
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  return ip.slice(0, 64);
+}
+
+// 只有显式配置可信代理跳数后才读取 X-Forwarded-For；客户端自带的 CF 头不再受信。
+function getClientIp(req) {
+  const remote = normalizeIp(req.socket && req.socket.remoteAddress);
+  if (!TRUST_PROXY_HOPS) return remote;
+  const forwarded = String(req.headers && req.headers['x-forwarded-for'] || '')
+    .split(',').map(normalizeIp).filter(Boolean);
+  if (forwarded.length < TRUST_PROXY_HOPS) return remote;
+  return forwarded[forwarded.length - TRUST_PROXY_HOPS];
 }
 
 // 全服周期扫描：只回收全员离线且已超过保留期的房间。
@@ -322,24 +372,22 @@ function serveStatic(req, res) {
     res.end('Forbidden');
     return;
   }
-  function respond(data) {
-    const ext = path.extname(filePath).toLowerCase();
-    const etag = '"' + crypto.createHash('sha1').update(data).digest('base64url').slice(0, 16) + '"';
+  function respond(entry) {
+    const useGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && !!entry.gzip;
+    const body = useGzip ? entry.gzip : entry.data;
+    const etag = useGzip ? entry.gzipEtag : entry.etag;
     if (req.headers['if-none-match'] === etag) {
-      writeHead(res, 304, { ETag: etag, 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300, must-revalidate' });
+      writeHead(res, 304, { ETag: etag, 'Cache-Control': entry.cacheControl, Vary: 'Accept-Encoding' });
       res.end();
       return;
     }
-    const canGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) &&
-      data.length > 1024 && /^(\.html|\.js|\.css|\.json|\.svg)$/.test(ext);
-    const body = canGzip ? zlib.gzipSync(data, { level: 6 }) : data;
     writeHead(res, 200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Content-Type': entry.contentType,
       'Content-Length': body.length,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300, must-revalidate',
+      'Cache-Control': entry.cacheControl,
       ETag: etag,
       Vary: 'Accept-Encoding',
-      ...(canGzip ? { 'Content-Encoding': 'gzip' } : {})
+      ...(useGzip ? { 'Content-Encoding': 'gzip' } : {})
     });
     if (req.method === 'HEAD') res.end();
     else res.end(body);
@@ -352,8 +400,19 @@ function serveStatic(req, res) {
       res.end('404 Not Found');
       return;
     }
-    staticCache.set(filePath, data);
-    respond(data);
+    const ext = path.extname(filePath).toLowerCase();
+    const hash = crypto.createHash('sha1').update(data).digest('base64url').slice(0, 16);
+    const canGzip = data.length > 1024 && /^(\.html|\.js|\.css|\.json|\.svg)$/.test(ext);
+    const entry = {
+      data: data,
+      gzip: canGzip ? zlib.gzipSync(data, { level: 6 }) : null,
+      etag: '"' + hash + '"',
+      gzipEtag: '"' + hash + '-gzip"',
+      contentType: MIME[ext] || 'application/octet-stream',
+      cacheControl: ext === '.html' ? 'no-cache' : 'public, max-age=300, must-revalidate'
+    };
+    staticCache.set(filePath, entry);
+    respond(entry);
   });
 }
 
@@ -366,7 +425,7 @@ const server = http.createServer(function (req, res) {
   }
   if (urlPath === '/health' || urlPath === '/healthz') {
     writeHead(res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ ok: true, service: '24vs', rooms: rooms.size, connections: liveConnections, ts: Date.now() }));
+    res.end(JSON.stringify({ ok: true, service: 'light-games', rooms: rooms.size, seats: countSeats(), sockets: liveConnections, ts: Date.now() }));
     return;
   }
   // 游戏目录使用稳定的尾斜杠 URL；旧数独入口继续可用。
@@ -390,13 +449,7 @@ const wss = new WebSocket.Server({ server, path: '/ws', maxPayload: MAX_WS_PAYLO
 let liveConnections = 0;
 
 wss.on('connection', function (ws, req) {
-  // 取客户端真实 IP（兼容反向代理 X-Forwarded-For，如 Render）
-  const forwarded = req.headers && req.headers['x-forwarded-for']
-    ? String(req.headers['x-forwarded-for']).split(',').map(function (x) { return x.trim(); }).filter(Boolean)
-    : [];
-  const clientIp = (req.headers && String(req.headers['cf-connecting-ip'] || '').trim()) ||
-    (forwarded.length ? forwarded[forwarded.length - 1] : '') ||
-    (req.socket && req.socket.remoteAddress) || '';
+  const clientIp = getClientIp(req);
 
   // ---- Origin 校验：只允许本站与本地调试（CSWSH 防护）----
   // 同时接受「请求自身的 Host」，做到域名无关：换 onrender 子域也不会断
@@ -415,11 +468,11 @@ wss.on('connection', function (ws, req) {
     return;
   }
   const ipConnections = liveConnectionsByIp.get(clientIp) || 0;
-  if (ipConnections >= MAX_CONNECTIONS_PER_IP) {
+  if (ipConnections >= MAX_SOCKET_CONNECTIONS_PER_IP) {
     ws.close(1013, 'too many connections from this ip');
     return;
   }
-  if (liveConnections >= MAX_CONNECTIONS) {
+  if (liveConnections >= MAX_SOCKET_CONNECTIONS) {
     ws.close(1013, 'too many connections');
     return;
   }
@@ -468,13 +521,18 @@ wss.on('connection', function (ws, req) {
       const cid = typeof m.cid === 'string' ? m.cid.slice(0, 32) : '';
       if (!cid || cid.length < 4) return;
       const nick = typeof m.nick === 'string' && m.nick.trim()
-        ? m.nick.trim().slice(0, 16) : '玩家';
+        ? m.nick.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16) : '玩家';
+      const reconnectToken = typeof m.token === 'string' ? m.token.slice(0, 128) : '';
       const intent = m.intent === 'create' || m.intent === 'join' ? m.intent : 'legacy';
 
       let room = rooms.get(code);
       if (!room) {
         if (intent === 'join') {
           fail('ROOM_NOT_FOUND', '房间不存在或已失效，请向房主确认房间码');
+          return;
+        }
+        if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试');
           return;
         }
         // ---- 单 IP 建房限速：防单 IP 占满全部房间导致所有正常用户被拒 ----
@@ -491,21 +549,28 @@ wss.on('connection', function (ws, req) {
       } else if (intent === 'create') {
         // 建房成功后的首个 state 可能在弱网中丢失；同一 cid 的离线座位仍按重连处理。
         const ownSeat = room.players.get(cid);
-        if (!ownSeat || ownSeat.online) {
+        if (!ownSeat) {
           fail('ROOM_EXISTS', '房间码碰巧重复，正在换一个新房间码');
+          return;
+        }
+        if (!tokenMatches(ownSeat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '重连身份已失效，请退出房间后重新加入');
           return;
         }
       }
 
       let p = room.players.get(cid);
+      let replacedSocket = null;
       if (p) {
-        // ---- 防座位劫持：同 cid 已在线时拒绝新连接接管 ----
-        if (p.online && p.ws && p.ws !== ws) {
-          fail('DUPLICATE_ID', '该身份已在线，请勿重复加入');
+        // 重连令牌由服务器签发且不广播；只有持令牌者可以恢复或替换旧半开连接。
+        if (!tokenMatches(p.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '无法验证该玩家身份，请退出房间后重新加入');
           return;
         }
+        replacedSocket = p.ws && p.ws !== ws ? p.ws : null;
         p.ws = ws;
         p.nick = nick;
+        p.clientIp = clientIp;
         p.online = true;
         p.disconnectedAt = null;
         p._room = room;
@@ -518,6 +583,14 @@ wss.on('connection', function (ws, req) {
           fail('ROUND_FINISHED', '上一局刚结束，请让房主发起下一局后再加入');
           return;
         }
+        if (countSeats() >= MAX_CONNECTIONS) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试');
+          return;
+        }
+        if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限');
+          return;
+        }
         // ---- 单房间人数上限 ----
         if (room.players.size >= MAX_PLAYERS_PER_ROOM) {
           fail('ROOM_FULL', '该房间人数已满（最多' + MAX_PLAYERS_PER_ROOM + '人）');
@@ -527,13 +600,17 @@ wss.on('connection', function (ws, req) {
           cid: cid, nick: nick, ws: ws, ready: false, online: true,
           prog: 0, done: false, finalMs: null, actualMs: null,
           correct: 0, wrong: 0, skip: 0, results: null, qms: null,
-          lastProgressMs: 0, participant: false, disconnectedAt: null, _room: room
+          lastProgressMs: 0, lastProgressAt: null, participant: false,
+          disconnectedAt: null, clientIp: clientIp,
+          reconnectToken: createReconnectToken(), _room: room
         };
         room.players.set(cid, p);
         if (!room.hostCid) room.hostCid = cid;
       }
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
       player = p;
+      send(ws, { t: 'session', cid: p.cid, token: p.reconnectToken });
+      if (replacedSocket) { try { replacedSocket.terminate(); } catch (e) {} }
       room.lastActivityAt = Date.now();
       if (room.phase === 'lobby') room.lastLobbyActivityAt = room.lastActivityAt;
       clearTimeout(joinTimer); // 已加入，取消空连接超时
@@ -543,6 +620,7 @@ wss.on('connection', function (ws, req) {
     }
 
     if (!player) return; // 其余指令需先 join
+    if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
     const room = player._room;
 
     if (m.t !== 'ping') room.lastActivityAt = Date.now();
@@ -570,6 +648,7 @@ wss.on('connection', function (ws, req) {
       }
       room.phase = 'playing';
       room.startedAt = Date.now() + SYNC_DELAY;
+      room.questions = Questions.buildRoomQuestions(room.code + '#' + room.round, TOTAL_QUESTIONS);
       resetProgress(room);
       room.players.forEach(function (p) {
         p.participant = p.online;
@@ -579,37 +658,45 @@ wss.on('connection', function (ws, req) {
       broadcastStart(room);
     } else if (m.t === 'prog') {
       if (room.phase !== 'playing' || !player.participant || player.done) return;
+      if (!room.startedAt || now < room.startedAt) {
+        fail('ROUND_NOT_STARTED', '倒计时尚未结束');
+        return;
+      }
       const index = asInt(m.i, 0, TOTAL_QUESTIONS - 1, -1);
       if (index < 0 || index !== (player.prog || 0)) return;
+      const outcome = m.outcome === 'correct' || m.outcome === 'wrong' || m.outcome === 'skip' ? m.outcome : '';
+      if (!outcome) {
+        fail('CLIENT_OUTDATED', '客户端版本过旧，请刷新页面后重新进入');
+        return;
+      }
+      const expected = room.questions && room.questions[index];
+      if (!expected || (outcome !== 'skip' && !Questions.verifyProof(m.proof, expected.numbers, outcome === 'correct'))) {
+        fail('INVALID_PROOF', '本题运算记录校验失败，请刷新后重试');
+        return;
+      }
+      const elapsed = Math.max(0, now - room.startedAt);
       player.prog = index + 1;
       if (!player.results) player.results = [];
       if (!player.qms) player.qms = [];
-      player.results[index] = m.ok ? 1 : 0;
-      player.qms[index] = asInt(m.ms, 0, 600000, 0);
-      player.lastProgressMs = asInt(m.elapsedMs, 0, 24 * 60 * 60 * 1000, player.lastProgressMs || 0);
-      player.correct = asInt(m.correct, 0, TOTAL_QUESTIONS, player.correct || 0);
-      player.wrong = asInt(m.wrong, 0, TOTAL_QUESTIONS, player.wrong || 0);
-      player.skip = asInt(m.skip, 0, TOTAL_QUESTIONS, player.skip || 0);
+      player.results[index] = outcome === 'correct' ? 1 : 0;
+      player.qms[index] = Math.max(0, elapsed - (player.lastProgressMs || 0));
+      player.lastProgressMs = elapsed;
+      player.lastProgressAt = now;
+      if (outcome === 'correct') player.correct++;
+      else if (outcome === 'wrong') player.wrong++;
+      else player.skip++;
       broadcastState(room);
     } else if (m.t === 'done') {
       if (room.phase !== 'playing' || !player.participant || player.done) return;
+      if (player.prog !== TOTAL_QUESTIONS) {
+        fail('ROUND_INCOMPLETE', '还有题目尚未提交，暂时不能交卷');
+        return;
+      }
       player.done = true;
       player.prog = TOTAL_QUESTIONS;
-      player.actualMs = asInt(m.actualMs, 0, 24 * 60 * 60 * 1000, 0);
-      player.correct = asInt(m.correct, 0, TOTAL_QUESTIONS, 0);
-      player.wrong = asInt(m.wrong, 0, TOTAL_QUESTIONS, 0);
-      player.skip = asInt(m.skip, 0, TOTAL_QUESTIONS, 0);
+      player.actualMs = Math.max(0, Math.min(24 * 60 * 60 * 1000, now - room.startedAt));
       player.finalMs = player.actualMs + player.wrong * WRONG_PENALTY + player.skip * SKIP_PENALTY;
       player.lastProgressMs = player.actualMs;
-      // 逐题对错 / 逐题耗时：校验后存储并下发，供结果页「逐题对决」与战报
-      player.results = Array.isArray(m.results)
-        ? m.results.slice(0, TOTAL_QUESTIONS).map(function (v) { return v ? 1 : 0; })
-        : null;
-      player.qms = Array.isArray(m.qms)
-        ? m.qms.slice(0, TOTAL_QUESTIONS).map(function (v) {
-            var n = parseInt(v, 10); return (n >= 0 && n <= 600000) ? n : 0;
-          })
-        : null;
       broadcastState(room);
       maybeFinishRound(room);
     } else if (m.t === 'again') {
@@ -621,6 +708,7 @@ wss.on('connection', function (ws, req) {
       room.round = (room.round || 1) + 1;
       room.phase = 'lobby';
       room.startedAt = null;
+      room.questions = null;
       room.lastLobbyActivityAt = Date.now();
       room.players.forEach(function (p, cid) { if (!p.online) room.players.delete(cid); });
       if (!room.players.has(room.hostCid)) pickNewHost(room);
@@ -660,6 +748,8 @@ wss.on('connection', function (ws, req) {
     if (remainingForIp) liveConnectionsByIp.set(clientIp, remainingForIp);
     else liveConnectionsByIp.delete(clientIp);
     if (!player) return;
+    // 该座位已被携带有效令牌的新连接接管，旧 Socket 关闭不能把新连接标成离线。
+    if (player.ws !== ws) { player = null; return; }
     player.online = false;
     player.ws = null;
     player.disconnectedAt = Date.now();

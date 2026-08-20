@@ -15,3 +15,13 @@ services:
     envVars:
       - key: PORT
         value: "3000"
+      # Render 是唯一可信反向代理：从 X-Forwarded-For 右侧取 1 跳，忽略客户端伪造的 CF 头。
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      # 4 个玩家席位之外，为握手、半开连接替换和移动网络重连保留 4 条 Socket。
+      - key: MAX_CONNECTIONS
+        value: "4"
+      - key: MAX_SOCKET_CONNECTIONS
+        value: "8"
+      - key: MAX_PLAYERS_PER_ROOM
+        value: "2"

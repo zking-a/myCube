@@ -25,6 +25,7 @@ const sandbox = {
   atob: s => Buffer.from(s, 'base64').toString('binary'),
   setTimeout, clearTimeout, setInterval, clearInterval,
   WebSocket: FakeWebSocket,
+  crypto: { getRandomValues: bytes => { for (let i = 0; i < bytes.length; i++) bytes[i] = i + 1; return bytes; } },
   localStorage: {
     getItem: key => storage.get(key) || null,
     setItem: (key, value) => storage.set(key, String(value))
@@ -56,6 +57,11 @@ const socket = sockets[0];
 ok('WebSocket 固定连接同域 /ws', socket.url === 'wss://game.test/ws');
 socket.open();
 ok('首包明确携带 create 意图', socket.sent[0].t === 'join' && socket.sent[0].intent === 'create');
+ok('客户端身份使用 128 位随机 cid', socket.sent[0].cid === '0102030405060708090a0b0c0d0e0f10');
+
+const reconnectToken = 'abcdefghijklmnopqrstuvwx12345678';
+socket.message({ t: 'session', cid: socket.sent[0].cid, token: reconnectToken });
+ok('服务端重连令牌按房间保存且不会自行生成', Net.getRoomToken('ABCDE') === reconnectToken);
 
 const now = Date.now();
 socket.message({ t: 'pong', c: now - 20, s: now - 5 });
@@ -66,6 +72,10 @@ ok('服务器开局时间被换算成本地时间', lastState && Math.abs(lastSt
 
 client.ready(true);
 ok('准备状态走实时协议发送', socket.sent.some(m => m.t === 'ready' && m.v === true));
+client.progress(0, 'correct', '1×2×3×4');
+ok('逐题进度只发送结果类型与运算证明', socket.sent.some(m => m.t === 'prog' && m.outcome === 'correct' && m.proof === '1×2×3×4' && !('actualMs' in m)));
+client.done({ actualMs: 0, correct: 10 });
+ok('交卷不再上传客户端自报成绩', socket.sent.some(m => m.t === 'done' && Object.keys(m).length === 1));
 client.close(true);
 ok('主动离房会发送 leave，避免大厅残留幽灵玩家', socket.sent.some(m => m.t === 'leave'));
 

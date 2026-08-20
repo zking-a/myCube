@@ -291,7 +291,7 @@
         this.selId = null; this.op = null; this.history = []; this.nextId = 1; this.locked = false;
         var self = this;
         numbers.forEach(function (n) {
-          self.tokens.push({ id: self.nextId++, value: new Rational(n), label: String(n), kind: 'orig', alive: true, win: false, bad: false });
+          self.tokens.push({ id: self.nextId++, value: new Rational(n), label: String(n), expr: String(n), kind: 'orig', alive: true, win: false, bad: false });
         });
         this.render();
       },
@@ -315,7 +315,7 @@
           }
           var r = this.compute(a.value, this.op, b.value);
           var resId = this.nextId++;
-          var res = { id: resId, value: r, label: r.toString(), kind: 'res', alive: true, win: false, bad: false, fresh: true };
+          var res = { id: resId, value: r, label: r.toString(), expr: '(' + a.expr + this.op + b.expr + ')', kind: 'res', alive: true, win: false, bad: false, fresh: true };
           a.alive = false; b.alive = false;
           this.tokens.push(res);
           this.history.push({ resId: resId, aId: a.id, bId: b.id });
@@ -636,8 +636,8 @@
     containerId: 'vp-board', statusId: 'vp-status',
     onFlash: function (msg) { vsFeedback('error', msg); },
     onStatus: function (txt) { $('vp-status').textContent = txt; },
-    onWin: function (tok) { onVsResolved(true); },
-    onStuck: function (tok) { onVsResolved(false); }
+    onWin: function (tok) { onVsResolved(true, tok); },
+    onStuck: function (tok) { onVsResolved(false, tok); }
   });
 
   function vsFeedback(type, text) { setFeedback('vp-feedback', type, text); }
@@ -748,10 +748,12 @@
           vsState.playRound = 0; vsState.startingRound = 0;
           show('vsroom');
         } else if (vsState.phase === 'playing') {
-          beginVsPlay(m.startedAtLocal || Date.now(), getVsMe());
+          var activeMe = getVsMe();
+          if (activeMe && activeMe.done) restoreVsResult(activeMe);
+          else beginVsPlay(m.startedAtLocal || Date.now(), activeMe);
         } else if (vsState.phase === 'done') {
           var me = getVsMe();
-          if (me && me.done && !vsState.myResult) restoreVsResult(me);
+          if (me && me.done) restoreVsResult(me);
           else if (me && !me.done) {
             stopVsTimer(); cancelVsCountdown();
             vsState.started = false; vsState.finished = false;
@@ -781,6 +783,11 @@
         if ($('vr-error')) {
           $('vr-error').textContent = vsState.lastError;
           $('vr-error').style.display = 'block';
+        }
+        if (/^(CLIENT_OUTDATED|INVALID_PROOF|SESSION_INVALID)$/.test(m.code || '')) {
+          stopVsTimer(); cancelVsCountdown();
+          vsState.started = false;
+          show('vsroom');
         }
         renderVsRoom();
       }
@@ -903,7 +910,9 @@
     vsState._qStart = vsState.elapsedMs; // 本题开始计时
     vsFeedback('', '');
   }
-  function onVsResolved(correct) {
+  function onVsResolved(correct, token) {
+    var currentQuestion = vsState.questions[vsState.current];
+    currentQuestion.proof = token && token.expr ? token.expr : '';
     resolve(vsState, correct, {
       total: TOTAL_VS, fbEl: 'vp-feedback',
       setQuestion: vsSetQuestion, finish: vsFinishVs,
@@ -911,9 +920,7 @@
         var q = vsState.questions[vsState.current];
         q.ms = vsState.elapsedMs - vsState._qStart; // 本题耗时
         if (vsState.online && vsState.client) {
-          vsState.client.progress(vsState.current, c, q.ms, vsState.elapsedMs, {
-            correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
-          });
+          vsState.client.progress(vsState.current, c ? 'correct' : 'wrong', q.proof);
         }
       }
     });
@@ -927,9 +934,7 @@
     vsFeedback('bad', '已跳过 +15 秒罚时');
     boardVs.locked = true;
     if (vsState.online && vsState.client) {
-      vsState.client.progress(vsState.current, false, vsState.questions[vsState.current].ms, vsState.elapsedMs, {
-        correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip
-      });
+      vsState.client.progress(vsState.current, 'skip', '');
     }
     setTimeout(function () {
       var next = vsState.current + 1;
@@ -965,11 +970,7 @@
       results: results, qms: qms
     };
     if (vsState.online && vsState.client) {
-      vsState.client.done({
-        finalMs: finalMs, actualMs: actualMs,
-        correct: vsState.correct, wrong: vsState.wrong, skip: vsState.skip,
-        results: results, qms: qms
-      });
+      vsState.client.done();
     }
     setTimeout(function () { show('vsresult'); renderVsResult(); }, vsState.online ? 180 : 0);
   }
