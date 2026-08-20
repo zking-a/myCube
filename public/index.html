@@ -380,15 +380,22 @@
   .countdown { background: rgba(19,29,57,.72); backdrop-filter: blur(9px); -webkit-backdrop-filter: blur(9px); }
   .countdown span { width: 150px; height: 150px; display: grid; place-items: center; border-radius: 45px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.24); text-shadow: 0 10px 28px rgba(0,0,0,.22); }
 
-  @media (max-width: 420px) {
+  /* 手机端固定为 2×2，避免 iPhone 13 Pro Max（428 CSS px）出现 3+1 换行 */
+  @media (max-width: 480px) {
     #app { padding: 14px 12px calc(34px + env(safe-area-inset-bottom)); }
     .home-hero { gap: 13px; margin-top: 4px; }
     .brand-mark { width: 68px; height: 76px; border-radius: 21px; font-size: 31px; }
     h1 { font-size: 25px; }
     .home-mode { min-height: 72px; padding: 13px 15px; }
     .panel { padding: 15px; border-radius: 19px; }
-    .tk { width: 66px; height: 74px; border-radius: 18px; font-size: 34px; }
-    .board { gap: 8px; }
+    .tk { width: 78px; height: 82px; border-radius: 18px; font-size: 36px; }
+    .board.board-four {
+      display: grid;
+      grid-template-columns: repeat(2, 78px);
+      justify-content: center;
+      align-items: center;
+      gap: 10px 16px;
+    }
     .op-btn { height: 55px; min-width: 48px; }
     .room-code { font-size: 34px; letter-spacing: 6px; }
     .rule-steps { gap: 6px; }
@@ -727,6 +734,6 @@
 <script src="core.js?v=20260814b"></script>
 <script src="data.js?v=20260814c"></script>
 <script src="net.js?v=20260819b"></script>
-<script src="game.js?v=20260819d"></script>
+<script src="game.js?v=20260820a"></script>
 </body>
 </html>

@@ -338,7 +338,9 @@
         var c = $(this.containerId); if (!c) return;
         c.innerHTML = '';
         var self = this;
-        this.aliveTokens().forEach(function (t) {
+        var alive = this.aliveTokens();
+        c.classList.toggle('board-four', alive.length === 4);
+        alive.forEach(function (t) {
           var d = document.createElement('div');
           d.className = 'tk ' + (t.kind === 'orig' ? 'tk-orig' : 'tk-res') +
             (self.selId === t.id ? ' tk-sel' : '') + (t.win ? ' tk-win' : '') + (t.bad ? ' tk-bad' : '') +
