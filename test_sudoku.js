@@ -14,7 +14,9 @@ const sandbox = {
 sandbox.window = sandbox;
 sandbox.addEventListener = function () {};
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync('public/sudoku/sudoku.js', 'utf8'), sandbox, { filename: 'sudoku.js' });
+const sudokuSource = fs.readFileSync('public/sudoku/sudoku.js', 'utf8');
+const sudokuCss = fs.readFileSync('public/sudoku/sudoku.css', 'utf8');
+vm.runInContext(sudokuSource, sandbox, { filename: 'sudoku.js' });
 
 const S = sandbox.__sudokuTest;
 let passed = 0;
@@ -58,10 +60,31 @@ ok('难度越高给定数字不增加', clueCounts.every((v, i) => i === 0 || v 
 
 ok('难度参数越界时安全回落到简单', S.normalizeDifficulty(-1) === 0 && S.normalizeDifficulty(99) === 0);
 ok('计时格式覆盖分钟和小时', S.formatDuration(65) === '01:05' && S.formatDuration(3661) === '01:01:01');
+ok('棋盘坐标按内框尺寸映射，不受外边框干扰',
+  S.gridIndexAtPoint(0, 0, 441, 441) === 0 &&
+  S.gridIndexAtPoint(440.9, 440.9, 441, 441) === 80 &&
+  S.gridIndexAtPoint(-0.1, 20, 441, 441) === -1);
+const dragBox = S.getDragRectBox(72, 73, 441, 441);
+ok('拖拽选区与两个相邻单元格的内框精确对齐',
+  dragBox.left === 0 && dragBox.top === 392 && dragBox.width === 98 && dragBox.height === 49);
+ok('最下行和最右列不再绘制重复边框',
+  /\.cell\.c8\s*\{\s*border-right:\s*0/.test(sudokuCss) &&
+  /\.cell\.r8\s*\{\s*border-bottom:\s*0/.test(sudokuCss));
+ok('宫格粗线使用整数像素避免缩放亮缝',
+  /\.cell\.c2,\s*\.cell\.c5\s*\{\s*border-right:\s*2px/.test(sudokuCss) &&
+  /\.cell\.r2,\s*\.cell\.r5\s*\{\s*border-bottom:\s*2px/.test(sudokuCss));
 const historyBoard = [7];
 const historyNotes = { 0: [1, 2] };
 S.restoreHistoryEntry(historyBoard, historyNotes, { index: 0, prevValue: 0, prevNotes: null });
 ok('撤销普通填数会同时恢复数字与笔记', historyBoard[0] === 0 && historyNotes[0] === undefined);
+
+const bulkBoard = [0, 0];
+const bulkNotes = {};
+S.restoreHistoryEntry(bulkBoard, bulkNotes, { bulk: [
+  { index: 0, prevValue: 7, prevNotes: [1, 2] },
+  { index: 1, prevValue: 3, prevNotes: null },
+] });
+ok('整盘清空可一次撤销并恢复全部填写与笔记', bulkBoard[0] === 7 && bulkBoard[1] === 3 && bulkNotes[0].join('') === '12');
 
 S.CONFIG.AUTO_SAVE_INTERVAL = 20;
 S.autoSave(); S.autoSave(); S.autoSave();

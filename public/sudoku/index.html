@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
-<link rel="stylesheet" href="sudoku.css?v=20260820b"/>
+<link rel="stylesheet" href="sudoku.css?v=20260821e"/>
 </head>
 <body>
 
@@ -22,53 +22,109 @@
 </div>
 
 <div class="page-shell">
-<!-- 2.2 顶部栏 -->
-<header class="topbar">
-  <a class="platform-back" href="../" aria-label="返回小游戏平台">← 游戏大厅</a>
-  <div class="title-wrap">
-    <span class="eyebrow">Puzzle Sudoku</span>
-    <div class="title">数独挑战</div>
+<!-- 2.2 数独自己的大厅：先选择继续或新局，不再点进来就直接计时 -->
+<section class="sudoku-home" id="sudokuHome" aria-labelledby="sudokuHomeTitle">
+  <nav class="home-nav">
+    <a class="platform-back" href="../" aria-label="返回小游戏平台">← 游戏大厅</a>
+    <button type="button" class="home-stats" id="homeStatsBtn">▥ 我的战绩</button>
+  </nav>
+  <div class="home-hero">
+    <div class="home-logo" aria-hidden="true"><span>九</span></div>
+    <span class="home-eyebrow">Puzzle Sudoku</span>
+    <h1 id="sudokuHomeTitle">数独挑战</h1>
+    <p>一次专注一盘，在九宫格里找回秩序</p>
   </div>
-  <div class="top-actions">
-    <div class="timer" id="timerText">⏱ 0 秒</div>
-    <div class="right-btns">
-      <button type="button" class="icon-btn" id="soundBtn" title="切换音效" aria-label="切换音效">🔊</button>
-      <button type="button" class="icon-btn" id="darkBtn" title="切换深色模式" aria-label="切换深色模式">🌙</button>
-    </div>
-  </div>
-</header>
 
-<!-- 2.3 主卡片（棋盘 + 键盘 + 底部栏）-->
-<main class="card">
-  <div class="progress-box">
-    <span id="progressText">进度：0%</span>
-    <progress id="progressBar" value="0" max="100"></progress>
+  <article class="resume-card" id="homeResumeCard" hidden>
+    <div class="resume-copy">
+      <span class="resume-kicker">上次进度已保存</span>
+      <strong id="homeResumeTitle">继续未完成的一局</strong>
+      <span id="homeResumeMeta">简单 · 00:00 · 完成 0%</span>
+    </div>
+    <button type="button" id="homeResumeBtn">继续游戏 <b>→</b></button>
+  </article>
+
+  <section class="new-game-card" aria-labelledby="newGameTitle">
+    <div class="section-heading">
+      <div><span>开始新挑战</span><h2 id="newGameTitle">选择适合现在的难度</h2></div>
+      <span class="unique-badge">每局唯一解</span>
+    </div>
+    <div class="difficulty-cards" id="homeDifficulty" role="radiogroup" aria-label="选择数独难度">
+      <button type="button" class="difficulty-card active" data-diff="0" role="radio" aria-checked="true"><b>简单</b><span>轻松热身</span><small>40 个已知数</small></button>
+      <button type="button" class="difficulty-card" data-diff="1" role="radio" aria-checked="false"><b>中等</b><span>日常一局</span><small>34 个已知数</small></button>
+      <button type="button" class="difficulty-card" data-diff="2" role="radio" aria-checked="false"><b>困难</b><span>专注挑战</span><small>30 个已知数</small></button>
+      <button type="button" class="difficulty-card" data-diff="3" role="radio" aria-checked="false"><b>专家</b><span>进阶推理</span><small>26 个已知数</small></button>
+      <button type="button" class="difficulty-card" data-diff="4" role="radio" aria-checked="false"><b>极限</b><span>高手试炼</span><small>23 个已知数</small></button>
+    </div>
+    <button type="button" class="start-game-btn" id="homeStartBtn">开始新局 <span>→</span></button>
+  </section>
+
+  <div class="feature-strip" aria-label="数独功能">
+    <span><b>✎</b> 候选笔记</span><span><b>💡</b> 智能提示</span><span><b>↩</b> 随时撤销</span><span><b>▣</b> 自动存档</span>
   </div>
-  <div class="finish-msg" id="finishMsg" style="display:none;"></div>
-  <div class="sudoku-board" id="board" role="grid" aria-label="数独棋盘"></div>
-  <div class="keypad" id="keypad"></div>
-  <div class="tool-label">难度与新局</div>
-  <div class="bottom-bar">
-    <select class="difficulty-select" id="diffSelect" aria-label="选择数独难度">
-      <option value="0">简单 · 40 个提示</option>
-      <option value="1">中等 · 34 个提示</option>
-      <option value="2">困难 · 30 个提示</option>
-      <option value="3">专家 · 26 个提示</option>
-      <option value="4">极限 · 23 个提示</option>
-    </select>
-    <button type="button" class="primary-tool" id="newGameBtn">新游戏</button>
-  </div>
-  <div class="tool-label">辅助工具</div>
-  <div class="bottom-bar tool-grid">
-    <button type="button" id="noteBtn">✎ 笔记：关</button>
-    <button type="button" id="candBtn">▦ 候选：关</button>
-    <button type="button" id="undoBtn">↩ 撤销</button>
-    <button type="button" id="hintBtn">💡 提示</button>
-    <button type="button" id="techHintBtn" title="技巧提示">🧠 技巧</button>
-    <button type="button" id="statsBtn">▥ 统计</button>
-    <button type="button" id="autoFillBtn" title="自动填入唯一候选">⚡ 自动填入：关</button>
-  </div>
-</main>
+  <p class="home-tip">玩法：每一行、每一列和每个 3×3 宫内，数字 1–9 都不能重复。</p>
+</section>
+
+<!-- 2.3 沉浸式游戏页 -->
+<section class="game-screen" id="sudokuGame" hidden>
+  <header class="topbar">
+    <button type="button" class="game-home-btn" id="gameHomeBtn" aria-label="返回数独首页">← 数独首页</button>
+    <div class="title-wrap">
+      <span class="eyebrow">Puzzle Sudoku</span>
+      <div class="title">数独挑战</div>
+    </div>
+    <div class="top-actions">
+      <div class="timer" id="timerText">⏱ 00:00</div>
+      <div class="right-btns">
+        <button type="button" class="icon-btn" id="fullscreenBtn" title="进入沉浸全屏" aria-label="进入沉浸全屏">⛶</button>
+        <button type="button" class="icon-btn" id="soundBtn" title="切换音效" aria-label="切换音效">🔊</button>
+        <button type="button" class="icon-btn" id="darkBtn" title="切换深色模式" aria-label="切换深色模式">🌙</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="card">
+    <div class="board-column">
+      <div class="progress-box">
+        <span id="progressText">进度：0%</span>
+        <progress id="progressBar" value="0" max="100"></progress>
+      </div>
+      <div class="finish-msg" id="finishMsg" style="display:none;"></div>
+      <div class="sudoku-board" id="board" role="grid" aria-label="数独棋盘"></div>
+      <div class="keypad" id="keypad" aria-label="数字键盘"></div>
+    </div>
+
+    <aside class="control-panel" aria-label="数独工具">
+      <div class="tool-label">常用工具</div>
+      <div class="bottom-bar tool-grid primary-tools">
+        <button type="button" id="noteBtn">✎ 笔记：关</button>
+        <button type="button" id="candBtn">▦ 候选：关</button>
+        <button type="button" id="undoBtn">↩ 撤销</button>
+        <button type="button" id="hintBtn">💡 提示</button>
+      </div>
+      <details class="advanced-tools">
+        <summary>更多辅助与新局 <span>⌄</span></summary>
+        <div class="bottom-bar tool-grid secondary-tools">
+          <button type="button" id="techHintBtn" title="技巧提示">🧠 技巧</button>
+          <button type="button" id="statsBtn">▥ 统计</button>
+          <button type="button" id="autoFillBtn" title="自动填入唯一候选">⚡ 自动填入：关</button>
+          <button type="button" id="clearBoardBtn" class="danger-tool">⌫ 清空填写</button>
+        </div>
+        <div class="tool-label">难度与新局</div>
+        <div class="bottom-bar new-game-tools">
+          <select class="difficulty-select" id="diffSelect" aria-label="选择数独难度">
+            <option value="0">简单 · 40 个已知数</option>
+            <option value="1">中等 · 34 个已知数</option>
+            <option value="2">困难 · 30 个已知数</option>
+            <option value="3">专家 · 26 个已知数</option>
+            <option value="4">极限 · 23 个已知数</option>
+          </select>
+          <button type="button" class="primary-tool" id="newGameBtn">开始新局</button>
+        </div>
+      </details>
+    </aside>
+  </main>
+</section>
 </div>
 
 <!-- 2.4 统计弹窗 -->
@@ -87,19 +143,7 @@
   </div>
 </div>
 
-<!-- 2.5 继续游戏弹窗 -->
-<div class="resume-overlay" id="resumeOverlay">
-  <div class="resume-box">
-    <h3>发现未完成的游戏</h3>
-    <p id="resumeInfo">是否继续上局的游戏？</p>
-    <div class="resume-btns">
-      <button type="button" id="resumeBtn">继续游戏</button>
-      <button type="button" id="discardBtn">重新开始</button>
-    </div>
-  </div>
-</div>
-
-<!-- 2.6 技巧提示弹窗 -->
+<!-- 2.5 技巧提示弹窗 -->
 <div class="modal-overlay" id="techHintOverlay">
   <div class="modal-box">
     <button type="button" class="modal-close" id="techHintCloseBtn" aria-label="关闭技巧提示">✕</button>
@@ -111,7 +155,7 @@
   </div>
 </div>
 
-<!-- 2.7 分享弹窗 -->
+<!-- 2.6 分享弹窗 -->
 <div class="modal-overlay" id="shareOverlay">
   <div class="modal-box">
     <button type="button" class="modal-close" id="shareCloseBtn" aria-label="关闭分享">✕</button>
@@ -124,6 +168,6 @@
   </div>
 </div>
 
-<script src="sudoku.js?v=20260821b"></script>
+<script src="sudoku.js?v=20260821e"></script>
 </body>
 </html>

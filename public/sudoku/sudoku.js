@@ -72,6 +72,27 @@ function formatDuration(totalSeconds) {
   return hours > 0 ? String(hours).padStart(2, "0") + ":" + mmss : mmss;
 }
 
+function gridIndexAtPoint(x, y, width, height) {
+  if (x < 0 || y < 0 || x >= width || y >= height || width <= 0 || height <= 0) return -1;
+  const col = Math.floor(x / (width / CONFIG.BOARD_SIZE));
+  const row = Math.floor(y / (height / CONFIG.BOARD_SIZE));
+  return row * CONFIG.BOARD_SIZE + col;
+}
+
+function getDragRectBox(start, current, width, height) {
+  const cw = width / CONFIG.BOARD_SIZE;
+  const ch = height / CONFIG.BOARD_SIZE;
+  const sr = Math.floor(start / CONFIG.BOARD_SIZE);
+  const sc = start % CONFIG.BOARD_SIZE;
+  const er = Math.floor(current / CONFIG.BOARD_SIZE);
+  const ec = current % CONFIG.BOARD_SIZE;
+  const r1 = Math.min(sr, er);
+  const r2 = Math.max(sr, er);
+  const c1 = Math.min(sc, ec);
+  const c2 = Math.max(sc, ec);
+  return { left: c1 * cw, top: r1 * ch, width: (c2 - c1 + 1) * cw, height: (r2 - r1 + 1) * ch };
+}
+
 /* ========== SECTION 5: 游戏状态管理 ========== */
 /*
   本区函数清单：
@@ -103,6 +124,7 @@ let autoFillMode = false;
 let usedPraiseIndices = [];
 let lastPraiseText = "";      // 保存最近一次随机到的赞美诗，供分享复用
 let currentDifficulty = 0;
+let homeDifficulty = 0;
 
 function resetGameState() {
   solution       = [];
@@ -405,6 +427,8 @@ function renderKeypad() {
   for (let n = 1; n <= 9; n++) {
     const btn = document.createElement("button");
     btn.dataset.num = n;
+    btn.type = "button";
+    btn.setAttribute("aria-label", "填写数字 " + n);
     let placed = 0;
     for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
       if (board[i] === n) placed++;
@@ -417,9 +441,11 @@ function renderKeypad() {
     kp.appendChild(btn);
   }
   const clr = document.createElement("button");
-  clr.innerHTML = "清除所有";
+  clr.type = "button";
+  clr.innerHTML = "⌫ 清除当前格";
   clr.className = "clear-btn";
-  clr.onclick = clearAllUser;
+  clr.setAttribute("aria-label", "清除当前选中格");
+  clr.onclick = () => fillNumber(0);
   kp.appendChild(clr);
 }
 
@@ -526,22 +552,27 @@ function selectCell(index, isCtrl, isShift) {
   renderBoard();
 }
 
-function cellFromEvent(e) {
+function cellFromEvent(e, preferTarget) {
   const boardEl = $("board");
+  if (preferTarget && e.target && typeof e.target.closest === "function") {
+    const targetCell = e.target.closest(".cell");
+    if (targetCell && boardEl.contains(targetCell)) {
+      const directIndex = parseInt(targetCell.dataset.index, 10);
+      if (Number.isInteger(directIndex)) return directIndex;
+    }
+  }
   const rect = boardEl.getBoundingClientRect();
-  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-  const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-  const cw = rect.width / CONFIG.BOARD_SIZE;
-  const ch = rect.height / CONFIG.BOARD_SIZE;
-  const col = Math.floor(x / cw);
-  const row = Math.floor(y / ch);
-  if (row < 0 || row >= CONFIG.BOARD_SIZE || col < 0 || col >= CONFIG.BOARD_SIZE) return -1;
-  return row * 9 + col;
+  const point = e.touches && e.touches.length ? e.touches[0] : e;
+  // clientWidth/clientHeight 不包含棋盘外边框；坐标也扣除边框，避免格子映射偏移。
+  // 落在棋盘自身的外框上时吸附到最近单元格，消除最下/最右侧的点击死区。
+  const x = clamp(point.clientX - rect.left - boardEl.clientLeft, 0, boardEl.clientWidth - 0.001);
+  const y = clamp(point.clientY - rect.top - boardEl.clientTop, 0, boardEl.clientHeight - 0.001);
+  return gridIndexAtPoint(x, y, boardEl.clientWidth, boardEl.clientHeight);
 }
 
 function onBoardMouseDown(e) {
   if (finished) return;
-  const idx = cellFromEvent(e);
+  const idx = cellFromEvent(e, true);
   if (idx < 0 || givens[idx] !== 0) return;
   e.preventDefault();
   isDragging  = true;
@@ -550,6 +581,10 @@ function onBoardMouseDown(e) {
   selected     = idx;
   selectedCells= [idx];
   renderBoard();
+  // 普通点按只使用单元格自身的实线选中态；确实拖到另一格后才显示虚线选区。
+}
+
+function ensureDragRect() {
   let rectEl = $("dragRect");
   if (!rectEl) {
     rectEl = document.createElement("div");
@@ -557,29 +592,21 @@ function onBoardMouseDown(e) {
     rectEl.className = "drag-rect";
     $("board").appendChild(rectEl);
   }
-  updateDragRect();
+  return rectEl;
 }
 
 function updateDragRect() {
   const rectEl = $("dragRect");
   if (!rectEl || dragStart < 0) return;
   const boardEl = $("board");
-  const bw = boardEl.offsetWidth;
-  const bh = boardEl.offsetHeight;
-  const cw = bw / CONFIG.BOARD_SIZE;
-  const ch = bh / CONFIG.BOARD_SIZE;
-  const sr = Math.floor(dragStart / 9);
-  const sc = dragStart % 9;
-  const er = Math.floor(dragCurrent / 9);
-  const ec = dragCurrent % 9;
-  const r1 = Math.min(sr, er);
-  const r2 = Math.max(sr, er);
-  const c1 = Math.min(sc, ec);
-  const c2 = Math.max(sc, ec);
-  rectEl.style.left   = (c1 * cw) + "px";
-  rectEl.style.top    = (r1 * ch) + "px";
-  rectEl.style.width  = ((c2 - c1 + 1) * cw) + "px";
-  rectEl.style.height = ((r2 - r1 + 1) * ch) + "px";
+  // 绝对定位的参考区域是棋盘内框，使用 client 尺寸与单元格网格完全对齐。
+  const bw = boardEl.clientWidth;
+  const bh = boardEl.clientHeight;
+  const box = getDragRectBox(dragStart, dragCurrent, bw, bh);
+  rectEl.style.left   = box.left + "px";
+  rectEl.style.top    = box.top + "px";
+  rectEl.style.width  = box.width + "px";
+  rectEl.style.height = box.height + "px";
 }
 
 function onBoardMouseMove(e) {
@@ -602,14 +629,17 @@ function onBoardMouseMove(e) {
         if (givens[i] === 0) selectedCells.push(i);
       }
     if (selectedCells.length > 0) selected = selectedCells[selectedCells.length - 1];
-    updateDragRect();
     renderBoard();
+    ensureDragRect();
+    updateDragRect();
   }
 }
 
 function onBoardMouseUp(e) {
   if (!isDragging) return;
   isDragging = false;
+  dragStart = -1;
+  dragCurrent = -1;
   const rectEl = $("dragRect");
   if (rectEl) rectEl.remove();
 }
@@ -620,9 +650,11 @@ function bindBoardEvents() {
   boardEl.addEventListener("mousedown", onBoardMouseDown);
   boardEl.addEventListener("mousemove", onBoardMouseMove);
   boardEl.addEventListener("mouseup", onBoardMouseUp);
+  boardEl.addEventListener("mouseleave", onBoardMouseUp);
   boardEl.addEventListener("touchstart", (e) => { onBoardMouseDown(e); }, {passive: false});
   boardEl.addEventListener("touchmove",  (e) => { onBoardMouseMove(e); }, {passive: false});
   boardEl.addEventListener("touchend",    (e) => { onBoardMouseUp(e); });
+  boardEl.addEventListener("touchcancel", (e) => { onBoardMouseUp(e); });
   boardEl._eventsBound = true;
 }
 
@@ -763,12 +795,15 @@ function fillNumber(value) {
   /* 检查是否获胜 */
   if (isBoardFilled() && checkWin()) {
     checkWinAndFinish();
+  } else if (autoFillMode && !hasError) {
+    runAutoFill(false);
   }
 }
 
 function toggleNoteMode() {
   noteMode = !noteMode;
   $("noteBtn").textContent = "笔记：" + (noteMode ? "开" : "关");
+  $("noteBtn").classList.toggle("active-btn", noteMode);
   if (!noteMode) { selected = -1; selectedCells = []; }
   renderBoard();
   autoSave();
@@ -822,16 +857,16 @@ function autoEraseNotes(row, col, num) {
 
 function clearAllUser() {
   if (finished) return;
-  let changed = false;
+  const changes = [];
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
-    if (givens[i] === 0 && board[i] !== 0) {
-      pushHistory({ index: i, prevValue: board[i] });
+    if (givens[i] === 0 && (board[i] !== 0 || (notes[i] && notes[i].length))) {
+      changes.push({ index: i, prevValue: board[i], prevNotes: notes[i] ? [...notes[i]] : null });
       board[i] = 0;
       delete notes[i];
-      changed = true;
     }
   }
-  if (changed) {
+  if (changes.length) {
+    pushHistory({ bulk: changes });
     selected = -1;
     selectedCells = [];
     renderBoard();
@@ -849,6 +884,10 @@ function clearAllUser() {
   | undo    | —    | 撤销最后一步操作        |
 */
 function restoreHistoryEntry(targetBoard, targetNotes, last) {
+  if (Array.isArray(last.bulk)) {
+    last.bulk.forEach(entry => restoreHistoryEntry(targetBoard, targetNotes, entry));
+    return;
+  }
   if (last.prevValue !== undefined) {
     targetBoard[last.index] = last.prevValue;
   }
@@ -866,8 +905,13 @@ function undo() {
   const last = history.pop();
   restoreHistoryEntry(board, notes, last);
 
-  selected = last.index;
-  selectedCells = [last.index];
+  if (Array.isArray(last.bulk)) {
+    selected = -1;
+    selectedCells = [];
+  } else {
+    selected = last.index;
+    selectedCells = [last.index];
+  }
   renderBoard();
   updateProgress();
   refreshKeypadCounts();
@@ -991,7 +1035,7 @@ function toggleAutoFill() {
   if (autoFillMode) runAutoFill();
 }
 
-function runAutoFill() {
+function runAutoFill(showEmptyToast = true) {
   if (finished) return;
   let filled = false;
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
@@ -1013,7 +1057,7 @@ function runAutoFill() {
     if (isBoardFilled() && checkWin()) {
       checkWinAndFinish();
     }
-  } else {
+  } else if (showEmptyToast) {
     showToast("当前没有唯一候选数可自动填入");
   }
 }
@@ -1351,7 +1395,6 @@ function createParticle(container, color) {
   | clearSave    | —               | 清除存档                  |
   | checkResume  | —               | 检查是否有未完成的游戏    |
   | resumeGame   | —               | 从存档恢复游戏状态        |
-  | discardGame  | —               | 丢弃存档，开始新游戏      |
   | recordStats  | diff,timeSec    | 记录一局完成统计          |
   | getStats     | —               | 读取统计数据              |
   | clearStats   | —               | 清除所有统计数据          |
@@ -1425,7 +1468,11 @@ function clearSave() {
 
 function checkResume() {
   const save = getSave();
-  if (!save) return false;
+  const card = $("homeResumeCard");
+  if (!save) {
+    if (card) card.hidden = true;
+    return false;
+  }
   /* 检查是否真的未完成 */
   let done = 0;
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
@@ -1434,19 +1481,27 @@ function checkResume() {
   const totalBlanks = save.givens.filter(v => v === 0).length;
   if (done >= totalBlanks && totalBlanks > 0) {
     clearSave();
+    if (card) card.hidden = true;
     return false;
   }
   const difficulty = getSavedDifficulty(save);
-  $("resumeInfo").textContent =
-    "发现未完成的游戏（难度：" + ["简单","中等","困难","专家","极限"][difficulty] +
-    "，已用时 " + formatDuration(save.seconds) + "）。\n是否继续上局的游戏？";
-  $("resumeOverlay").classList.add("active");
+  const percent = totalBlanks > 0 ? Math.floor(done / totalBlanks * 100) : 0;
+  if (card) {
+    $("homeResumeTitle").textContent = "继续未完成的一局";
+    $("homeResumeMeta").textContent =
+      ["简单","中等","困难","专家","极限"][difficulty] + " · " +
+      formatDuration(save.seconds) + " · 完成 " + percent + "%";
+    card.hidden = false;
+  }
   return true;
 }
 
 function resumeGame() {
   const save = getSave();
-  if (!save) return;
+  if (!save) {
+    checkResume();
+    return;
+  }
   solution       = save.solution;
   givens        = save.givens;
   board          = save.board;
@@ -1461,25 +1516,19 @@ function resumeGame() {
   finished = false;
   history = [];
 
-  $("resumeOverlay").classList.remove("active");
   $("noteBtn").textContent = "笔记：" + (noteMode ? "开" : "关");
+  $("noteBtn").classList.toggle("active-btn", noteMode);
   $("candBtn").textContent = "候选：" + (showAllCands ? "开" : "关");
   $("candBtn").classList.toggle("active-btn", showAllCands);
   $("diffSelect").value = String(currentDifficulty);
 
+  showGameScreen(true);
   startTimer();
 
   renderBoard();
   renderKeypad();
   updateProgress();
   updateTimer();
-}
-
-function discardGame() {
-  clearSave();
-  $("resumeOverlay").classList.remove("active");
-  renderKeypad();
-  newGame();
 }
 
 function recordStats(diff, timeSec) {
@@ -1569,6 +1618,98 @@ function hideToast() {
   | stopTimer        | —    | 停止计时器                  |
   | checkWinAndFinish | —   | 检查是否获胜并触发完成流程  |
 */
+function syncHomeDifficulty() {
+  document.querySelectorAll("#homeDifficulty [data-diff]").forEach(btn => {
+    const active = normalizeDifficulty(btn.dataset.diff) === homeDifficulty;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-checked", active ? "true" : "false");
+  });
+}
+
+function selectHomeDifficulty(value) {
+  homeDifficulty = normalizeDifficulty(value);
+  $("diffSelect").value = String(homeDifficulty);
+  syncHomeDifficulty();
+}
+
+function showGameScreen(pushState) {
+  $("sudokuHome").hidden = true;
+  $("sudokuGame").hidden = false;
+  document.body.classList.add("playing");
+  if (pushState && window.history && location.hash !== "#play") {
+    window.history.pushState({ sudoku: "play" }, "", "#play");
+  }
+}
+
+function leaveFocusMode() {
+  document.body.classList.remove("focus-mode");
+  const btn = $("fullscreenBtn");
+  if (btn) {
+    btn.textContent = "⛶";
+    btn.setAttribute("aria-label", "进入沉浸全屏");
+    btn.title = "进入沉浸全屏";
+  }
+  if (document.fullscreenElement && document.exitFullscreen) {
+    const result = document.exitFullscreen();
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  }
+}
+
+function showSudokuHome(updateUrl) {
+  if (timerStartedAt) {
+    stopTimer();
+    autoSave(true);
+  }
+  leaveFocusMode();
+  document.body.classList.remove("playing");
+  $("sudokuGame").hidden = true;
+  $("sudokuHome").hidden = false;
+  checkResume();
+  if (updateUrl && window.history && location.hash === "#play") {
+    window.history.replaceState({ sudoku: "home" }, "", location.pathname + location.search);
+  }
+  window.scrollTo(0, 0);
+}
+
+function canReplaceCurrentGame() {
+  if (!getSave()) return true;
+  if (typeof window.confirm !== "function") return true;
+  return window.confirm("开始新局会替换当前未完成的进度，确定继续吗？");
+}
+
+function startHomeGame() {
+  if (!canReplaceCurrentGame()) return;
+  $("diffSelect").value = String(homeDifficulty);
+  showGameScreen(true);
+  newGame();
+}
+
+function requestNewGame() {
+  if (!canReplaceCurrentGame()) return;
+  newGame();
+}
+
+function requestClearBoard() {
+  if (typeof window.confirm === "function" && !window.confirm("清空本局所有填写和笔记吗？题目数字会保留。")) return;
+  clearAllUser();
+}
+
+function toggleFullscreenMode() {
+  const entering = !document.body.classList.contains("focus-mode");
+  const btn = $("fullscreenBtn");
+  document.body.classList.toggle("focus-mode", entering);
+  btn.textContent = entering ? "↙" : "⛶";
+  btn.setAttribute("aria-label", entering ? "退出沉浸全屏" : "进入沉浸全屏");
+  btn.title = entering ? "退出沉浸全屏" : "进入沉浸全屏";
+  if (entering && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+    const result = document.documentElement.requestFullscreen();
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } else if (!entering && document.fullscreenElement && document.exitFullscreen) {
+    const result = document.exitFullscreen();
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  }
+}
+
 function startTimer() {
   clearInterval(timerInterval);
   timerStartedAt = Date.now() - seconds * 1000;
@@ -1611,6 +1752,8 @@ function checkWinAndFinish() {
 }
 
 function newGame() {
+  stopTimer();
+  clearSave();
   const idx = normalizeDifficulty($("diffSelect").value);
   currentDifficulty = idx;
   solution      = generateSolution();
@@ -1631,21 +1774,22 @@ function newGame() {
 
   hideToast();
   $("noteBtn").textContent = "笔记：关";
+  $("noteBtn").classList.remove("active-btn");
   $("candBtn").textContent = "候选：关";
   $("candBtn").classList.remove("active-btn");
   $("autoFillBtn").textContent = "自动填入：关";
   autoFillMode = false;
   $("finishMsg").style.display = "none";
   renderBoard();
+  renderKeypad();
   updateProgress();
   updateTimer();
   clearKeypadRecommend();
-  refreshKeypadCounts();
   autoSave();
 }
 
 function onDifficultyChange() {
-  newGame();
+  selectHomeDifficulty($("diffSelect").value);
 }
 
 /* ========== SECTION 20: 键盘事件 ========== */
@@ -1732,8 +1876,16 @@ function bindKeyboardEvents() {
 function bindUiEvents() {
   $("soundBtn").addEventListener("click", toggleSound);
   $("darkBtn").addEventListener("click", toggleDarkMode);
+  $("fullscreenBtn").addEventListener("click", toggleFullscreenMode);
+  $("gameHomeBtn").addEventListener("click", () => showSudokuHome(true));
+  $("homeStartBtn").addEventListener("click", startHomeGame);
+  $("homeResumeBtn").addEventListener("click", resumeGame);
+  $("homeStatsBtn").addEventListener("click", showStats);
+  document.querySelectorAll("#homeDifficulty [data-diff]").forEach(btn => {
+    btn.addEventListener("click", () => selectHomeDifficulty(btn.dataset.diff));
+  });
   $("diffSelect").addEventListener("change", onDifficultyChange);
-  $("newGameBtn").addEventListener("click", newGame);
+  $("newGameBtn").addEventListener("click", requestNewGame);
   $("noteBtn").addEventListener("click", toggleNoteMode);
   $("candBtn").addEventListener("click", toggleShowAllCands);
   $("undoBtn").addEventListener("click", undo);
@@ -1741,11 +1893,10 @@ function bindUiEvents() {
   $("techHintBtn").addEventListener("click", showTechHint);
   $("statsBtn").addEventListener("click", showStats);
   $("autoFillBtn").addEventListener("click", toggleAutoFill);
+  $("clearBoardBtn").addEventListener("click", requestClearBoard);
   $("statsCloseBtn").addEventListener("click", closeStats);
   $("statsDoneBtn").addEventListener("click", closeStats);
   $("clearStatsBtn").addEventListener("click", clearStats);
-  $("resumeBtn").addEventListener("click", resumeGame);
-  $("discardBtn").addEventListener("click", discardGame);
   $("techHintCloseBtn").addEventListener("click", closeTechHint);
   $("techHintDoneBtn").addEventListener("click", closeTechHint);
   $("shareCloseBtn").addEventListener("click", closeShare);
@@ -1760,7 +1911,13 @@ function bindUiEvents() {
       autoSave(true);
     }
   });
-  window.addEventListener("pagehide", () => { if (!finished) autoSave(true); });
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && document.body.classList.contains("focus-mode")) leaveFocusMode();
+  });
+  window.addEventListener("pagehide", () => { if (!finished && timerStartedAt) autoSave(true); });
+  window.addEventListener("popstate", () => {
+    if (location.hash !== "#play" && !$("sudokuGame").hidden) showSudokuHome(false);
+  });
 }
 
 function initApp() {
@@ -1768,11 +1925,10 @@ function initApp() {
   restoreSoundSetting();
   bindUiEvents();
   bindKeyboardEvents();
+  selectHomeDifficulty(0);
   const hadSave = checkResume();
-  if (!hadSave) {
-    renderKeypad();
-    newGame();
-  }
+  if (location.hash === "#play" && hadSave) resumeGame();
+  else showSudokuHome(location.hash === "#play");
 }
 
 window.__sudokuTest = {
@@ -1785,6 +1941,8 @@ window.__sudokuTest = {
   normalizeDifficulty,
   formatDuration,
   restoreHistoryEntry,
+  gridIndexAtPoint,
+  getDragRectBox,
   autoSave,
   clearSave,
 };
