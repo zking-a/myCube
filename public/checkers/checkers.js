@@ -74,6 +74,8 @@ function countInGoal(pieceMap, player) {
 
 function hasWon(pieceMap, player) { return countInGoal(pieceMap, player) === 10; }
 
+function getBoardRotation(player) { return player === 'red' ? 180 : 0; }
+
 function sanitizeSavedGame(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   if (raw.turn !== 'red' && raw.turn !== 'blue') return null;
@@ -198,9 +200,14 @@ function renderBoard() {
 
 function updateStatus() {
   const isRed = turn === 'red';
+  const board = $('board');
+  board.dataset.rotation = String(getBoardRotation(turn));
+  board.classList.toggle('view-red', isRed);
+  board.classList.toggle('view-blue', !isRed);
+  board.setAttribute('aria-label', '中国跳棋棋盘，' + (isRed ? '红方' : '蓝方') + '视角，当前行动方位于下方');
   $('turnPiece').className = 'turn-piece ' + turn;
   $('turnText').textContent = gameOver ? (gameOver === 'red' ? '红方获胜' : '蓝方获胜') : (isRed ? '红方回合' : '蓝方回合');
-  $('turnKicker').textContent = gameOver ? '本局已经结束' : '本地双人 · ' + (isRed ? '请红方落子' : '请蓝方落子');
+  $('turnKicker').textContent = gameOver ? '本局已经结束' : (isRed ? '红方' : '蓝方') + '视角 · 己方在下';
   $('moveCount').textContent = '第 ' + moveNumber + ' 手';
   $('redProgress').textContent = countInGoal(pieces, 'red') + '/10';
   $('blueProgress').textContent = countInGoal(pieces, 'blue') + '/10';
@@ -312,7 +319,7 @@ window.__checkersTest = {
   BOARD_CELLS: BOARD_CELLS.map(cell => ({ ...cell })),
   TOP_CAMP: [...TOP_CAMP], BOTTOM_CAMP: [...BOTTOM_CAMP],
   buildBoardCells, createInitialPieces, getLegalMoves,
-  countInGoal, hasWon, sanitizeSavedGame,
+  countInGoal, hasWon, getBoardRotation, sanitizeSavedGame,
 };
 
 window.addEventListener('DOMContentLoaded', init);

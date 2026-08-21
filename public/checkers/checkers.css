@@ -21,7 +21,8 @@ button,a,summary{font:inherit}button{touch-action:manipulation}
 .move-count{padding:6px 9px;border-radius:999px;color:#66738d;background:#fff;font-size:10px;font-weight:800;white-space:nowrap}
 .board-frame{position:relative;width:100%;aspect-ratio:1/1;overflow:hidden;border:1px solid #dfe6f4;border-radius:22px;background:radial-gradient(circle at 50% 46%,#fff 0%,#f7f9ff 62%,#edf2fb 100%)}
 .board-frame::before{position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(86,104,245,.055),transparent 68%);content:"";pointer-events:none}
-.checker-board{position:relative;display:block;width:100%;height:100%;user-select:none;touch-action:manipulation}
+.checker-board{position:relative;display:block;width:100%;height:100%;user-select:none;touch-action:manipulation;transform-origin:50% 50%;transition:transform .36s cubic-bezier(.22,.8,.28,1);will-change:transform}
+.checker-board.view-red{transform:rotate(180deg)}.checker-board.view-blue{transform:rotate(0deg)}
 .cell-node{cursor:pointer;outline:none}.cell-node .hit-area{fill:transparent}.cell-node .hole{fill:#e8edf6;stroke:#c7d1e2;stroke-width:1.1;transition:fill .12s,stroke .12s,transform .12s}
 .cell-node.top-camp .hole{fill:#fff0ef;stroke:#efcbc8}.cell-node.bottom-camp .hole{fill:#eef2ff;stroke:#cbd5fb}
 .cell-node .piece{stroke:rgba(255,255,255,.78);stroke-width:1.2;filter:drop-shadow(0 2px 2px rgba(28,40,74,.22));transition:transform .14s}.cell-node .piece.red-piece{fill:var(--red)}.cell-node .piece.blue-piece{fill:var(--blue)}

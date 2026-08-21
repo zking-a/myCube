@@ -33,6 +33,8 @@ ok('棋盘生成完整的 121 个唯一孔位',
 ok('17 行孔位数量符合六角星棋盘结构',
   C.CONFIG.ROW_COUNTS.join(',') === '1,2,3,4,13,12,11,10,9,10,11,12,13,4,3,2,1');
 ok('上下双方营地各有 10 个孔位', C.TOP_CAMP.length === 10 && C.BOTTOM_CAMP.length === 10);
+ok('当前行动方视角始终把己方营地转到棋盘下方',
+  C.getBoardRotation('red') === 180 && C.getBoardRotation('blue') === 0);
 
 const initial = C.createInitialPieces();
 const owners = Object.values(initial);
@@ -67,6 +69,11 @@ ok('跳棋入口完整引用独立样式和脚本',
   /checkers\.css\?v=/.test(html) && /checkers\.js\?v=/.test(html) && /href="\.\.\/"/.test(html));
 ok('手机布局会切换为单列并保持棋盘正方形',
   /@media\(max-width:760px\)/.test(css) && /aspect-ratio:1\/1/.test(css));
+ok('棋盘初始为红方视角并在换手时切换红蓝方向',
+  /class="checker-board view-red"/.test(html) &&
+  /\.checker-board\.view-red\{transform:rotate\(180deg\)\}/.test(css) &&
+  /\.checker-board\.view-blue\{transform:rotate\(0deg\)\}/.test(css) &&
+  /classList\.toggle\('view-red', isRed\)/.test(source));
 ok('游戏平台卡片路由到真实跳棋目录且不再虚标联机',
   /href="checkers\/index\.html"/.test(platformHtml) && /本地热座/.test(platformHtml) && !/本地\+联机/.test(platformHtml));
 ok('服务器为无尾斜杠跳棋地址提供稳定重定向',
