@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eef3ff">
-  <meta name="description" content="中国跳棋本地双人对战，支持连跳、撤销和自动存档。">
+  <meta name="description" content="中国跳棋，支持人机、本地双人和在线联机对战。">
   <title>中国跳棋 · 轻量游戏站</title>
-  <link rel="stylesheet" href="checkers.css?v=20260822b">
-  <script src="checkers.js?v=20260822b" defer></script>
+  <link rel="stylesheet" href="checkers.css?v=20260822c">
+  <script src="checkers_core.js?v=20260822c" defer></script>
+  <script src="checkers.js?v=20260822c" defer></script>
 </head>
 <body>
   <main class="page-shell">
@@ -17,15 +18,49 @@
       <button type="button" class="icon-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效" title="切换音效">🔊</button>
     </header>
 
+    <nav class="mode-switch" aria-label="对战模式">
+      <button type="button" class="active" data-mode="ai" aria-pressed="true"><span>🤖</span>人机对战</button>
+      <button type="button" data-mode="local" aria-pressed="false"><span>👥</span>本地双人</button>
+      <button type="button" data-mode="online" aria-pressed="false"><span>🌐</span>联机对战</button>
+    </nav>
+
+    <section class="mode-options" id="aiOptions" aria-label="人机设置">
+      <div><strong>挑战电脑</strong><small>你执红方，棋子始终位于屏幕下方</small></div>
+      <label>难度
+        <select id="aiLevel">
+          <option value="easy">轻松</option>
+          <option value="normal" selected>标准</option>
+          <option value="hard">困难</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="online-panel" id="onlinePanel" hidden aria-label="联机大厅">
+      <div class="online-form" id="onlineForm">
+        <label><span>玩家昵称</span><input id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="请输入昵称"></label>
+        <label><span>房间码</span><input id="roomInput" type="text" maxlength="5" inputmode="text" autocomplete="off" spellcheck="false" placeholder="5 位房间码"></label>
+        <div class="online-actions">
+          <button type="button" class="primary" id="createRoomBtn">创建房间</button>
+          <button type="button" id="joinRoomBtn">加入房间</button>
+        </div>
+      </div>
+      <div class="room-summary" id="roomSummary" hidden>
+        <div><small>当前房间</small><strong id="roomCodeText">-----</strong></div>
+        <p id="onlineStatus" role="status" aria-live="polite">正在连接服务器…</p>
+        <div class="room-actions"><button type="button" id="copyInviteBtn">复制邀请</button><button type="button" id="leaveRoomBtn">退出房间</button></div>
+      </div>
+    </section>
+
     <section class="game-layout" aria-label="中国跳棋棋局">
       <div class="board-column">
         <div class="turn-banner" id="turnBanner" aria-live="polite">
           <span class="turn-piece red" id="turnPiece" aria-hidden="true"></span>
-          <div><small id="turnKicker">红方视角 · 己方在下</small><strong id="turnText">红方回合</strong></div>
+          <div><small id="turnKicker">你的视角 · 红方在下</small><strong id="turnText">你的回合</strong></div>
           <span class="move-count" id="moveCount">第 1 手</span>
         </div>
         <div class="board-frame">
-          <svg id="board" class="checker-board view-red" viewBox="0 0 320 320" role="grid" aria-label="中国跳棋棋盘，红方视角"></svg>
+          <svg id="board" class="checker-board" viewBox="0 0 320 320" role="grid" aria-label="中国跳棋棋盘，红方视角"></svg>
+          <div class="board-wait" id="boardWait" hidden><span>🌐</span><strong>等待对手加入</strong><small>复制邀请链接发给朋友即可开始</small></div>
         </div>
         <p class="board-tip" id="boardTip">点击己方棋子，再点击高亮位置移动；金色圆环表示可以跳跃。</p>
       </div>
@@ -34,12 +69,12 @@
         <div class="score-card">
           <div class="player-row active" id="redPlayer">
             <span class="player-piece red" aria-hidden="true"></span>
-            <div><strong>红方</strong><small>目标：对面营地</small></div><b id="redProgress">0/10</b>
+            <div><strong id="redName">你 · 红方</strong><small>目标：对面营地</small></div><b id="redProgress">0/10</b>
           </div>
           <div class="versus">VS</div>
           <div class="player-row" id="bluePlayer">
             <span class="player-piece blue" aria-hidden="true"></span>
-            <div><strong>蓝方</strong><small>目标：对面营地</small></div><b id="blueProgress">0/10</b>
+            <div><strong id="blueName">电脑 · 蓝方</strong><small>目标：对面营地</small></div><b id="blueProgress">0/10</b>
           </div>
         </div>
         <div class="control-grid">
@@ -50,13 +85,13 @@
           <summary>玩法说明 <span>⌄</span></summary>
           <ol>
             <li>红方先走，双方轮流移动一枚自己的棋子。</li>
-            <li>每次换手会自动调整视角，让当前行动方始终位于棋盘下方。</li>
+            <li>棋盘方向固定；联机时双方各自在自己的设备上看到己方位于下方，换手时不会翻转棋盘。</li>
             <li>可以移动到相邻空位，也可以隔着任意棋子跳到其后方空位。</li>
             <li>一次跳跃可以连续跨越多个棋子，界面会直接标出所有可达位置。</li>
             <li>先把自己的 10 枚棋子全部移入对面营地即可获胜。</li>
           </ol>
         </details>
-        <p class="save-note">棋局会自动保存在当前浏览器中，刷新页面也能继续。</p>
+        <p class="save-note" id="saveNote">人机与本地棋局会保存在当前浏览器中，刷新后可以继续。</p>
       </aside>
     </section>
   </main>

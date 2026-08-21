@@ -10,6 +10,7 @@
     "test:e2e": "node test_local.js",
     "test:sudoku": "node test_sudoku.js",
     "test:checkers": "node test_checkers.js",
+    "test:checkers:e2e": "node test_checkers_online.js",
     "test:security": "node test_security.js"
   },
   "engines": {

@@ -1,128 +1,125 @@
 'use strict';
 
+const Core = window.CheckersCore;
+if (!Core) throw new Error('CheckersCore 未加载');
+
 const CONFIG = {
-  STORAGE_KEY: 'chinese_checkers_save_v1',
+  MODE_KEY: 'chinese_checkers_mode_v2',
+  SAVE_PREFIX: 'chinese_checkers_save_v2_',
   SOUND_KEY: 'chinese_checkers_sound',
+  AI_LEVEL_KEY: 'chinese_checkers_ai_level',
+  NICK_KEY: 'light_games_nickname',
+  CID_KEY: 'chinese_checkers_cid',
+  TOKEN_PREFIX: 'chinese_checkers_token_',
   HISTORY_LIMIT: 80,
-  ROW_COUNTS: [1,2,3,4,13,12,11,10,9,10,11,12,13,4,3,2,1],
-  DIRECTIONS: [[0,-2],[0,2],[-1,-1],[-1,1],[1,-1],[1,1]],
+  ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+  ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/,
+  AI_DELAY: 460,
+  RECONNECT_DELAY: 1200
 };
 
-function keyOf(row, unit) { return row + ':' + unit; }
-
-function buildBoardCells() {
-  const cells = [];
-  CONFIG.ROW_COUNTS.forEach((count, row) => {
-    for (let column = 0; column < count; column++) {
-      const unit = -(count - 1) + column * 2;
-      cells.push({
-        key: keyOf(row, unit), row, unit,
-        x: 160 + unit * 10.8,
-        y: 16 + row * 18,
-        camp: row <= 3 ? 'top' : (row >= 13 ? 'bottom' : ''),
-      });
-    }
-  });
-  return cells;
-}
-
-const BOARD_CELLS = buildBoardCells();
-const CELL_MAP = new Map(BOARD_CELLS.map(cell => [cell.key, cell]));
-const TOP_CAMP = new Set(BOARD_CELLS.filter(cell => cell.camp === 'top').map(cell => cell.key));
-const BOTTOM_CAMP = new Set(BOARD_CELLS.filter(cell => cell.camp === 'bottom').map(cell => cell.key));
-
-function createInitialPieces() {
-  const pieceMap = {};
-  TOP_CAMP.forEach(key => { pieceMap[key] = 'red'; });
-  BOTTOM_CAMP.forEach(key => { pieceMap[key] = 'blue'; });
-  return pieceMap;
-}
-
-function getLegalMoves(pieceMap, fromKey) {
-  const from = CELL_MAP.get(fromKey);
-  if (!from || !pieceMap || !pieceMap[fromKey]) return { steps: [], jumps: [], all: [] };
-  const steps = [];
-  CONFIG.DIRECTIONS.forEach(direction => {
-    const targetKey = keyOf(from.row + direction[0], from.unit + direction[1]);
-    if (CELL_MAP.has(targetKey) && !pieceMap[targetKey]) steps.push(targetKey);
-  });
-
-  const jumps = [];
-  const visited = new Set([fromKey]);
-  const queue = [fromKey];
-  const occupied = key => key !== fromKey && !!pieceMap[key];
-  while (queue.length) {
-    const current = CELL_MAP.get(queue.shift());
-    CONFIG.DIRECTIONS.forEach(direction => {
-      const overKey = keyOf(current.row + direction[0], current.unit + direction[1]);
-      const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
-      if (!CELL_MAP.has(landingKey) || !occupied(overKey) || occupied(landingKey) || visited.has(landingKey)) return;
-      visited.add(landingKey);
-      jumps.push(landingKey);
-      queue.push(landingKey);
-    });
-  }
-  return { steps, jumps, all: steps.concat(jumps) };
-}
-
-function countInGoal(pieceMap, player) {
-  const goal = player === 'red' ? BOTTOM_CAMP : TOP_CAMP;
-  let count = 0;
-  goal.forEach(key => { if (pieceMap[key] === player) count++; });
-  return count;
-}
-
-function hasWon(pieceMap, player) { return countInGoal(pieceMap, player) === 10; }
-
-function getBoardRotation(player) { return player === 'red' ? 180 : 0; }
-
-function sanitizeSavedGame(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  if (raw.turn !== 'red' && raw.turn !== 'blue') return null;
-  if (!raw.pieces || typeof raw.pieces !== 'object' || Array.isArray(raw.pieces)) return null;
-  const cleanPieces = {};
-  let red = 0, blue = 0;
-  Object.keys(raw.pieces).forEach(key => {
-    const owner = raw.pieces[key];
-    if (!CELL_MAP.has(key) || (owner !== 'red' && owner !== 'blue') || cleanPieces[key]) return;
-    cleanPieces[key] = owner;
-    if (owner === 'red') red++;
-    else blue++;
-  });
-  if (red !== 10 || blue !== 10) return null;
-  return {
-    pieces: cleanPieces,
-    turn: raw.turn,
-    moveNumber: Math.max(1, Math.min(9999, Math.floor(Number(raw.moveNumber) || 1))),
-    gameOver: (raw.gameOver === 'red' || raw.gameOver === 'blue') && hasWon(cleanPieces, raw.gameOver) ? raw.gameOver : '',
-  };
-}
-
-let pieces = createInitialPieces();
+const BOARD_CELLS = Core.BOARD_CELLS;
+let mode = 'ai';
+let viewPlayer = 'red';
+let pieces = Core.createInitialPieces();
 let turn = 'red';
 let selectedKey = '';
-let legalMoves = { steps: [], jumps: [], all: [] };
+let legalMoves = emptyMoves();
 let history = [];
 let moveNumber = 1;
 let gameOver = '';
 let soundEnabled = true;
+let aiLevel = 'normal';
+let aiThinking = false;
+let aiTimer = null;
 let toastTimer = null;
 
-function $(id) { return document.getElementById(id); }
-function svgElement(name) { return document.createElementNS('http://www.w3.org/2000/svg', name); }
+const online = {
+  active: false,
+  ws: null,
+  room: '',
+  cid: '',
+  token: '',
+  color: '',
+  phase: 'idle',
+  host: '',
+  players: [],
+  intent: 'join',
+  nick: '',
+  intentionalClose: false,
+  reconnectTimer: null
+};
 
-function saveGame() {
-  try { localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({ pieces, turn, moveNumber, gameOver })); } catch (e) {}
+function $(id) { return document.getElementById(id); }
+function emptyMoves() { return { steps: [], jumps: [], all: [] }; }
+function svgElement(name) { return document.createElementNS('http://www.w3.org/2000/svg', name); }
+function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+function playerLabel(player) { return player === 'red' ? '红方' : '蓝方'; }
+function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
+
+function getViewPlayerForMode(currentMode, assignedColor) {
+  return currentMode === 'online' && (assignedColor === 'red' || assignedColor === 'blue') ? assignedColor : 'red';
 }
 
-function loadGame() {
+function normalizeRoom(value) {
+  return String(value || '').toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 5);
+}
+
+function randomString(length, alphabet) {
+  const bytes = new Uint8Array(length);
+  if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+  else for (let i = 0; i < length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  let out = '';
+  for (let i = 0; i < length; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
+function getClientId() {
+  let id = safeGet(CONFIG.CID_KEY);
+  if (!id || id.length < 12) {
+    id = randomString(24, 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+    safeSet(CONFIG.CID_KEY, id);
+  }
+  return id;
+}
+
+function sanitizeLocalState(raw) {
+  const clean = Core.sanitizeState(raw);
+  if (!clean) return null;
+  return { pieces: clean.pieces, turn: clean.turn, moveNumber: clean.moveNumber, gameOver: clean.winner };
+}
+
+function saveGame() {
+  if (mode === 'online') return;
+  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces, turn, moveNumber, winner: gameOver }));
+}
+
+function loadGame(targetMode) {
   try {
-    const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
-    const saved = raw ? sanitizeSavedGame(JSON.parse(raw)) : null;
+    const raw = safeGet(CONFIG.SAVE_PREFIX + targetMode);
+    const saved = raw ? sanitizeLocalState(JSON.parse(raw)) : null;
     if (!saved) return false;
-    pieces = saved.pieces; turn = saved.turn; moveNumber = saved.moveNumber; gameOver = saved.gameOver;
+    pieces = saved.pieces;
+    turn = saved.turn;
+    moveNumber = saved.moveNumber;
+    gameOver = saved.gameOver;
     return true;
   } catch (e) { return false; }
+}
+
+function resetState() {
+  pieces = Core.createInitialPieces();
+  turn = 'red';
+  selectedKey = '';
+  legalMoves = emptyMoves();
+  history = [];
+  moveNumber = 1;
+  gameOver = '';
+  aiThinking = false;
+  clearTimeout(aiTimer);
+  aiTimer = null;
+  closeWinner();
 }
 
 function pushHistory() {
@@ -130,11 +127,23 @@ function pushHistory() {
   if (history.length > CONFIG.HISTORY_LIMIT) history.shift();
 }
 
+function restoreHistory(snapshot) {
+  pieces = snapshot.pieces;
+  turn = snapshot.turn;
+  moveNumber = snapshot.moveNumber;
+  gameOver = snapshot.gameOver;
+  selectedKey = '';
+  legalMoves = emptyMoves();
+  closeWinner();
+}
+
 function showToast(message) {
   const toast = $('toast');
-  toast.textContent = message; toast.classList.add('show');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+  toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 1800);
 }
 
 function playTone(kind) {
@@ -148,15 +157,17 @@ function playTone(kind) {
     oscillator.frequency.value = kind === 'jump' ? 620 : (kind === 'win' ? 760 : 470);
     gain.gain.setValueAtTime(.045, context.currentTime);
     gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + (kind === 'win' ? .32 : .13));
-    oscillator.connect(gain); gain.connect(context.destination);
-    oscillator.start(); oscillator.stop(context.currentTime + (kind === 'win' ? .32 : .13));
-    oscillator.onended = () => context.close();
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + (kind === 'win' ? .32 : .13));
+    oscillator.onended = function () { context.close(); };
   } catch (e) {}
 }
 
 function cellLabel(cell, owner, moveKind) {
   const base = '第 ' + (cell.row + 1) + ' 行';
-  if (owner) return base + '，' + (owner === 'red' ? '红方棋子' : '蓝方棋子');
+  if (owner) return base + '，' + playerLabel(owner) + '棋子';
   if (moveKind) return base + '，可' + (moveKind === 'jump' ? '跳跃到达' : '移动到达');
   return base + '，空位';
 }
@@ -166,8 +177,9 @@ function renderBoard() {
   board.replaceChildren();
   const stepSet = new Set(legalMoves.steps);
   const jumpSet = new Set(legalMoves.jumps);
-  const keyboardFocusKey = selectedKey || Object.keys(pieces).find(key => pieces[key] === turn) || BOARD_CELLS[0].key;
-  BOARD_CELLS.forEach(cell => {
+  const keyboardFocusKey = selectedKey || Object.keys(pieces).find(function (key) { return pieces[key] === turn; }) || BOARD_CELLS[0].key;
+  BOARD_CELLS.forEach(function (cell) {
+    const point = Core.orientPoint(cell, viewPlayer);
     const group = svgElement('g');
     const owner = pieces[cell.key] || '';
     const moveKind = jumpSet.has(cell.key) ? 'jump' : (stepSet.has(cell.key) ? 'step' : '');
@@ -182,144 +194,495 @@ function renderBoard() {
 
     const hit = svgElement('circle');
     hit.classList.add('hit-area');
-    hit.setAttribute('cx', cell.x); hit.setAttribute('cy', cell.y); hit.setAttribute('r', '12');
+    hit.setAttribute('cx', point.x); hit.setAttribute('cy', point.y); hit.setAttribute('r', '12');
     group.appendChild(hit);
     const hole = svgElement('circle');
     hole.classList.add('hole');
-    hole.setAttribute('cx', cell.x); hole.setAttribute('cy', cell.y); hole.setAttribute('r', moveKind ? '7.1' : '6.2');
+    hole.setAttribute('cx', point.x); hole.setAttribute('cy', point.y); hole.setAttribute('r', moveKind ? '7.1' : '6.2');
     group.appendChild(hole);
     if (owner) {
       const piece = svgElement('circle');
       piece.classList.add('piece', owner + '-piece');
-      piece.setAttribute('cx', cell.x); piece.setAttribute('cy', cell.y); piece.setAttribute('r', '7.9');
+      piece.setAttribute('cx', point.x); piece.setAttribute('cy', point.y); piece.setAttribute('r', '7.9');
       group.appendChild(piece);
     }
     board.appendChild(group);
   });
 }
 
+function onlinePlayer(color) {
+  return online.players.find(function (player) { return player.color === color; });
+}
+
+function updatePlayerNames() {
+  if (mode === 'ai') {
+    $('redName').textContent = '你 · 红方';
+    $('blueName').textContent = '电脑 · 蓝方';
+    return;
+  }
+  if (mode === 'local') {
+    $('redName').textContent = '玩家 A · 红方';
+    $('blueName').textContent = '玩家 B · 蓝方';
+    return;
+  }
+  const red = onlinePlayer('red');
+  const blue = onlinePlayer('blue');
+  $('redName').textContent = (red ? red.nick : '等待玩家') + ' · 红方' + (online.color === 'red' ? '（你）' : '');
+  $('blueName').textContent = (blue ? blue.nick : '等待玩家') + ' · 蓝方' + (online.color === 'blue' ? '（你）' : '');
+}
+
+function canAct() {
+  if (gameOver || aiThinking) return false;
+  if (mode === 'ai') return turn === 'red';
+  if (mode === 'local') return true;
+  return online.phase === 'playing' && online.players.length === 2 &&
+    online.players.every(function (player) { return player.online; }) &&
+    online.color === turn && online.ws && online.ws.readyState === WebSocket.OPEN;
+}
+
+function onlineStatusText() {
+  if (!online.active) return '输入房间码加入朋友的对局';
+  if (online.phase === 'connecting') return '正在连接服务器…';
+  if (online.phase === 'waiting') return online.players.length < 2 ? '等待另一位玩家加入' : '正在准备开局';
+  if (online.phase === 'playing') {
+    if (online.players.some(function (player) { return !player.online; })) return '对手已离线，等待其自动重连';
+    const selfTurn = online.color === turn;
+    return selfTurn ? '轮到你走' : '等待对手走棋';
+  }
+  if (online.phase === 'done') return '本局已结束';
+  if (online.phase === 'reconnecting') return '连接中断，正在自动重连…';
+  return '尚未加入房间';
+}
+
 function updateStatus() {
   const isRed = turn === 'red';
-  const board = $('board');
-  board.dataset.rotation = String(getBoardRotation(turn));
-  board.classList.toggle('view-red', isRed);
-  board.classList.toggle('view-blue', !isRed);
-  board.setAttribute('aria-label', '中国跳棋棋盘，' + (isRed ? '红方' : '蓝方') + '视角，当前行动方位于下方');
+  const selfTurn = mode === 'online' && online.color === turn;
+  $('board').setAttribute('aria-label', '中国跳棋棋盘，' + playerLabel(viewPlayer) + '固定视角，己方位于下方');
   $('turnPiece').className = 'turn-piece ' + turn;
-  $('turnText').textContent = gameOver ? (gameOver === 'red' ? '红方获胜' : '蓝方获胜') : (isRed ? '红方回合' : '蓝方回合');
-  $('turnKicker').textContent = gameOver ? '本局已经结束' : (isRed ? '红方' : '蓝方') + '视角 · 己方在下';
+
+  let title = playerLabel(turn) + '回合';
+  let kicker = playerLabel(viewPlayer) + '固定视角 · 己方在下';
+  if (gameOver) {
+    title = playerLabel(gameOver) + '获胜';
+    kicker = '本局已经结束';
+  } else if (mode === 'ai') {
+    title = aiThinking || turn === 'blue' ? '电脑思考中…' : '你的回合';
+    kicker = '你的视角 · 红方始终在下';
+  } else if (mode === 'local') {
+    kicker = '红方固定视角 · 换手不翻转棋盘';
+  } else if (!online.color) {
+    title = '联机大厅';
+    kicker = '加入房间后分配阵营';
+  } else {
+    title = online.phase === 'playing' ? (selfTurn ? '轮到你走' : '对手回合') : onlineStatusText();
+    kicker = '你的视角 · ' + playerLabel(online.color) + '始终在下';
+  }
+
+  $('turnText').textContent = title;
+  $('turnKicker').textContent = kicker;
   $('moveCount').textContent = '第 ' + moveNumber + ' 手';
-  $('redProgress').textContent = countInGoal(pieces, 'red') + '/10';
-  $('blueProgress').textContent = countInGoal(pieces, 'blue') + '/10';
+  $('redProgress').textContent = Core.countInGoal(pieces, 'red') + '/10';
+  $('blueProgress').textContent = Core.countInGoal(pieces, 'blue') + '/10';
   $('redPlayer').classList.toggle('active', !gameOver && isRed);
   $('bluePlayer').classList.toggle('active', !gameOver && !isRed);
-  $('undoBtn').disabled = history.length === 0;
+  updatePlayerNames();
+
+  $('undoBtn').disabled = mode === 'online' || history.length === 0 || aiThinking;
+  $('undoBtn').title = mode === 'online' ? '联机对战由服务器同步，不能撤销' : '';
+  if (mode === 'online') {
+    const mayRestart = online.phase === 'done' && online.host === online.cid;
+    $('newGameBtn').disabled = !mayRestart;
+    $('newGameBtn').textContent = mayRestart ? '↻ 再来一局' : '↻ 房主可重开';
+  } else {
+    $('newGameBtn').disabled = false;
+    $('newGameBtn').textContent = '↻ 重新开局';
+  }
+
+  const opponentOffline = online.phase === 'playing' && online.players.some(function (player) { return !player.online; });
+  const showBoardWait = mode === 'online' && online.active &&
+    (online.phase === 'connecting' || online.phase === 'reconnecting' || online.phase === 'waiting' || opponentOffline);
+  $('boardWait').hidden = !showBoardWait;
+  if (showBoardWait) {
+    const reconnecting = online.phase === 'connecting' || online.phase === 'reconnecting';
+    $('boardWait').querySelector('strong').textContent = reconnecting ? '正在恢复联机' : (opponentOffline ? '对手暂时离线' : '等待对手加入');
+    $('boardWait').querySelector('small').textContent = reconnecting ? '正在连接服务器，请稍候' : (opponentOffline ? '已保留其阵营，重连后继续当前棋局' : '复制邀请链接发给朋友即可开始');
+  }
+  if (mode === 'online' && online.active) $('onlineStatus').textContent = onlineStatusText();
   $('boardTip').textContent = selectedKey
     ? (legalMoves.all.length ? '绿色为空位移动，金色为跳跃；再次点击已选棋子可以取消。' : '这枚棋子当前没有可走位置。')
-    : '点击己方棋子，再点击高亮位置移动；金色圆环表示可以跳跃。';
+    : (canAct() ? '点击己方棋子，再点击高亮位置移动；棋盘方向不会随回合变化。' : (mode === 'online' ? onlineStatusText() : '请等待电脑完成走棋。'));
 }
 
 function render() { renderBoard(); updateStatus(); }
 
 function selectPiece(key) {
-  selectedKey = key; legalMoves = getLegalMoves(pieces, key);
+  selectedKey = key;
+  legalMoves = Core.getLegalMoves(pieces, key);
   if (!legalMoves.all.length) showToast('这枚棋子暂时没有可走位置');
   render();
 }
 
 function showWinner(player) {
-  const isRed = player === 'red';
+  const alreadyOpen = $('winnerOverlay').classList.contains('active');
   $('winnerPiece').className = 'winner-piece ' + player;
-  $('winnerTitle').textContent = (isRed ? '红方' : '蓝方') + '获胜！';
+  $('winnerTitle').textContent = playerLabel(player) + '获胜！';
   $('winnerText').textContent = '率先把 10 枚棋子全部移入了对方营地';
+  if (mode === 'online') {
+    const isHost = online.host === online.cid;
+    $('winnerNewBtn').textContent = isHost ? '再来一局' : '返回房间等待房主';
+    $('winnerNewBtn').disabled = false;
+  } else {
+    $('winnerNewBtn').textContent = '再来一局';
+    $('winnerNewBtn').disabled = false;
+  }
   $('winnerOverlay').classList.add('active');
   $('winnerOverlay').setAttribute('aria-hidden', 'false');
-  setTimeout(() => $('winnerNewBtn').focus(), 0);
+  if (!alreadyOpen && !$('winnerNewBtn').disabled) setTimeout(function () { $('winnerNewBtn').focus(); }, 0);
 }
 
 function closeWinner() {
   const overlay = $('winnerOverlay');
-  overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true');
+  if (!overlay) return;
+  overlay.classList.remove('active');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
+function applyLocalMove(fromKey, targetKey, actor) {
+  const result = Core.applyMove(pieces, actor, fromKey, targetKey);
+  if (!result) return false;
+  pushHistory();
+  pieces = result.pieces;
+  selectedKey = '';
+  legalMoves = emptyMoves();
+  if (result.winner) {
+    gameOver = result.winner;
+    playTone('win');
+    showWinner(result.winner);
+  } else {
+    turn = opposite(actor);
+    moveNumber++;
+    playTone(result.kind);
+  }
+  saveGame();
+  render();
+  return true;
+}
+
+function scheduleAiMove() {
+  if (mode !== 'ai' || turn !== 'blue' || gameOver) return;
+  aiThinking = true;
+  render();
+  clearTimeout(aiTimer);
+  aiTimer = setTimeout(function () {
+    aiTimer = null;
+    if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
+    const move = Core.chooseAiMove(pieces, 'blue', aiLevel);
+    aiThinking = false;
+    if (!move) { showToast('电脑当前没有可走位置'); render(); return; }
+    applyLocalMove(move.from, move.target, 'blue');
+  }, CONFIG.AI_DELAY);
 }
 
 function movePiece(targetKey) {
-  const owner = pieces[selectedKey];
-  const wasJump = legalMoves.jumps.includes(targetKey);
-  pushHistory();
-  delete pieces[selectedKey]; pieces[targetKey] = owner;
-  selectedKey = ''; legalMoves = { steps: [], jumps: [], all: [] };
-  if (hasWon(pieces, owner)) {
-    gameOver = owner; playTone('win'); showWinner(owner);
-  } else {
-    turn = owner === 'red' ? 'blue' : 'red'; moveNumber++; playTone(wasJump ? 'jump' : 'step');
+  if (mode === 'online') {
+    if (!sendOnline({ t: 'move', from: selectedKey, target: targetKey, seq: moveNumber })) {
+      showToast('连接尚未恢复，请稍后再试');
+    } else {
+      selectedKey = '';
+      legalMoves = emptyMoves();
+      render();
+    }
+    return;
   }
-  saveGame(); render();
+  const actor = turn;
+  if (applyLocalMove(selectedKey, targetKey, actor) && mode === 'ai') scheduleAiMove();
 }
 
 function handleCell(key) {
   if (gameOver) return;
+  if (!canAct()) {
+    if (mode === 'online') showToast(onlineStatusText());
+    else if (mode === 'ai') showToast('请等待电脑完成走棋');
+    return;
+  }
   if (selectedKey && legalMoves.all.includes(key)) { movePiece(key); return; }
   const owner = pieces[key];
   if (owner === turn) {
     if (selectedKey === key) {
-      selectedKey = ''; legalMoves = { steps: [], jumps: [], all: [] }; render();
+      selectedKey = '';
+      legalMoves = emptyMoves();
+      render();
     } else selectPiece(key);
     return;
   }
-  if (owner) showToast('现在是' + (turn === 'red' ? '红方' : '蓝方') + '回合');
+  if (owner) showToast('现在是' + playerLabel(turn) + '回合');
   else if (selectedKey) showToast('这个位置不能到达');
 }
 
 function undoMove() {
-  const previous = history.pop();
+  if (mode === 'online') return;
+  clearTimeout(aiTimer);
+  aiTimer = null;
+  aiThinking = false;
+  let previous = history.pop();
   if (!previous) return;
-  pieces = previous.pieces; turn = previous.turn; moveNumber = previous.moveNumber; gameOver = previous.gameOver;
-  selectedKey = ''; legalMoves = { steps: [], jumps: [], all: [] };
-  closeWinner(); saveGame(); render();
+  if (mode === 'ai' && previous.turn === 'blue' && history.length) previous = history.pop();
+  restoreHistory(previous);
+  saveGame();
+  render();
 }
 
 function resetGame(skipConfirm) {
+  if (mode === 'online') {
+    if (online.phase === 'done' && online.host === online.cid) sendOnline({ t: 'again' });
+    else closeWinner();
+    return;
+  }
   if (!skipConfirm && moveNumber > 1 && typeof window.confirm === 'function' && !window.confirm('确定重新开始当前棋局吗？')) return;
-  pieces = createInitialPieces(); turn = 'red'; selectedKey = '';
-  legalMoves = { steps: [], jumps: [], all: [] }; history = []; moveNumber = 1; gameOver = '';
-  closeWinner(); saveGame(); render();
+  resetState();
+  saveGame();
+  render();
 }
 
 function toggleSound() {
   soundEnabled = !soundEnabled;
-  try { localStorage.setItem(CONFIG.SOUND_KEY, soundEnabled ? '1' : '0'); } catch (e) {}
+  safeSet(CONFIG.SOUND_KEY, soundEnabled ? '1' : '0');
   $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇';
   $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
   $('soundBtn').setAttribute('aria-label', soundEnabled ? '关闭音效' : '开启音效');
 }
 
-function init() {
-  try { soundEnabled = localStorage.getItem(CONFIG.SOUND_KEY) !== '0'; } catch (e) {}
-  $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇';
-  $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
-  loadGame();
-  $('board').addEventListener('click', event => {
-    const node = event.target.closest('[data-key]');
-    if (node) handleCell(node.dataset.key);
+function updateModeUi() {
+  document.querySelectorAll('[data-mode]').forEach(function (button) {
+    const active = button.dataset.mode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
-  $('board').addEventListener('keydown', event => {
-    const node = event.target.closest('[data-key]');
-    if (node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleCell(node.dataset.key); }
-  });
-  $('undoBtn').addEventListener('click', undoMove);
-  $('newGameBtn').addEventListener('click', () => resetGame(false));
-  $('winnerNewBtn').addEventListener('click', () => resetGame(true));
-  $('soundBtn').addEventListener('click', toggleSound);
+  $('aiOptions').hidden = mode !== 'ai';
+  $('onlinePanel').hidden = mode !== 'online';
+  $('saveNote').textContent = mode === 'online'
+    ? '联机棋局由服务器同步和校验；短暂断线会自动恢复原阵营。'
+    : '人机与本地棋局会保存在当前浏览器中，刷新后可以继续。';
+}
+
+function switchMode(nextMode) {
+  if (!['ai', 'local', 'online'].includes(nextMode) || nextMode === mode) return;
+  if (mode === 'online') leaveOnline(true);
+  clearTimeout(aiTimer);
+  aiTimer = null;
+  aiThinking = false;
+  closeWinner();
+  mode = nextMode;
+  safeSet(CONFIG.MODE_KEY, mode);
+  viewPlayer = getViewPlayerForMode(mode, '');
+  selectedKey = '';
+  legalMoves = emptyMoves();
+  history = [];
+  if (mode === 'online') {
+    resetState();
+  } else if (!loadGame(mode)) {
+    resetState();
+    saveGame();
+  }
+  updateModeUi();
   render();
+  if (mode === 'ai' && turn === 'blue' && !gameOver) scheduleAiMove();
   if (gameOver) showWinner(gameOver);
 }
 
+function websocketUrl() {
+  return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/checkers-ws';
+}
+
+function sendOnline(message) {
+  if (!online.ws || online.ws.readyState !== WebSocket.OPEN) return false;
+  try { online.ws.send(JSON.stringify(message)); return true; } catch (e) { return false; }
+}
+
+function setOnlinePanel(joined) {
+  $('onlineForm').hidden = joined;
+  $('roomSummary').hidden = !joined;
+  if (joined) $('roomCodeText').textContent = online.room;
+}
+
+function connectOnline(intent) {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') {
+    showToast('联机模式需要通过服务器网址打开，不能直接打开本地文件');
+    return;
+  }
+  const nick = String($('nickInput').value || '').trim().slice(0, 16) || '玩家';
+  let room = normalizeRoom($('roomInput').value);
+  if (intent === 'create') {
+    room = randomString(5, CONFIG.ROOM_ALPHABET);
+    $('roomInput').value = room;
+  }
+  if (!CONFIG.ROOM_RE.test(room)) { showToast('请输入正确的 5 位房间码'); return; }
+  safeSet(CONFIG.NICK_KEY, nick);
+  clearTimeout(online.reconnectTimer);
+  if (online.ws) { online.intentionalClose = true; try { online.ws.close(1000, 'replace'); } catch (e) {} }
+  online.active = true;
+  online.room = room;
+  online.cid = getClientId();
+  online.token = safeGet(CONFIG.TOKEN_PREFIX + room) || '';
+  online.color = '';
+  online.players = [];
+  online.host = '';
+  online.phase = 'connecting';
+  online.intent = intent;
+  online.nick = nick;
+  online.intentionalClose = false;
+  setOnlinePanel(true);
+  render();
+
+  let ws;
+  try { ws = new WebSocket(websocketUrl()); } catch (e) { online.phase = 'idle'; showToast('无法创建联机连接'); render(); return; }
+  online.ws = ws;
+  ws.addEventListener('open', function () {
+    if (online.ws !== ws) return;
+    sendOnline({ t: 'join', room: online.room, nick: online.nick, cid: online.cid, token: online.token, intent: online.intent });
+  });
+  ws.addEventListener('message', function (event) {
+    if (online.ws !== ws) return;
+    let message;
+    try { message = JSON.parse(event.data); } catch (e) { return; }
+    if (message.t === 'session') {
+      if (message.cid === online.cid && typeof message.token === 'string') {
+        online.token = message.token;
+        safeSet(CONFIG.TOKEN_PREFIX + online.room, online.token);
+      }
+      return;
+    }
+    if (message.t === 'state') {
+      const clean = Core.sanitizeState(message);
+      if (!clean || message.room !== online.room || !Array.isArray(message.players)) return;
+      pieces = clean.pieces;
+      turn = clean.turn;
+      moveNumber = clean.moveNumber;
+      gameOver = clean.winner;
+      online.phase = ['waiting', 'playing', 'done'].includes(message.phase) ? message.phase : 'waiting';
+      online.host = typeof message.host === 'string' ? message.host : '';
+      online.players = message.players.slice(0, 2).map(function (player) {
+        return {
+          cid: String(player.cid || '').slice(0, 32),
+          nick: String(player.nick || '玩家').slice(0, 16),
+          color: player.color === 'blue' ? 'blue' : 'red',
+          online: !!player.online
+        };
+      });
+      const self = online.players.find(function (player) { return player.cid === online.cid; });
+      if (self) online.color = self.color;
+      viewPlayer = getViewPlayerForMode('online', online.color);
+      selectedKey = '';
+      legalMoves = emptyMoves();
+      history = [];
+      if (gameOver) showWinner(gameOver); else closeWinner();
+      render();
+      return;
+    }
+    if (message.t === 'err') {
+      showToast(String(message.msg || '联机操作失败').slice(0, 80));
+      if (['ROOM_NOT_FOUND', 'ROOM_FULL', 'ROOM_EXISTS', 'SERVER_FULL', 'SESSION_INVALID'].includes(message.code)) leaveOnline(false);
+    }
+  });
+  ws.addEventListener('close', function () {
+    if (online.ws !== ws) return;
+    online.ws = null;
+    if (!online.active || online.intentionalClose) return;
+    online.phase = 'reconnecting';
+    render();
+    clearTimeout(online.reconnectTimer);
+    online.reconnectTimer = setTimeout(function () {
+      if (online.active && mode === 'online') connectOnline('join');
+    }, CONFIG.RECONNECT_DELAY);
+  });
+  ws.addEventListener('error', function () {});
+}
+
+function leaveOnline(notifyServer) {
+  clearTimeout(online.reconnectTimer);
+  online.intentionalClose = true;
+  if (notifyServer !== false) sendOnline({ t: 'leave' });
+  if (online.ws) { try { online.ws.close(1000, 'left room'); } catch (e) {} }
+  online.active = false;
+  online.ws = null;
+  online.room = '';
+  online.color = '';
+  online.players = [];
+  online.host = '';
+  online.phase = 'idle';
+  viewPlayer = 'red';
+  resetState();
+  if ($('onlineForm')) setOnlinePanel(false);
+  if ($('board')) render();
+}
+
+function copyInvite() {
+  if (!online.room) return;
+  const url = new URL(location.href);
+  url.searchParams.set('room', online.room);
+  const text = '来和我下中国跳棋：' + url.toString();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () { showToast('邀请链接已复制'); }, function () { showToast('房间码：' + online.room); });
+  } else showToast('房间码：' + online.room);
+}
+
+function init() {
+  soundEnabled = safeGet(CONFIG.SOUND_KEY) !== '0';
+  aiLevel = ['easy', 'normal', 'hard'].includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal';
+  $('aiLevel').value = aiLevel;
+  $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
+  $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇';
+  $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
+
+  const queryRoom = normalizeRoom(new URLSearchParams(location.search).get('room'));
+  const savedMode = safeGet(CONFIG.MODE_KEY);
+  mode = queryRoom ? 'online' : (['ai', 'local', 'online'].includes(savedMode) ? savedMode : 'ai');
+  viewPlayer = 'red';
+  if (mode !== 'online') loadGame(mode);
+  if (queryRoom) $('roomInput').value = queryRoom;
+  updateModeUi();
+
+  $('board').addEventListener('click', function (event) {
+    const node = event.target.closest('[data-key]');
+    if (node) handleCell(node.dataset.key);
+  });
+  $('board').addEventListener('keydown', function (event) {
+    const node = event.target.closest('[data-key]');
+    if (node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleCell(node.dataset.key); }
+  });
+  document.querySelectorAll('[data-mode]').forEach(function (button) {
+    button.addEventListener('click', function () { switchMode(button.dataset.mode); });
+  });
+  $('roomInput').addEventListener('input', function () { $('roomInput').value = normalizeRoom($('roomInput').value); });
+  $('createRoomBtn').addEventListener('click', function () { connectOnline('create'); });
+  $('joinRoomBtn').addEventListener('click', function () { connectOnline('join'); });
+  $('copyInviteBtn').addEventListener('click', copyInvite);
+  $('leaveRoomBtn').addEventListener('click', function () { leaveOnline(true); });
+  $('aiLevel').addEventListener('change', function () {
+    aiLevel = ['easy', 'normal', 'hard'].includes($('aiLevel').value) ? $('aiLevel').value : 'normal';
+    safeSet(CONFIG.AI_LEVEL_KEY, aiLevel);
+  });
+  $('undoBtn').addEventListener('click', undoMove);
+  $('newGameBtn').addEventListener('click', function () { resetGame(false); });
+  $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
+  $('soundBtn').addEventListener('click', toggleSound);
+  window.addEventListener('beforeunload', function () {
+    if (online.active) sendOnline({ t: 'ping' });
+  });
+
+  render();
+  if (mode === 'ai' && turn === 'blue' && !gameOver) scheduleAiMove();
+  if (gameOver) showWinner(gameOver);
+  if (queryRoom && (location.protocol === 'http:' || location.protocol === 'https:')) connectOnline('join');
+}
+
 window.__checkersTest = {
-  CONFIG,
-  BOARD_CELLS: BOARD_CELLS.map(cell => ({ ...cell })),
-  TOP_CAMP: [...TOP_CAMP], BOTTOM_CAMP: [...BOTTOM_CAMP],
-  buildBoardCells, createInitialPieces, getLegalMoves,
-  countInGoal, hasWon, getBoardRotation, sanitizeSavedGame,
+  CONFIG: CONFIG,
+  Core: Core,
+  getViewPlayerForMode: getViewPlayerForMode,
+  normalizeRoom: normalizeRoom,
+  sanitizeLocalState: sanitizeLocalState,
+  websocketUrl: websocketUrl
 };
 
 window.addEventListener('DOMContentLoaded', init);

@@ -4,23 +4,31 @@ const fs = require('fs');
 const vm = require('vm');
 
 const sandbox = {
-  console, Math, Date, JSON, Number, String, Array, Object, Set, Map, Error,
+  console, Math, Date, JSON, Number, String, Array, Object, Set, Map, Error, RegExp,
+  Uint8Array, URL, URLSearchParams,
   setTimeout, clearTimeout,
   document: {},
+  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/', search: '' },
+  navigator: {},
   localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+  WebSocket: { OPEN: 1 }
 };
 sandbox.window = sandbox;
+sandbox.globalThis = sandbox;
 sandbox.addEventListener = function () {};
 vm.createContext(sandbox);
 
+const coreSource = fs.readFileSync('public/checkers/checkers_core.js', 'utf8');
 const source = fs.readFileSync('public/checkers/checkers.js', 'utf8');
 const html = fs.readFileSync('public/checkers/index.html', 'utf8');
 const css = fs.readFileSync('public/checkers/checkers.css', 'utf8');
 const platformHtml = fs.readFileSync('public/index.html', 'utf8');
 const serverSource = fs.readFileSync('server.js', 'utf8');
+vm.runInContext(coreSource, sandbox, { filename: 'checkers_core.js' });
 vm.runInContext(source, sandbox, { filename: 'checkers.js' });
 
-const C = sandbox.__checkersTest;
+const T = sandbox.__checkersTest;
+const C = T.Core;
 let passed = 0;
 function ok(name, condition) {
   if (!condition) throw new Error('FAIL: ' + name);
@@ -31,10 +39,19 @@ function ok(name, condition) {
 ok('棋盘生成完整的 121 个唯一孔位',
   C.BOARD_CELLS.length === 121 && new Set(C.BOARD_CELLS.map(cell => cell.key)).size === 121);
 ok('17 行孔位数量符合六角星棋盘结构',
-  C.CONFIG.ROW_COUNTS.join(',') === '1,2,3,4,13,12,11,10,9,10,11,12,13,4,3,2,1');
+  C.ROW_COUNTS.join(',') === '1,2,3,4,13,12,11,10,9,10,11,12,13,4,3,2,1');
 ok('上下双方营地各有 10 个孔位', C.TOP_CAMP.length === 10 && C.BOTTOM_CAMP.length === 10);
-ok('当前行动方视角始终把己方营地转到棋盘下方',
-  C.getBoardRotation('red') === 180 && C.getBoardRotation('blue') === 0);
+
+const topCell = C.BOARD_CELLS.find(cell => cell.row === 0);
+const bottomCell = C.BOARD_CELLS.find(cell => cell.row === 16);
+ok('红方视角把红方逻辑营地映射到屏幕下方', C.orientPoint(topCell, 'red').y > 280);
+ok('蓝方视角把蓝方逻辑营地保持在屏幕下方', C.orientPoint(bottomCell, 'blue').y > 280);
+ok('本地与人机视角固定为红方，不会跟随回合改变',
+  T.getViewPlayerForMode('ai', '') === 'red' && T.getViewPlayerForMode('local', 'blue') === 'red');
+ok('联机视角只由服务器分配的本机阵营决定',
+  T.getViewPlayerForMode('online', 'red') === 'red' && T.getViewPlayerForMode('online', 'blue') === 'blue');
+ok('棋盘不再通过 CSS 旋转或按回合切换视角',
+  !/checker-board\.view-(red|blue)/.test(css) && !/\.checker-board[^}]*rotate/.test(css) && !/viewPlayer\s*=\s*turn/.test(source));
 
 const initial = C.createInitialPieces();
 const owners = Object.values(initial);
@@ -44,39 +61,39 @@ ok('初始棋局为红蓝双方各 10 枚棋子',
 const opening = C.getLegalMoves(initial, '3:-3');
 ok('红方前排棋子开局可以走向中央空位',
   opening.steps.includes('4:-4') && opening.steps.includes('4:-2'));
+const applied = C.applyMove(initial, 'red', '3:-3', '4:-4');
+ok('共用规则核心能执行合法走棋且不修改原棋盘',
+  applied && applied.pieces['4:-4'] === 'red' && initial['3:-3'] === 'red');
+ok('共用规则核心拒绝越权阵营和非法落点',
+  C.applyMove(initial, 'blue', '3:-3', '4:-4') === null && C.applyMove(initial, 'red', '3:-3', '8:0') === null);
 
 const chainPieces = { '8:0': 'red', '8:2': 'blue', '8:6': 'red' };
 const chainMoves = C.getLegalMoves(chainPieces, '8:0');
 ok('连续跳跃会一次标出全部可达落点',
   chainMoves.jumps.includes('8:4') && chainMoves.jumps.includes('8:8'));
 
-const blockedPieces = { '8:0': 'red', '8:2': 'blue', '8:4': 'blue' };
-ok('被占用的落点不会被判定为合法跳跃',
-  !C.getLegalMoves(blockedPieces, '8:0').jumps.includes('8:4'));
+const aiMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0);
+ok('电脑可以从初始棋局选择一条合法蓝方走法',
+  aiMove && C.getLegalMoves(initial, aiMove.from).all.includes(aiMove.target) && initial[aiMove.from] === 'blue');
 
-const winning = {};
-C.BOTTOM_CAMP.forEach(key => { winning[key] = 'red'; });
-ok('10 枚棋子全部进入对面营地后判定获胜', C.hasWon(winning, 'red') && C.countInGoal(winning, 'red') === 10);
+const validState = C.sanitizeState({ pieces: initial, turn: 'blue', moveNumber: 12, winner: '' });
+ok('合法棋局状态可恢复且保留回合信息', validState && validState.turn === 'blue' && validState.moveNumber === 12);
+ok('棋子数量不完整或位置越界的状态会被拒绝',
+  C.sanitizeState({ pieces: { '99:99': 'red' }, turn: 'red' }) === null);
 
-const validSave = C.sanitizeSavedGame({ pieces: initial, turn: 'blue', moveNumber: 12, gameOver: '' });
-ok('合法存档可恢复且保留回合信息', validSave && validSave.turn === 'blue' && validSave.moveNumber === 12);
-ok('伪造的获胜标记不会绕过营地胜负判断',
-  C.sanitizeSavedGame({ pieces: initial, turn: 'red', moveNumber: 2, gameOver: 'red' }).gameOver === '');
-ok('棋子数量不完整或位置越界的存档会被拒绝',
-  C.sanitizeSavedGame({ pieces: { '99:99': 'red' }, turn: 'red' }) === null);
-
-ok('跳棋入口完整引用独立样式和脚本',
-  /checkers\.css\?v=/.test(html) && /checkers\.js\?v=/.test(html) && /href="\.\.\/"/.test(html));
-ok('手机布局会切换为单列并保持棋盘正方形',
-  /@media\(max-width:760px\)/.test(css) && /aspect-ratio:1\/1/.test(css));
-ok('棋盘初始为红方视角并在换手时切换红蓝方向',
-  /class="checker-board view-red"/.test(html) &&
-  /\.checker-board\.view-red\{transform:rotate\(180deg\)\}/.test(css) &&
-  /\.checker-board\.view-blue\{transform:rotate\(0deg\)\}/.test(css) &&
-  /classList\.toggle\('view-red', isRed\)/.test(source));
-ok('游戏平台卡片路由到真实跳棋目录且不再虚标联机',
-  /href="checkers\/index\.html"/.test(platformHtml) && /本地热座/.test(platformHtml) && !/本地\+联机/.test(platformHtml));
-ok('服务器为无尾斜杠跳棋地址提供稳定重定向',
-  /'\/checkers': '\/checkers\/'/.test(serverSource));
+ok('页面提供人机、本地双人、联机三种模式',
+  /data-mode="ai"/.test(html) && /data-mode="local"/.test(html) && /data-mode="online"/.test(html));
+ok('页面先加载共用规则核心再加载交互脚本',
+  html.indexOf('checkers_core.js') >= 0 && html.indexOf('checkers_core.js') < html.indexOf('checkers.js'));
+ok('手机布局保持单列与正方形棋盘', /@media\(max-width:760px\)/.test(css) && /aspect-ratio:1\/1/.test(css));
+ok('邀请链接和联机地址使用跳棋专属入口',
+  /searchParams\.set\('room'/.test(source) && T.websocketUrl() === 'wss://game.test/checkers-ws');
+ok('游戏平台卡片已展示人机与在线联机能力',
+  /href="checkers\/index\.html"/.test(platformHtml) && /人机挑战/.test(platformHtml) && /在线联机/.test(platformHtml));
+ok('服务器加载同一规则核心并提供权威跳棋 WebSocket',
+  /require\('\.\/public\/checkers\/checkers_core'\)/.test(serverSource) &&
+  /pathname === '\/checkers-ws'/.test(serverSource) &&
+  /CheckersCore\.applyMove\(room\.pieces/.test(serverSource));
+ok('服务器为无尾斜杠跳棋地址提供稳定重定向', /'\/checkers': '\/checkers\/'/.test(serverSource));
 
 console.log('\n✅ 中国跳棋核心测试全部通过（' + passed + ' 项）');

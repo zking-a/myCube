@@ -1,12 +1,13 @@
 'use strict';
 /*
- * server.js —— 24点大挑战·联机对战 WebSocket 中转服务器
+ * server.js —— 轻量游戏站联机与静态资源服务器
  *
- * 作用：静态托管小游戏，并为 24 点联机提供房间、私密重连令牌、运算证明校验和权威计时。
+ * 作用：静态托管小游戏，并为 24 点与中国跳棋提供独立的服务端权威联机房间。
  *   - 房间码就是随机种子，双方题目天然一致；服务端按同一规则复现题目并验证表达式。
+ *   - 跳棋由服务端保存棋盘、校验回合和合法走法，双方客户端只负责固定阵营视角的展示。
  *   - 房间仍只保存在内存，不需要数据库，适合轻量双人对局。
  *
- * 协议（JSON，UTF-8）
+ * 24 点协议（JSON，UTF-8；跳棋协议见文件下方 /checkers-ws 处理器）
  *   客户端 → 服务端：
  *     {t:'join', room, nick, cid, token, intent:'create'|'join'}
  *     {t:'ready', v:true|false}
@@ -30,6 +31,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 const WebSocket = require('ws');
 const Questions = require('./server_questions');
+const CheckersCore = require('./public/checkers/checkers_core');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
@@ -103,6 +105,8 @@ const SECURITY_HEADERS = {
 
 /** roomCode -> room */
 const rooms = new Map();
+/** roomCode -> 中国跳棋房间（与 24 点共用全服房间和席位上限） */
+const checkersRooms = new Map();
 
 function createRoom(code) {
   const room = {
@@ -121,6 +125,79 @@ function createRoom(code) {
   };
   rooms.set(code, room);
   return room;
+}
+
+function createCheckersRoom(code) {
+  const room = {
+    code: code,
+    phase: 'waiting',       // waiting | playing | done
+    pieces: CheckersCore.createInitialPieces(),
+    turn: 'red',
+    moveNumber: 1,
+    winner: '',
+    hostCid: null,
+    players: new Map(),
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    _gc: null
+  };
+  checkersRooms.set(code, room);
+  return room;
+}
+
+function resetCheckersRoom(room) {
+  room.pieces = CheckersCore.createInitialPieces();
+  room.turn = 'red';
+  room.moveNumber = 1;
+  room.winner = '';
+  room.phase = Array.from(room.players.values()).filter(function (p) { return p.online; }).length === 2 ? 'playing' : 'waiting';
+  room.lastActivityAt = Date.now();
+}
+
+function checkersPlayerList(room) {
+  return Array.from(room.players.values()).map(function (p) {
+    return { cid: p.cid, nick: p.nick, color: p.color, online: p.online };
+  });
+}
+
+function broadcastCheckersState(room) {
+  const state = JSON.stringify({
+    t: 'state',
+    room: room.code,
+    phase: room.phase,
+    pieces: room.pieces,
+    turn: room.turn,
+    moveNumber: room.moveNumber,
+    winner: room.winner,
+    host: room.hostCid,
+    players: checkersPlayerList(room)
+  });
+  room.players.forEach(function (p) { send(p.ws, state); });
+}
+
+function pickCheckersHost(room) {
+  const next = Array.from(room.players.values()).find(function (p) { return p.online; }) || room.players.values().next().value;
+  room.hostCid = next ? next.cid : null;
+}
+
+function scheduleCheckersGC(room) {
+  if (room._gc) clearTimeout(room._gc);
+  room._gc = setTimeout(function () {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (!anyOnline && checkersRooms.get(room.code) === room) checkersRooms.delete(room.code);
+  }, ROOM_TTL);
+}
+
+function expireCheckersRoom(room, reason) {
+  if (!room || checkersRooms.get(room.code) !== room) return;
+  checkersRooms.delete(room.code);
+  if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+  room.players.forEach(function (p) {
+    send(p.ws, { t: 'err', code: 'ROOM_EXPIRED', msg: reason });
+    if (p.ws) { try { p.ws.close(1000, 'room expired'); } catch (e) {} }
+    p.online = false;
+    p.ws = null;
+  });
 }
 
 function resetProgress(room) {
@@ -143,12 +220,16 @@ function resetProgress(room) {
 function countSeats() {
   let total = 0;
   rooms.forEach(function (room) { total += room.players.size; });
+  checkersRooms.forEach(function (room) { total += room.players.size; });
   return total;
 }
 
 function countSeatsForIp(ip) {
   let total = 0;
   rooms.forEach(function (room) {
+    room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
+  });
+  checkersRooms.forEach(function (room) {
     room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
   });
   return total;
@@ -316,6 +397,18 @@ setInterval(function () {
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
     }
   });
+  checkersRooms.forEach(function (room, code) {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    const idleLimit = room.phase === 'waiting' ? LOBBY_IDLE_MS : ONLINE_ROOM_IDLE_MS;
+    if (anyOnline && now - (room.lastActivityAt || room.createdAt) > idleLimit) {
+      expireCheckersRoom(room, '跳棋房间长时间没有操作，已自动释放');
+      return;
+    }
+    if (!anyOnline && now - (room.lastActivityAt || room.createdAt || now) > ROOM_TTL) {
+      checkersRooms.delete(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+    }
+  });
   roomCreateLog.forEach(function (timestamps, ip) {
     const recent = timestamps.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
     if (recent.length) roomCreateLog.set(ip, recent);
@@ -425,7 +518,16 @@ const server = http.createServer(function (req, res) {
   }
   if (urlPath === '/health' || urlPath === '/healthz') {
     writeHead(res, 200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ ok: true, service: 'light-games', rooms: rooms.size, seats: countSeats(), sockets: liveConnections, ts: Date.now() }));
+    res.end(JSON.stringify({
+      ok: true,
+      service: 'light-games',
+      rooms: rooms.size + checkersRooms.size,
+      rooms24: rooms.size,
+      roomsCheckers: checkersRooms.size,
+      seats: countSeats(),
+      sockets: liveConnections,
+      ts: Date.now()
+    }));
     return;
   }
   // 游戏目录使用稳定的尾斜杠 URL；旧数独入口继续可用。
@@ -449,7 +551,17 @@ server.keepAliveTimeout = 5000;
 server.maxHeadersCount = 50;
 
 // ===================== WebSocket =====================
-const wss = new WebSocket.Server({ server, path: '/ws', maxPayload: MAX_WS_PAYLOAD });
+const wss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+const checkersWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+
+// 显式分发升级请求，避免多个 WebSocket.Server 各自监听 server 时互相抢占路径。
+server.on('upgrade', function (req, socket, head) {
+  let pathname = '';
+  try { pathname = new URL(req.url || '/', 'http://localhost').pathname; } catch (e) {}
+  const target = pathname === '/ws' ? wss : (pathname === '/checkers-ws' ? checkersWss : null);
+  if (!target) { socket.destroy(); return; }
+  target.handleUpgrade(req, socket, head, function (ws) { target.emit('connection', ws, req); });
+});
 
 let liveConnections = 0;
 
@@ -546,7 +658,7 @@ wss.on('connection', function (ws, req) {
           return;
         }
         // ---- 全服房间数上限 ----
-        if (rooms.size >= MAX_ROOMS) {
+        if (rooms.size + checkersRooms.size >= MAX_ROOMS) {
           fail('SERVER_FULL', '服务器房间已满，请稍后再试');
           return;
         }
@@ -770,17 +882,203 @@ wss.on('connection', function (ws, req) {
   ws.on('error', function () { /* close 会紧随处理 */ });
 });
 
+// ===================== 中国跳棋 WebSocket =====================
+// 服务端持有唯一棋局状态；客户端只能提交起点和终点，不能自行声明回合或胜负。
+checkersWss.on('connection', function (ws, req) {
+  const clientIp = getClientIp(req);
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    const host = req.headers.host;
+    const ok = origin === ALLOWED_ORIGIN ||
+      (host && (origin === 'https://' + host || origin === 'http://' + host)) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (!ok) { ws.close(1008, 'origin not allowed'); return; }
+  }
+  if (!checkConnectionAttemptLimit(clientIp)) { ws.close(1013, 'too many connection attempts'); return; }
+  const ipConnections = liveConnectionsByIp.get(clientIp) || 0;
+  if (ipConnections >= MAX_SOCKET_CONNECTIONS_PER_IP) { ws.close(1013, 'too many connections from this ip'); return; }
+  if (liveConnections >= MAX_SOCKET_CONNECTIONS) { ws.close(1013, 'too many connections'); return; }
+
+  liveConnections++;
+  liveConnectionsByIp.set(clientIp, ipConnections + 1);
+  ws.isAlive = true;
+  ws.on('pong', function () { ws.isAlive = true; });
+
+  let tokens = RATE_BURST;
+  let lastRefill = Date.now();
+  let player = null;
+
+  function fail(code, msg) { send(ws, { t: 'err', code: code, msg: msg }); }
+  const joinTimer = setTimeout(function () {
+    if (!player) { try { ws.close(1000, 'join timeout'); } catch (e) {} }
+  }, JOIN_IDLE_MS);
+
+  ws.on('message', function (data) {
+    const now = Date.now();
+    tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
+    lastRefill = now;
+    if (tokens < 1) { ws.close(1008, 'rate limit'); return; }
+    tokens -= 1;
+
+    let m;
+    try { m = JSON.parse(data.toString()); } catch (e) { return; }
+    if (!m || typeof m.t !== 'string') return;
+
+    if (m.t === 'join') {
+      if (player) return;
+      const code = String(m.room || '').toUpperCase();
+      if (!ROOM_CODE_RE.test(code)) { fail('ROOM_INVALID', '房间码格式不正确'); return; }
+      const cid = typeof m.cid === 'string' ? m.cid.slice(0, 32) : '';
+      if (!cid || cid.length < 4) { fail('SESSION_INVALID', '玩家身份格式不正确'); return; }
+      const nick = typeof m.nick === 'string' && m.nick.trim()
+        ? m.nick.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16) : '玩家';
+      const reconnectToken = typeof m.token === 'string' ? m.token.slice(0, 128) : '';
+      const intent = m.intent === 'create' ? 'create' : 'join';
+
+      let room = checkersRooms.get(code);
+      if (!room) {
+        if (intent !== 'create') { fail('ROOM_NOT_FOUND', '房间不存在或已失效，请向房主确认房间码'); return; }
+        if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
+        }
+        if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
+        if (rooms.size + checkersRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        room = createCheckersRoom(code);
+      } else if (intent === 'create') {
+        const ownSeat = room.players.get(cid);
+        if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，请重新创建'); return; }
+        if (!tokenMatches(ownSeat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '重连身份已失效，请退出房间后重新加入'); return;
+        }
+      }
+
+      let p = room.players.get(cid);
+      let replacedSocket = null;
+      if (p) {
+        if (!tokenMatches(p.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '无法验证该玩家身份，请退出房间后重新加入'); return;
+        }
+        replacedSocket = p.ws && p.ws !== ws ? p.ws : null;
+        p.ws = ws;
+        p.nick = nick;
+        p.online = true;
+        p.clientIp = clientIp;
+        p.disconnectedAt = null;
+        p._room = room;
+      } else {
+        if (room.phase !== 'waiting') { fail('ROUND_IN_PROGRESS', '棋局已经开始，暂时不能加入'); return; }
+        if (countSeats() >= MAX_CONNECTIONS) { fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return; }
+        if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) { fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限'); return; }
+        if (room.players.size >= 2) { fail('ROOM_FULL', '该跳棋房间已有两位玩家'); return; }
+        const redTaken = Array.from(room.players.values()).some(function (seat) { return seat.color === 'red'; });
+        p = {
+          cid: cid,
+          nick: nick,
+          color: redTaken ? 'blue' : 'red',
+          ws: ws,
+          online: true,
+          clientIp: clientIp,
+          disconnectedAt: null,
+          reconnectToken: createReconnectToken(),
+          _room: room
+        };
+        room.players.set(cid, p);
+        if (!room.hostCid) room.hostCid = cid;
+      }
+
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+      player = p;
+      send(ws, { t: 'session', cid: p.cid, token: p.reconnectToken });
+      if (replacedSocket) { try { replacedSocket.terminate(); } catch (e) {} }
+      if (room.phase === 'waiting' && room.players.size === 2 &&
+          Array.from(room.players.values()).every(function (seat) { return seat.online; })) room.phase = 'playing';
+      room.lastActivityAt = Date.now();
+      clearTimeout(joinTimer);
+      broadcastCheckersState(room);
+      return;
+    }
+
+    if (!player) return;
+    if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
+    const room = player._room;
+    if (!room || checkersRooms.get(room.code) !== room) return;
+    if (m.t !== 'ping') room.lastActivityAt = Date.now();
+
+    if (m.t === 'move') {
+      if (room.phase !== 'playing' || room.winner) return;
+      if (room.players.size !== 2 || !Array.from(room.players.values()).every(function (seat) { return seat.online; })) {
+        fail('OPPONENT_OFFLINE', '对手已离线，正在等待其重连'); return;
+      }
+      if (player.color !== room.turn) { fail('NOT_YOUR_TURN', '还没有轮到你走'); return; }
+      if (Number(m.seq) !== room.moveNumber) { fail('STATE_OUTDATED', '棋局状态已更新，请按最新棋盘走棋'); broadcastCheckersState(room); return; }
+      const from = typeof m.from === 'string' ? m.from.slice(0, 12) : '';
+      const target = typeof m.target === 'string' ? m.target.slice(0, 12) : '';
+      const applied = CheckersCore.applyMove(room.pieces, player.color, from, target);
+      if (!applied) { fail('ILLEGAL_MOVE', '这一步不符合跳棋规则'); return; }
+      room.pieces = applied.pieces;
+      room.moveNumber++;
+      if (applied.winner) {
+        room.winner = applied.winner;
+        room.phase = 'done';
+      } else room.turn = player.color === 'red' ? 'blue' : 'red';
+      broadcastCheckersState(room);
+    } else if (m.t === 'again') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以发起下一局'); return; }
+      if (room.phase !== 'done') return;
+      resetCheckersRoom(room);
+      broadcastCheckersState(room);
+    } else if (m.t === 'ping') {
+      send(ws, { t: 'pong', s: Date.now() });
+    } else if (m.t === 'leave') {
+      room.players.delete(player.cid);
+      if (room.hostCid === player.cid) pickCheckersHost(room);
+      player = null;
+      if (!room.players.size) {
+        checkersRooms.delete(room.code);
+        if (room._gc) clearTimeout(room._gc);
+      } else {
+        resetCheckersRoom(room);
+        broadcastCheckersState(room);
+      }
+      try { ws.close(1000, 'left room'); } catch (e) {}
+    }
+  });
+
+  ws.on('close', function () {
+    clearTimeout(joinTimer);
+    liveConnections = Math.max(0, liveConnections - 1);
+    const remainingForIp = Math.max(0, (liveConnectionsByIp.get(clientIp) || 1) - 1);
+    if (remainingForIp) liveConnectionsByIp.set(clientIp, remainingForIp);
+    else liveConnectionsByIp.delete(clientIp);
+    if (!player) return;
+    if (player.ws !== ws) { player = null; return; }
+    player.online = false;
+    player.ws = null;
+    player.disconnectedAt = Date.now();
+    const room = player._room;
+    if (room && checkersRooms.get(room.code) === room) {
+      room.lastActivityAt = Date.now();
+      broadcastCheckersState(room);
+      scheduleCheckersGC(room);
+    }
+  });
+  ws.on('error', function () {});
+});
+
 // WebSocket 心跳：及时清理移动网络留下的“半开连接”，让重连和房主转移更可靠。
 const heartbeatTimer = setInterval(function () {
-  wss.clients.forEach(function (ws) {
-    if (ws.isAlive === false) { try { ws.terminate(); } catch (e) {} return; }
-    ws.isAlive = false;
-    try { ws.ping(); } catch (e) {}
+  [wss, checkersWss].forEach(function (socketServer) {
+    socketServer.clients.forEach(function (ws) {
+      if (ws.isAlive === false) { try { ws.terminate(); } catch (e) {} return; }
+      ws.isAlive = false;
+      try { ws.ping(); } catch (e) {}
+    });
   });
 }, 30000);
 heartbeatTimer.unref();
-wss.on('close', function () { clearInterval(heartbeatTimer); });
+wss.on('close', function () { if (!checkersWss.clients.size) clearInterval(heartbeatTimer); });
+checkersWss.on('close', function () { if (!wss.clients.size) clearInterval(heartbeatTimer); });
 
 server.listen(PORT, function () {
-  console.log('[24vs] relay listening on :' + PORT + '  (wss 与 http 同端口)');
+  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws)');
 });
