@@ -1487,7 +1487,7 @@ function checkResume() {
   const difficulty = getSavedDifficulty(save);
   const percent = totalBlanks > 0 ? Math.floor(done / totalBlanks * 100) : 0;
   if (card) {
-    $("homeResumeTitle").textContent = "继续未完成的一局";
+    $("homeResumeTitle").textContent = "继续上局";
     $("homeResumeMeta").textContent =
       ["简单","中等","困难","专家","极限"][difficulty] + " · " +
       formatDuration(save.seconds) + " · 完成 " + percent + "%";

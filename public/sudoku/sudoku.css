@@ -116,13 +116,13 @@ body{
 .home-hero h1{ margin:4px 0 7px; color:var(--text-primary); font-size:clamp(28px,6vw,38px); letter-spacing:-.7px; }
 .home-hero p{ margin:0; color:var(--text-secondary); font-size:14px; }
 .resume-card,.new-game-card{ border:1px solid rgba(218,226,241,.92); background:rgba(255,255,255,.92); box-shadow:0 14px 34px rgba(45,61,112,.09); }
-.resume-card{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; padding:18px; border-radius:20px; }
-.resume-copy{ display:flex; min-width:0; flex-direction:column; gap:3px; }
-.resume-kicker{ color:#0f9db1; font-size:10px; font-weight:900; letter-spacing:.6px; }
-.resume-copy strong{ color:var(--text-primary); font-size:17px; }
-.resume-copy>span:last-child{ color:var(--text-secondary); font-size:12px; }
-.resume-card button{ flex:0 0 auto; padding:11px 15px; border:0; border-radius:12px; color:#fff; background:linear-gradient(135deg,#22b8cf,#087f8c); font-weight:900; cursor:pointer; box-shadow:0 8px 18px rgba(8,145,178,.2); }
-.resume-card button b{ margin-left:8px; }
+.resume-card{ display:flex; min-height:72px; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; padding:13px 14px; border-radius:17px; }
+.resume-copy{ display:flex; min-width:0; flex:1; flex-direction:column; gap:2px; }
+.resume-kicker{ color:#0f9db1; font-size:9px; font-weight:900; letter-spacing:.5px; }
+.resume-copy strong{ overflow:hidden; color:var(--text-primary); font-size:15px; line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
+.resume-copy>span:last-child{ overflow:hidden; color:var(--text-secondary); font-size:11px; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
+.resume-card button{ display:inline-flex; min-height:40px; flex:0 0 auto; padding:9px 12px; align-items:center; justify-content:center; border:0; border-radius:12px; color:#fff; background:linear-gradient(135deg,#22b8cf,#087f8c); font-size:12px; font-weight:900; cursor:pointer; box-shadow:0 6px 14px rgba(8,145,178,.18); }
+.resume-card button b{ margin-left:6px; font-size:15px; }
 .new-game-card{ padding:20px; border-radius:23px; }
 .section-heading{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:15px; }
 .section-heading span{ color:#0891b2; font-size:10px; font-weight:900; }
@@ -550,8 +550,8 @@ body.dark .advanced-tools{ background:rgba(15,23,42,.28); }
   .home-logo{ width:72px; height:72px; border-radius:23px; }
   .difficulty-cards{ grid-template-columns:repeat(3,1fr); }
   .difficulty-card{ min-height:86px; }
-  .resume-card{ align-items:stretch; flex-direction:column; }
-  .resume-card button{ width:100%; }
+  .resume-card{ min-height:68px; padding:11px 12px; }
+  .resume-card button{ min-height:38px; padding:8px 10px; }
   .feature-strip{ grid-template-columns:repeat(2,1fr); }
 }
 @media (min-width: 761px) and (max-width: 900px){

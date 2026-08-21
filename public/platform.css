@@ -58,7 +58,7 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 .game-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .game-card {
   position: relative;
-  min-height: 245px;
+  min-height: 220px;
   padding: 20px;
   overflow: hidden;
   border: 1px solid rgba(225,231,245,.95);
@@ -69,6 +69,7 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
   background: rgba(255,255,255,.94);
   box-shadow: 0 14px 34px rgba(45,61,112,.1);
   transition: transform .18s ease, box-shadow .18s ease;
+  cursor: pointer;
 }
 .game-card:hover { transform: translateY(-3px); box-shadow: 0 19px 39px rgba(45,61,112,.15); }
 .game-card:focus-visible { outline: 3px solid rgba(86,104,245,.3); outline-offset: 4px; }
@@ -82,15 +83,13 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 .game-card p { min-height: 42px; margin: 0 0 15px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .game-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .game-tags span { padding: 4px 8px; border-radius: 999px; color: #60708a; font-size: 10px; font-weight: 800; background: #f1f3fa; }
-.game-enter { position: absolute; left: 20px; right: 20px; bottom: 18px; display: flex; justify-content: space-between; color: var(--blue-deep); font-size: 12px; font-weight: 900; }
-.sudoku .game-enter { color: #087f8c; }
 .platform-note { margin: 14px 0 0; padding: 12px 14px; border: 1px solid rgba(225,231,245,.9); border-radius: 15px; color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center; background: rgba(255,255,255,.72); }
 
 @media (max-width: 560px) {
   .platform-shell { max-width: 440px; padding-top: 18px; }
   .platform-mark { width: 72px; height: 72px; border-radius: 22px; }
   .game-grid { grid-template-columns: 1fr; }
-  .game-card { min-height: 210px; }
+  .game-card { min-height: 0; padding: 18px; }
   .game-card p { min-height: 0; }
 }
 

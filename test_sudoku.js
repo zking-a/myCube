@@ -16,6 +16,9 @@ sandbox.addEventListener = function () {};
 vm.createContext(sandbox);
 const sudokuSource = fs.readFileSync('public/sudoku/sudoku.js', 'utf8');
 const sudokuCss = fs.readFileSync('public/sudoku/sudoku.css', 'utf8');
+const sudokuHtml = fs.readFileSync('public/sudoku/index.html', 'utf8');
+const platformHtml = fs.readFileSync('public/index.html', 'utf8');
+const platformCss = fs.readFileSync('public/platform.css', 'utf8');
 vm.runInContext(sudokuSource, sandbox, { filename: 'sudoku.js' });
 
 const S = sandbox.__sudokuTest;
@@ -73,6 +76,12 @@ ok('最下行和最右列不再绘制重复边框',
 ok('宫格粗线使用整数像素避免缩放亮缝',
   /\.cell\.c2,\s*\.cell\.c5\s*\{\s*border-right:\s*2px/.test(sudokuCss) &&
   /\.cell\.r2,\s*\.cell\.r5\s*\{\s*border-bottom:\s*2px/.test(sudokuCss));
+ok('手机游戏大厅不再使用会覆盖标签的绝对定位入口文案',
+  !/game-enter/.test(platformHtml) && !/\.game-enter/.test(platformCss));
+ok('数独续玩卡保持紧凑横向结构',
+  /继续上局/.test(sudokuHtml) &&
+  /\.resume-card\{[^}]*min-height:72px[^}]*align-items:center/.test(sudokuCss) &&
+  !/\.resume-card\{[^}]*flex-direction:column/.test(sudokuCss));
 const historyBoard = [7];
 const historyNotes = { 0: [1, 2] };
 S.restoreHistoryEntry(historyBoard, historyNotes, { index: 0, prevValue: 0, prevNotes: null });
