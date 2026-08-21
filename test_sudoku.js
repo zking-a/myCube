@@ -63,6 +63,55 @@ ok('难度越高给定数字不增加', clueCounts.every((v, i) => i === 0 || v 
 
 ok('难度参数越界时安全回落到简单', S.normalizeDifficulty(-1) === 0 && S.normalizeDifficulty(99) === 0);
 ok('计时格式覆盖分钟和小时', S.formatDuration(65) === '01:05' && S.formatDuration(3661) === '01:01:01');
+ok('候选辅助关闭时不显示自动候选，人工笔记仍可见',
+  S.getCandidateDisplayMode(0, [], false) === 'none' &&
+  S.getCandidateDisplayMode(0, [], true) === 'auto' &&
+  S.getCandidateDisplayMode(0, [3], false) === 'manual' &&
+  S.getCandidateDisplayMode(7, [3], true) === 'none');
+ok('点击已填数字始终关联相同数字，候选关联只在辅助开启时生效',
+  S.getNumberRelation(3, [], 3, false) === 'same' &&
+  S.getNumberRelation(0, [1, 3, 7], 3, false) === 'none' &&
+  S.getNumberRelation(0, [1, 3, 7], 3, true) === 'candidate' &&
+  S.getNumberRelation(0, [1, 7], 3, true) === 'none');
+ok('相同数字使用强高亮，关联候选只圈亮对应小数字',
+  /\.cell\.same-num:not\(\.error\)>span/.test(sudokuCss) &&
+  /\.cell\.candidate-match\{/.test(sudokuCss) &&
+  /\.candidates span\.candidate-match-num\{/.test(sudokuCss) &&
+  /s\.classList\.add\("candidate-match-num"\)/.test(sudokuSource));
+const noteToggleSource = sudokuSource.slice(
+  sudokuSource.indexOf('function toggleNoteMode()'),
+  sudokuSource.indexOf('function toggleShowAllCands()'));
+const candidateToggleSource = sudokuSource.slice(
+  sudokuSource.indexOf('function toggleShowAllCands()'),
+  sudokuSource.indexOf('function toggleCandidate('));
+ok('候选辅助关闭时不再高亮数字键且切换不会清空选中格',
+  /if \(!showAllCands \|\| selected < 0\) return;/.test(sudokuSource) &&
+  !/selected = -1/.test(candidateToggleSource) &&
+  !/selected = -1/.test(noteToggleSource));
+ok('开启候选辅助后写笔记不会复制整格自动候选',
+  !/如果 showAllCands 开启，先确保目标格有笔记数据/.test(sudokuSource));
+const sanitizedNotes = S.sanitizeNotes({
+  0: [9, 2, 2, 0, 10, '3'],
+  1: [4],
+  2: '5',
+  81: [1],
+  bad: [7],
+}, [0, 8, 0], [0, 8, 0]);
+ok('恢复存档时过滤越界、重复、非数字及已填格笔记',
+  JSON.stringify(sanitizedNotes) === JSON.stringify({ 0: [2, 9] }));
+const sanitizedStats = S.sanitizeStats({
+  0: { count: 2.8, best: 65.9, total: 200.7 },
+  1: { count: '<img>', best: 20, total: 20 },
+  2: { count: 1, best: -1, total: 8 },
+  bad: { count: 99, best: 1, total: 1 },
+});
+ok('战绩存档只接受有效难度和有限非负数值',
+  JSON.stringify(sanitizedStats) === JSON.stringify({ 0: { count: 2, best: 65, total: 200 } }));
+ok('战绩面板采用可访问对话框并隐藏非激活内容',
+  /id="statsOverlay" role="dialog" aria-modal="true" aria-hidden="true"/.test(sudokuHtml) &&
+  /\.modal-overlay\{[^}]*visibility:\s*hidden/.test(sudokuCss) &&
+  /#statsOverlay\{[^}]*justify-content:\s*flex-end/.test(sudokuCss) &&
+  /#statsOverlay\{\s*align-items:flex-end/.test(sudokuCss));
 ok('棋盘坐标按内框尺寸映射，不受外边框干扰',
   S.gridIndexAtPoint(0, 0, 441, 441) === 0 &&
   S.gridIndexAtPoint(440.9, 440.9, 441, 441) === 80 &&
@@ -94,6 +143,16 @@ S.restoreHistoryEntry(bulkBoard, bulkNotes, { bulk: [
   { index: 1, prevValue: 3, prevNotes: null },
 ] });
 ok('整盘清空可一次撤销并恢复全部填写与笔记', bulkBoard[0] === 7 && bulkBoard[1] === 3 && bulkNotes[0].join('') === '12');
+
+const snapshotBoard = [5, 6];
+const snapshotNotes = { 0: [9] };
+S.restoreHistoryEntry(snapshotBoard, snapshotNotes, {
+  bulk: [{ index: 0, prevValue: 0 }, { index: 1, prevValue: 0 }],
+  notesSnapshot: { 0: [1, 3], 1: [2, 4] },
+});
+ok('批量填数撤销会还原所有被自动擦除的候选笔记',
+  snapshotBoard.join('') === '00' && snapshotNotes[0].join('') === '13' && snapshotNotes[1].join('') === '24');
+ok('赞美语句库不再混入候选功能调试说明', !/这个是我要的逻辑/.test(sudokuSource));
 
 S.CONFIG.AUTO_SAVE_INTERVAL = 20;
 S.autoSave(); S.autoSave(); S.autoSave();

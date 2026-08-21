@@ -93,6 +93,46 @@ function getDragRectBox(start, current, width, height) {
   return { left: c1 * cw, top: r1 * ch, width: (c2 - c1 + 1) * cw, height: (r2 - r1 + 1) * ch };
 }
 
+function getCandidateDisplayMode(value, manualNotes, showCandidates) {
+  if (value) return "none";
+  if (Array.isArray(manualNotes) && manualNotes.length > 0) return "manual";
+  return showCandidates ? "auto" : "none";
+}
+
+function getNumberRelation(value, visibleCandidates, selectedNumber, showCandidates) {
+  if (!Number.isInteger(selectedNumber) || selectedNumber < 1 || selectedNumber > 9) return "none";
+  if (value === selectedNumber) return "same";
+  if (!value && showCandidates && Array.isArray(visibleCandidates) && visibleCandidates.includes(selectedNumber)) {
+    return "candidate";
+  }
+  return "none";
+}
+
+function sanitizeNotes(rawNotes, savedGivens, savedBoard) {
+  const clean = {};
+  if (!rawNotes || typeof rawNotes !== "object" || Array.isArray(rawNotes)) return clean;
+  Object.keys(rawNotes).forEach(key => {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index < 0 || index >= CONFIG.TOTAL_CELLS) return;
+    if ((savedGivens && savedGivens[index]) || (savedBoard && savedBoard[index])) return;
+    if (!Array.isArray(rawNotes[key])) return;
+    const values = [...new Set(rawNotes[key].filter(v => Number.isInteger(v) && v >= 1 && v <= 9))].sort((a, b) => a - b);
+    if (values.length) clean[index] = values;
+  });
+  return clean;
+}
+
+function cloneNotes(source) {
+  const copy = {};
+  Object.keys(source || {}).forEach(key => { copy[key] = [...source[key]]; });
+  return copy;
+}
+
+function replaceNotes(target, source) {
+  Object.keys(target).forEach(key => { delete target[key]; });
+  Object.keys(source || {}).forEach(key => { target[key] = [...source[key]]; });
+}
+
 /* ========== SECTION 5: 游戏状态管理 ========== */
 /*
   本区函数清单：
@@ -125,6 +165,7 @@ let usedPraiseIndices = [];
 let lastPraiseText = "";      // 保存最近一次随机到的赞美诗，供分享复用
 let currentDifficulty = 0;
 let homeDifficulty = 0;
+let modalReturnFocus = null;
 
 function resetGameState() {
   solution       = [];
@@ -135,6 +176,7 @@ function resetGameState() {
   selectedCells = [];
   noteMode      = false;
   showAllCands = false;
+  autoFillMode = false;
   finished      = false;
   history       = [];
   seconds       = 0;
@@ -147,6 +189,28 @@ function resetGameState() {
 /* 统一历史压栈 */
 function pushHistory(entry) {
   history.push(entry);
+}
+
+function openModal(overlayId, initialFocusId) {
+  const overlay = $(overlayId);
+  if (!overlay) return;
+  modalReturnFocus = document.activeElement;
+  overlay.classList.add("active");
+  overlay.setAttribute("aria-hidden", "false");
+  const focusTarget = initialFocusId ? $(initialFocusId) : overlay.querySelector(".modal-box");
+  setTimeout(() => {
+    if (focusTarget && typeof focusTarget.focus === "function") focusTarget.focus();
+  }, 0);
+}
+
+function closeModal(overlayId) {
+  const overlay = $(overlayId);
+  if (!overlay) return;
+  overlay.classList.remove("active");
+  overlay.setAttribute("aria-hidden", "true");
+  const returnTarget = modalReturnFocus;
+  modalReturnFocus = null;
+  if (returnTarget && typeof returnTarget.focus === "function") returnTarget.focus();
 }
 
 /* ========== SECTION 6: 核心算法 ========== */
@@ -249,24 +313,37 @@ function countSolutions(givensBoard, limit) {
   return count;
 }
 
-/* 根据难度生成题目（挖洞）*/
-function generateGivens(solution, difficulty) {
-  const keep = CONFIG.DIFFICULTY_KEEP[difficulty] || CONFIG.DIFFICULTY_KEEP[0];
-  const targetRemove = CONFIG.TOTAL_CELLS - keep;
-  const positions = shuffle([...Array(CONFIG.TOTAL_CELLS).keys()]);
-  let givens = solution.slice();
-  let removed = 0;
+function carveUniquePuzzle(source, keep) {
+  const givens = source.slice();
+  const positions = shuffle([...Array(CONFIG.TOTAL_CELLS).keys()].filter(pos => givens[pos] !== 0));
+  let clueCount = positions.length;
   for (const pos of positions) {
-    if (removed >= targetRemove) break;
+    if (clueCount <= keep) break;
     const backup = givens[pos];
     givens[pos] = 0;
     if (countSolutions(givens, 2) === 1) {
-      removed++;
+      clueCount--;
     } else {
       givens[pos] = backup;
     }
   }
   return givens;
+}
+
+/* 根据难度生成题目（挖洞）。极限档先稳定生成专家档，再继续挖空，避免难度倒挂。*/
+function generateGivens(solution, difficulty) {
+  const normalized = normalizeDifficulty(difficulty);
+  const keep = CONFIG.DIFFICULTY_KEEP[normalized];
+  if (normalized !== CONFIG.DIFFICULTY_KEEP.length - 1) {
+    return carveUniquePuzzle(solution, keep);
+  }
+  const expertKeep = CONFIG.DIFFICULTY_KEEP[normalized - 1];
+  let expertPuzzle = carveUniquePuzzle(solution, expertKeep);
+  for (let attempt = 1; attempt < 3 && expertPuzzle.filter(Boolean).length > expertKeep; attempt++) {
+    const retry = carveUniquePuzzle(solution, expertKeep);
+    if (retry.filter(Boolean).length < expertPuzzle.filter(Boolean).length) expertPuzzle = retry;
+  }
+  return carveUniquePuzzle(expertPuzzle, keep);
 }
 
 /* 候选数计算 */
@@ -328,6 +405,11 @@ function renderBoard() {
     const isSelected= selected === i;
     const inMulti   = multiSet.has(i) && selected !== i;
     const hasError  = isUser && val !== solution[i];
+    const candidateMode = getCandidateDisplayMode(val, notes[i], showAllCands);
+    const visibleCandidates = candidateMode === "manual"
+      ? notes[i]
+      : (candidateMode === "auto" ? getCandidates(i) : []);
+    const numberRelation = getNumberRelation(val, visibleCandidates, selectedNum, showAllCands);
 
     let isHighlightRow = false;
     let isHighlightCol = false;
@@ -338,10 +420,8 @@ function renderBoard() {
       if (c === sc) isHighlightCol = true;
     }
 
-    let isSameNum = false;
-    if (selectedNum > 0 && val === selectedNum && !isSelected) {
-      isSameNum = true;
-    }
+    const isSameNum = numberRelation === "same" && !isSelected;
+    const isCandidateMatch = numberRelation === "candidate";
 
     const cell = document.createElement("div");
     const cls = [
@@ -355,6 +435,7 @@ function renderBoard() {
       isHighlightRow ? "highlight-row" : "",
       isHighlightCol ? "highlight-col" : "",
       isSameNum   ? "same-num"     : "",
+      isCandidateMatch ? "candidate-match" : "",
     ].filter(Boolean).join(" ");
     cell.className = cls;
     cell.dataset.index = String(i);
@@ -372,12 +453,13 @@ function renderBoard() {
       const span = document.createElement("span");
       span.textContent = val;
       cell.appendChild(span);
-    } else if (notes[i] && notes[i].length > 0) {
+    } else if (candidateMode === "manual") {
       const nd = document.createElement("div");
       nd.className = "candidates";
       for (let k = 1; k <= 9; k++) {
         const s = document.createElement("span");
         s.textContent = (notes[i] || []).includes(k) ? k : "";
+        if (isCandidateMatch && k === selectedNum) s.classList.add("candidate-match-num");
         if (noteMode) {
           s.style.cursor = "pointer";
           s.onclick = (e) => { e.stopPropagation(); toggleCandidate(i, k); };
@@ -385,30 +467,19 @@ function renderBoard() {
         nd.appendChild(s);
       }
       cell.appendChild(nd);
-    } else if (showAllCands) {
-      const cands = getCandidates(i);
+    } else if (candidateMode === "auto") {
+      const cands = visibleCandidates;
       if (cands.length > 0) {
         const cd = document.createElement("div");
         cd.className = "candidates";
         for (let k = 1; k <= 9; k++) {
           const s = document.createElement("span");
           s.textContent = cands.includes(k) ? k : "";
+          if (isCandidateMatch && k === selectedNum) s.classList.add("candidate-match-num");
           if (noteMode && s.textContent !== "") {
             s.style.cursor = "pointer";
             s.onclick = (e) => { e.stopPropagation(); toggleCandidate(i, k); };
           }
-          cd.appendChild(s);
-        }
-        cell.appendChild(cd);
-      }
-    } else if (isSelected && !noteMode) {
-      const cands = getCandidates(i);
-      if (cands.length > 0) {
-        const cd = document.createElement("div");
-        cd.className = "candidates";
-        for (let k = 1; k <= 9; k++) {
-          const s = document.createElement("span");
-          s.textContent = cands.includes(k) ? k : "";
           cd.appendChild(s);
         }
         cell.appendChild(cd);
@@ -466,7 +537,7 @@ function refreshKeypadCounts() {
 
 function updateKeypadRecommend() {
   clearKeypadRecommend();
-  if (selected < 0 || noteMode) return;
+  if (!showAllCands || selected < 0) return;
   const cands = getCandidates(selected);
   if (cands.length === 0) return;
   const btns = document.querySelectorAll("#keypad button");
@@ -679,6 +750,28 @@ function cleanEmptyNotes(idx) {
   }
 }
 
+function syncAssistButtons() {
+  const noteBtn = $("noteBtn");
+  const candBtn = $("candBtn");
+  const autoFillBtn = $("autoFillBtn");
+
+  if (noteBtn) {
+    noteBtn.textContent = "✎ 笔记：" + (noteMode ? "开" : "关");
+    noteBtn.classList.toggle("active-btn", noteMode);
+    noteBtn.setAttribute("aria-pressed", noteMode ? "true" : "false");
+  }
+  if (candBtn) {
+    candBtn.textContent = "▦ 候选辅助：" + (showAllCands ? "开" : "关");
+    candBtn.classList.toggle("active-btn", showAllCands);
+    candBtn.setAttribute("aria-pressed", showAllCands ? "true" : "false");
+  }
+  if (autoFillBtn) {
+    autoFillBtn.textContent = "⚡ 自动填入：" + (autoFillMode ? "开" : "关");
+    autoFillBtn.classList.toggle("active-btn", autoFillMode);
+    autoFillBtn.setAttribute("aria-pressed", autoFillMode ? "true" : "false");
+  }
+}
+
 function fillNumber(value) {
   if (finished) return;
   if (selected < 0 && selectedCells.length === 0) return;
@@ -687,21 +780,21 @@ function fillNumber(value) {
   if (value === 0) {
     const targets = (selectedCells.length > 0 && selectedCells.includes(selected))
       ? selectedCells : [selected];
-    let changed = false;
+    const changes = [];
     targets.forEach(i => {
       if (givens[i] !== 0) return;
       if (board[i] !== 0 || (notes[i] && notes[i].length > 0)) {
-        pushHistory({
+        changes.push({
           index: i,
           prevValue: board[i],
           prevNotes: notes[i] ? [...notes[i]] : null,
         });
         board[i] = 0;
         delete notes[i];
-        changed = true;
       }
     });
-    if (changed) {
+    if (changes.length) {
+      pushHistory({ bulk: changes });
       renderBoard();
       updateProgress();
       refreshKeypadCounts();
@@ -716,25 +809,16 @@ function fillNumber(value) {
     userTargets = userTargets.filter(i => givens[i] === 0 && board[i] === 0);
     if (userTargets.length === 0) return;
 
-    /* 如果 showAllCands 开启，先确保目标格有笔记数据 */
-    if (showAllCands) {
-      userTargets.forEach(idx => {
-        if (!notes[idx] || notes[idx].length === 0) {
-          notes[idx] = getCandidates(idx).slice();
-        }
-      });
-    }
-
     /* 判断：是否所有目标格都已包含 value */
     const allHaveIt = userTargets.every(idx => (notes[idx] || []).includes(value));
 
-    userTargets.forEach(idx => {
-      pushHistory({
-        index: idx,
-        prevValue: board[idx],
-        prevNotes: notes[idx] ? [...notes[idx]] : null,
-      });
+    const changes = userTargets.map(idx => ({
+      index: idx,
+      prevValue: board[idx],
+      prevNotes: notes[idx] ? [...notes[idx]] : null,
+    }));
 
+    userTargets.forEach(idx => {
       if (allHaveIt) {
         /* 所有格都有 value → 统一删除 */
         notes[idx] = (notes[idx] || []).filter(v => v !== value);
@@ -749,6 +833,7 @@ function fillNumber(value) {
         }
       }
     });
+    pushHistory({ bulk: changes });
 
     renderBoard();
     updateProgress();
@@ -764,16 +849,14 @@ function fillNumber(value) {
   targets = targets.filter(i => givens[i] === 0);
   if (targets.length === 0) return;
 
+  const changes = targets.map(i => ({ index: i, prevValue: board[i] }));
+  const notesSnapshot = cloneNotes(notes);
   targets.forEach(i => {
-    pushHistory({
-      index: i,
-      prevValue: board[i],
-      prevNotes: notes[i] ? [...notes[i]] : null,
-    });
     board[i] = value;
     delete notes[i];
     autoEraseNotes(Math.floor(i / 9), i % 9, value);
   });
+  pushHistory({ bulk: changes, notesSnapshot });
 
   /* 检查错误 */
   let hasError = false;
@@ -802,20 +885,14 @@ function fillNumber(value) {
 
 function toggleNoteMode() {
   noteMode = !noteMode;
-  $("noteBtn").textContent = "笔记：" + (noteMode ? "开" : "关");
-  $("noteBtn").classList.toggle("active-btn", noteMode);
-  if (!noteMode) { selected = -1; selectedCells = []; }
+  syncAssistButtons();
   renderBoard();
   autoSave();
 }
 
 function toggleShowAllCands() {
   showAllCands = !showAllCands;
-  const btn = $("candBtn");
-  btn.textContent = "候选：" + (showAllCands ? "开" : "关");
-  btn.classList.toggle("active-btn", showAllCands);
-  selected = -1;
-  selectedCells = [];
+  syncAssistButtons();
   renderBoard();
   autoSave();
 }
@@ -884,6 +961,9 @@ function clearAllUser() {
   | undo    | —    | 撤销最后一步操作        |
 */
 function restoreHistoryEntry(targetBoard, targetNotes, last) {
+  if (last.notesSnapshot) {
+    replaceNotes(targetNotes, last.notesSnapshot);
+  }
   if (Array.isArray(last.bulk)) {
     last.bulk.forEach(entry => restoreHistoryEntry(targetBoard, targetNotes, entry));
     return;
@@ -906,8 +986,8 @@ function undo() {
   restoreHistoryEntry(board, notes, last);
 
   if (Array.isArray(last.bulk)) {
-    selected = -1;
-    selectedCells = [];
+    selected = last.bulk.length === 1 ? last.bulk[0].index : -1;
+    selectedCells = selected >= 0 ? [selected] : [];
   } else {
     selected = last.index;
     selectedCells = [last.index];
@@ -943,8 +1023,12 @@ function showHint() {
   if (best < 0) return;
   selected = best;
   selectedCells = [best];
-  pushHistory({ index: best, prevValue: board[best] });
+  const notesSnapshot = cloneNotes(notes);
+  const prevValue = board[best];
   board[best] = solution[best];
+  delete notes[best];
+  autoEraseNotes(Math.floor(best / 9), best % 9, board[best]);
+  pushHistory({ bulk: [{ index: best, prevValue }], notesSnapshot });
   autoSave();
   renderBoard();
   updateProgress();
@@ -1012,11 +1096,11 @@ function showTechHintBox(title, desc) {
   $("techHintBody").innerHTML =
     '<div style="margin-bottom:12px;font-weight:700;font-size:16px;color:var(--accent)">' + title + '</div>' +
     '<div>' + desc + '</div>';
-  $("techHintOverlay").classList.add("active");
+  openModal("techHintOverlay", "techHintDoneBtn");
 }
 
 function closeTechHint() {
-  $("techHintOverlay").classList.remove("active");
+  closeModal("techHintOverlay");
 }
 
 /* ========== SECTION 12: 自动填入 ========== */
@@ -1029,26 +1113,27 @@ function closeTechHint() {
 */
 function toggleAutoFill() {
   autoFillMode = !autoFillMode;
-  const btn = $("autoFillBtn");
-  btn.textContent = "自动填入：" + (autoFillMode ? "开" : "关");
-  btn.classList.toggle("active-btn", autoFillMode);
+  syncAssistButtons();
   if (autoFillMode) runAutoFill();
 }
 
 function runAutoFill(showEmptyToast = true) {
   if (finished) return;
-  let filled = false;
+  const changes = [];
+  const notesSnapshot = cloneNotes(notes);
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
     if (givens[i] === 0 && board[i] === 0) {
       const cands = getCandidates(i);
       if (cands.length === 1) {
-        pushHistory({ index: i, prevValue: 0 });
+        changes.push({ index: i, prevValue: board[i] });
         board[i] = cands[0];
-        filled = true;
+        delete notes[i];
+        autoEraseNotes(Math.floor(i / 9), i % 9, board[i]);
       }
     }
   }
-  if (filled) {
+  if (changes.length) {
+    pushHistory({ bulk: changes, notesSnapshot });
     renderBoard();
     updateProgress();
     refreshKeypadCounts();
@@ -1098,7 +1183,6 @@ const PRAISE_LIB = [
   "追梦赤子心，热血铸青春 🔥",
   "逆风的方向，更适合飞翔 🕊️",
   "YYDS！你就是永远的神 🏆",
-  "这个是我要的逻辑 三个选中格的候选分别是： • 格A：[1, 5, 9] • 格B：[5, 7] • 格C：[1, 3] 按你说的逻辑，点 5 之后，你期望变成： • 格A：[1,, 9] • 格B：[7] • 格C：[1, 3, 5]",
   "大佬大佬，给大佬递茶 🍵",
   "格局打开！这操作我直呼内行 🧐",
   "DNA动了！这就是天才的直觉吗 🧬",
@@ -1142,12 +1226,12 @@ function getRandomPraise() {
 }
 
 function showShare() {
-  $("shareOverlay").classList.add("active");
+  openModal("shareOverlay", "shareDoneBtn");
   generateShareImg();
 }
 
 function closeShare() {
-  $("shareOverlay").classList.remove("active");
+  closeModal("shareOverlay");
 }
 
 function generateShareImg() {
@@ -1443,6 +1527,7 @@ function getSave() {
     if (!save.solution.every(v => Number.isInteger(v) && v >= 1 && v <= 9)) return null;
     if (!save.givens.every((v, i) => v === 0 || v === save.solution[i])) return null;
     if (!save.board.every(v => Number.isInteger(v) && v >= 0 && v <= 9)) return null;
+    if (!save.board.every((v, i) => save.givens[i] === 0 || v === save.givens[i])) return null;
     return save;
   } catch(e) { return null; }
 }
@@ -1505,21 +1590,21 @@ function resumeGame() {
   solution       = save.solution;
   givens        = save.givens;
   board          = save.board;
-  notes          = save.notes && typeof save.notes === "object" ? save.notes : {};
+  notes          = sanitizeNotes(save.notes, givens, board);
   selected      = Number.isInteger(save.selected) && save.selected >= 0 && save.selected < 81 ? save.selected : -1;
-  selectedCells = Array.isArray(save.selectedCells) ? save.selectedCells.filter(i => Number.isInteger(i) && i >= 0 && i < 81) : [];
-  noteMode      = save.noteMode || false;
-  showAllCands  = save.showAllCands || false;
+  selectedCells = Array.isArray(save.selectedCells)
+    ? [...new Set(save.selectedCells.filter(i => Number.isInteger(i) && i >= 0 && i < 81))]
+    : [];
+  noteMode      = save.noteMode === true;
+  showAllCands  = save.showAllCands === true;
+  autoFillMode  = false;
   seconds       = Math.max(0, Math.floor(Number(save.seconds) || 0));
   usedPraiseIndices = Array.isArray(save.usedPraiseIndices) ? save.usedPraiseIndices : [];
   currentDifficulty = getSavedDifficulty(save);
   finished = false;
   history = [];
 
-  $("noteBtn").textContent = "笔记：" + (noteMode ? "开" : "关");
-  $("noteBtn").classList.toggle("active-btn", noteMode);
-  $("candBtn").textContent = "候选：" + (showAllCands ? "开" : "关");
-  $("candBtn").classList.toggle("active-btn", showAllCands);
+  syncAssistButtons();
   $("diffSelect").value = String(currentDifficulty);
 
   showGameScreen(true);
@@ -1534,19 +1619,37 @@ function resumeGame() {
 function recordStats(diff, timeSec) {
   try {
     const stats = getStats();
-    const key = String(diff);                  // 强制转字符串键
+    const key = String(normalizeDifficulty(diff));
+    const safeTime = Math.max(0, Math.floor(Number(timeSec) || 0));
     if (!stats[key]) stats[key] = { count: 0, best: Infinity, total: 0 };
     stats[key].count++;
-    stats[key].best = Math.min(stats[key].best, timeSec);
-    stats[key].total += timeSec;
+    stats[key].best = Math.min(stats[key].best, safeTime);
+    stats[key].total += safeTime;
     localStorage.setItem(CONFIG.STORAGE_STATS, JSON.stringify(stats));
   } catch(e) {}
+}
+
+function sanitizeStats(rawStats) {
+  const clean = {};
+  if (!rawStats || typeof rawStats !== "object" || Array.isArray(rawStats)) return clean;
+  for (let d = 0; d < CONFIG.DIFFICULTY_KEEP.length; d++) {
+    const key = String(d);
+    const entry = rawStats[key];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const count = Math.max(0, Math.floor(Number(entry.count) || 0));
+    const best = Number(entry.best);
+    const total = Number(entry.total);
+    if (count > 0 && Number.isFinite(best) && best >= 0 && Number.isFinite(total) && total >= 0) {
+      clean[key] = { count, best: Math.floor(best), total: Math.floor(total) };
+    }
+  }
+  return clean;
 }
 
 function getStats() {
   try {
     const raw = localStorage.getItem(CONFIG.STORAGE_STATS);
-    return raw ? JSON.parse(raw) : {};
+    return raw ? sanitizeStats(JSON.parse(raw)) : {};
   } catch(e) { return {}; }
 }
 
@@ -1560,27 +1663,30 @@ function clearStats() {
 function showStats() {
   const stats = getStats();
   const diffNames = ["简单","中等","困难","专家","极限"];
-  let html = "";
+  const tbody = $("statsBody");
+  tbody.replaceChildren();
   for (let d = 0; d < 5; d++) {
     const key = String(d);           // 用字符串键，与 recordStats 一致
     const s = stats[key];
-    html += "<tr>";
-    html += "<td>" + diffNames[d] + "</td>";
+    const row = document.createElement("tr");
+    const values = [diffNames[d]];
     if (s && s.count > 0) {
-      html += "<td>" + s.count + "</td>";
-      html += "<td>" + (s.best === Infinity ? "—" : s.best + " 秒") + "</td>";
-      html += "<td>" + Math.round(s.total / s.count) + " 秒</td>";
+      values.push(String(s.count), formatDuration(s.best), formatDuration(Math.round(s.total / s.count)));
     } else {
-      html += "<td>—</td><td>—</td><td>—</td>";
+      values.push("—", "—", "—");
     }
-    html += "</tr>";
+    values.forEach(value => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
   }
-  $("statsBody").innerHTML = html;
-  $("statsOverlay").classList.add("active");
+  openModal("statsOverlay", "statsDoneBtn");
 }
 
 function closeStats() {
-  $("statsOverlay").classList.remove("active");
+  closeModal("statsOverlay");
 }
 
 /* ========== SECTION 18: Toast 提示 ========== */
@@ -1764,6 +1870,7 @@ function newGame() {
   selectedCells= [];
   noteMode     = false;
   showAllCands= false;
+  autoFillMode = false;
   finished     = false;
   history      = [];
   seconds      = 0;
@@ -1773,12 +1880,7 @@ function newGame() {
   startTimer();
 
   hideToast();
-  $("noteBtn").textContent = "笔记：关";
-  $("noteBtn").classList.remove("active-btn");
-  $("candBtn").textContent = "候选：关";
-  $("candBtn").classList.remove("active-btn");
-  $("autoFillBtn").textContent = "自动填入：关";
-  autoFillMode = false;
+  syncAssistButtons();
   $("finishMsg").style.display = "none";
   renderBoard();
   renderKeypad();
@@ -1805,7 +1907,7 @@ function bindKeyboardEvents() {
       const activeOverlay = document.querySelector(".modal-overlay.active");
       if (activeOverlay) {
         e.preventDefault();
-        activeOverlay.classList.remove("active");
+        closeModal(activeOverlay.id);
         return;
       }
     }
@@ -1903,7 +2005,7 @@ function bindUiEvents() {
   $("shareDoneBtn").addEventListener("click", closeShare);
   $("shareDownloadBtn").addEventListener("click", downloadShareImg);
   ["statsOverlay", "techHintOverlay", "shareOverlay"].forEach(id => {
-    $(id).addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("active"); });
+    $(id).addEventListener("click", e => { if (e.target === e.currentTarget) closeModal(id); });
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && !finished && timerStartedAt) {
@@ -1940,6 +2042,12 @@ window.__sudokuTest = {
   isValid,
   normalizeDifficulty,
   formatDuration,
+  getCandidateDisplayMode,
+  getNumberRelation,
+  sanitizeNotes,
+  sanitizeStats,
+  cloneNotes,
+  replaceNotes,
   restoreHistoryEntry,
   gridIndexAtPoint,
   getDragRectBox,

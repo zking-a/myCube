@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
-<link rel="stylesheet" href="sudoku.css?v=20260821f"/>
+<link rel="stylesheet" href="sudoku.css?v=20260821h"/>
 </head>
 <body>
 
@@ -97,8 +97,8 @@
     <aside class="control-panel" aria-label="数独工具">
       <div class="tool-label">常用工具</div>
       <div class="bottom-bar tool-grid primary-tools">
-        <button type="button" id="noteBtn">✎ 笔记：关</button>
-        <button type="button" id="candBtn">▦ 候选：关</button>
+        <button type="button" id="noteBtn" aria-pressed="false">✎ 笔记：关</button>
+        <button type="button" id="candBtn" aria-pressed="false" title="显示或隐藏自动计算的候选数">▦ 候选辅助：关</button>
         <button type="button" id="undoBtn">↩ 撤销</button>
         <button type="button" id="hintBtn">💡 提示</button>
       </div>
@@ -107,7 +107,7 @@
         <div class="bottom-bar tool-grid secondary-tools">
           <button type="button" id="techHintBtn" title="技巧提示">🧠 技巧</button>
           <button type="button" id="statsBtn">▥ 统计</button>
-          <button type="button" id="autoFillBtn" title="自动填入唯一候选">⚡ 自动填入：关</button>
+          <button type="button" id="autoFillBtn" aria-pressed="false" title="自动填入唯一候选">⚡ 自动填入：关</button>
           <button type="button" id="clearBoardBtn" class="danger-tool">⌫ 清空填写</button>
         </div>
         <div class="tool-label">难度与新局</div>
@@ -128,10 +128,10 @@
 </div>
 
 <!-- 2.4 统计弹窗 -->
-<div class="modal-overlay" id="statsOverlay">
-  <div class="modal-box">
+<div class="modal-overlay" id="statsOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="statsTitle">
+  <div class="modal-box" tabindex="-1">
     <button type="button" class="modal-close" id="statsCloseBtn" aria-label="关闭统计">✕</button>
-    <h2>📊 游戏统计</h2>
+    <h2 id="statsTitle">📊 我的战绩</h2>
     <table class="stats-table" id="statsTable">
       <thead><tr><th>难度</th><th>完成次数</th><th>最佳用时</th><th>平均用时</th></tr></thead>
       <tbody id="statsBody"></tbody>
@@ -144,10 +144,10 @@
 </div>
 
 <!-- 2.5 技巧提示弹窗 -->
-<div class="modal-overlay" id="techHintOverlay">
-  <div class="modal-box">
+<div class="modal-overlay" id="techHintOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="techHintTitle">
+  <div class="modal-box" tabindex="-1">
     <button type="button" class="modal-close" id="techHintCloseBtn" aria-label="关闭技巧提示">✕</button>
-    <h2>💡 技巧提示</h2>
+    <h2 id="techHintTitle">💡 技巧提示</h2>
     <div id="techHintBody" class="tech-hint-body"></div>
     <div class="stats-btns">
       <button type="button" id="techHintDoneBtn">关闭</button>
@@ -156,10 +156,10 @@
 </div>
 
 <!-- 2.6 分享弹窗 -->
-<div class="modal-overlay" id="shareOverlay">
-  <div class="modal-box">
+<div class="modal-overlay" id="shareOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="shareTitle">
+  <div class="modal-box" tabindex="-1">
     <button type="button" class="modal-close" id="shareCloseBtn" aria-label="关闭分享">✕</button>
-    <h2>📤 分享成绩</h2>
+    <h2 id="shareTitle">📤 分享成绩</h2>
     <canvas id="shareCanvas" width="360" height="480" class="share-canvas"></canvas>
     <div class="stats-btns">
       <button type="button" id="shareDownloadBtn">保存图片</button>
@@ -168,6 +168,6 @@
   </div>
 </div>
 
-<script src="sudoku.js?v=20260821f"></script>
+<script src="sudoku.js?v=20260821h"></script>
 </body>
 </html>
