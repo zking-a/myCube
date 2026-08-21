@@ -25,3 +25,8 @@ services:
         value: "8"
       - key: MAX_PLAYERS_PER_ROOM
         value: "2"
+      # 同一来源只能拥有 1 个房间，未等到对手的房间 2 分钟后按创建时间强制释放。
+      - key: MAX_ROOMS_PER_IP
+        value: "1"
+      - key: UNMATCHED_ROOM_TTL_MS
+        value: "120000"

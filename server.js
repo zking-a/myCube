@@ -38,6 +38,8 @@ const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟�
 const ROOM_TTL = 5 * 60 * 1000; // 房间内全员离线后保留时长，超时回收
 const LOBBY_IDLE_MS = Math.max(60 * 1000, parseInt(process.env.LOBBY_IDLE_MS, 10) || 5 * 60 * 1000);
 const ONLINE_ROOM_IDLE_MS = Math.max(5 * 60 * 1000, parseInt(process.env.ONLINE_ROOM_IDLE_MS, 10) || 15 * 60 * 1000);
+// 只有一人的等待房间使用不可续期的绝对寿命，避免持续发消息永久占住稀缺房间。
+const UNMATCHED_ROOM_TTL_MS = Math.max(60 * 1000, parseInt(process.env.UNMATCHED_ROOM_TTL_MS, 10) || 2 * 60 * 1000);
 const DISCONNECT_GRACE_MS = 30 * 1000; // 对局中掉线后保留座位，给移动网络重连留时间
 const TOTAL_QUESTIONS = 10;
 const WRONG_PENALTY = 5000;
@@ -52,6 +54,7 @@ const RATE_BURST = 40;               // 令牌桶初始容量（允许短时突�
 // MAX_CONNECTIONS 表示玩家席位，不再等同于底层 Socket 数；额外 Socket 专供握手与重连。
 const MAX_CONNECTIONS = Math.max(1, parseInt(process.env.MAX_CONNECTIONS, 10) || 4);
 const MAX_CONNECTIONS_PER_IP = Math.max(1, parseInt(process.env.MAX_CONNECTIONS_PER_IP, 10) || 2);
+const MAX_ROOMS_PER_IP = Math.max(1, parseInt(process.env.MAX_ROOMS_PER_IP, 10) || 1);
 const MAX_SOCKET_CONNECTIONS = Math.max(MAX_CONNECTIONS + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS, 10) || (MAX_CONNECTIONS + 4));
 const MAX_SOCKET_CONNECTIONS_PER_IP = Math.max(MAX_CONNECTIONS_PER_IP + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS_PER_IP, 10) || (MAX_CONNECTIONS_PER_IP + 2));
 const JOIN_IDLE_MS = 8000;           // 未 join 的连接尽快释放，避免占满全局名额
@@ -108,7 +111,7 @@ const rooms = new Map();
 /** roomCode -> 中国跳棋房间（与 24 点共用全服房间和席位上限） */
 const checkersRooms = new Map();
 
-function createRoom(code) {
+function createRoom(code, creatorIp) {
   const room = {
     code: code,
     round: 1,
@@ -119,6 +122,7 @@ function createRoom(code) {
     _gc: null,
     _finishTimer: null,
     questions: null,
+    creatorIp: creatorIp || '',
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
     lastLobbyActivityAt: Date.now()
@@ -127,7 +131,7 @@ function createRoom(code) {
   return room;
 }
 
-function createCheckersRoom(code) {
+function createCheckersRoom(code, creatorIp) {
   const room = {
     code: code,
     phase: 'waiting',       // waiting | playing | done
@@ -135,7 +139,9 @@ function createCheckersRoom(code) {
     turn: 'red',
     moveNumber: 1,
     winner: '',
+    lastMove: null,
     hostCid: null,
+    creatorIp: creatorIp || '',
     players: new Map(),
     createdAt: Date.now(),
     lastActivityAt: Date.now(),
@@ -150,6 +156,7 @@ function resetCheckersRoom(room) {
   room.turn = 'red';
   room.moveNumber = 1;
   room.winner = '';
+  room.lastMove = null;
   room.phase = Array.from(room.players.values()).filter(function (p) { return p.online; }).length === 2 ? 'playing' : 'waiting';
   room.lastActivityAt = Date.now();
 }
@@ -169,6 +176,7 @@ function broadcastCheckersState(room) {
     turn: room.turn,
     moveNumber: room.moveNumber,
     winner: room.winner,
+    lastMove: room.lastMove,
     host: room.hostCid,
     players: checkersPlayerList(room)
   });
@@ -232,6 +240,14 @@ function countSeatsForIp(ip) {
   checkersRooms.forEach(function (room) {
     room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
   });
+  return total;
+}
+
+function countRoomsForIp(ip) {
+  if (!ip) return 0;
+  let total = 0;
+  rooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
+  checkersRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   return total;
 }
 
@@ -384,6 +400,10 @@ setInterval(function () {
   const now = Date.now();
   rooms.forEach(function (room, code) {
     const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (room.phase === 'lobby' && room.players.size < 2 && now - room.createdAt > UNMATCHED_ROOM_TTL_MS) {
+      expireRoom(room, '等待对手超时，房间已自动释放');
+      return;
+    }
     if (anyOnline && room.phase === 'lobby' && now - (room.lastLobbyActivityAt || room.createdAt) > LOBBY_IDLE_MS) {
       expireRoom(room, '房间等待超时，请重新创建房间');
       return;
@@ -399,6 +419,10 @@ setInterval(function () {
   });
   checkersRooms.forEach(function (room, code) {
     const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (room.phase === 'waiting' && room.players.size < 2 && now - room.createdAt > UNMATCHED_ROOM_TTL_MS) {
+      expireCheckersRoom(room, '等待对手超时，房间已自动释放');
+      return;
+    }
     const idleLimit = room.phase === 'waiting' ? LOBBY_IDLE_MS : ONLINE_ROOM_IDLE_MS;
     if (anyOnline && now - (room.lastActivityAt || room.createdAt) > idleLimit) {
       expireCheckersRoom(room, '跳棋房间长时间没有操作，已自动释放');
@@ -652,6 +676,10 @@ wss.on('connection', function (ws, req) {
           fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试');
           return;
         }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
+          fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放');
+          return;
+        }
         // ---- 单 IP 建房限速：防单 IP 占满全部房间导致所有正常用户被拒 ----
         if (!checkRoomCreateLimit(clientIp)) {
           fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试');
@@ -662,7 +690,7 @@ wss.on('connection', function (ws, req) {
           fail('SERVER_FULL', '服务器房间已满，请稍后再试');
           return;
         }
-        room = createRoom(code);
+        room = createRoom(code, clientIp);
       } else if (intent === 'create') {
         // 建房成功后的首个 state 可能在弱网中丢失；同一 cid 的离线座位仍按重连处理。
         const ownSeat = room.players.get(cid);
@@ -740,11 +768,10 @@ wss.on('connection', function (ws, req) {
     if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
     const room = player._room;
 
-    if (m.t !== 'ping') room.lastActivityAt = Date.now();
-
     if (m.t === 'ready') {
       if (room.phase !== 'lobby') return;
-      room.lastLobbyActivityAt = Date.now();
+      room.lastActivityAt = Date.now();
+      room.lastLobbyActivityAt = room.lastActivityAt;
       player.ready = !!m.v;
       broadcastState(room);
     } else if (m.t === 'start') {
@@ -763,6 +790,7 @@ wss.on('connection', function (ws, req) {
         fail('PLAYERS_NOT_READY', '还有 ' + unready.length + ' 位玩家没有准备');
         return;
       }
+      room.lastActivityAt = Date.now();
       room.phase = 'playing';
       room.startedAt = Date.now() + SYNC_DELAY;
       room.questions = Questions.buildRoomQuestions(room.code + '#' + room.round, TOTAL_QUESTIONS);
@@ -791,6 +819,7 @@ wss.on('connection', function (ws, req) {
         fail('INVALID_PROOF', '本题运算记录校验失败，请刷新后重试');
         return;
       }
+      room.lastActivityAt = Date.now();
       const elapsed = Math.max(0, now - room.startedAt);
       player.prog = index + 1;
       if (!player.results) player.results = [];
@@ -809,6 +838,7 @@ wss.on('connection', function (ws, req) {
         fail('ROUND_INCOMPLETE', '还有题目尚未提交，暂时不能交卷');
         return;
       }
+      room.lastActivityAt = Date.now();
       player.done = true;
       player.prog = TOTAL_QUESTIONS;
       player.actualMs = Math.max(0, Math.min(24 * 60 * 60 * 1000, now - room.startedAt));
@@ -822,6 +852,7 @@ wss.on('connection', function (ws, req) {
         return;
       }
       if (room.phase !== 'done') return;
+      room.lastActivityAt = Date.now();
       room.round = (room.round || 1) + 1;
       room.phase = 'lobby';
       room.startedAt = null;
@@ -941,9 +972,12 @@ checkersWss.on('connection', function (ws, req) {
         if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
           fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
         }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
+          fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
+        }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
         if (rooms.size + checkersRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
-        room = createCheckersRoom(code);
+        room = createCheckersRoom(code, clientIp);
       } else if (intent === 'create') {
         const ownSeat = room.players.get(cid);
         if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，请重新创建'); return; }
@@ -1002,8 +1036,6 @@ checkersWss.on('connection', function (ws, req) {
     if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
     const room = player._room;
     if (!room || checkersRooms.get(room.code) !== room) return;
-    if (m.t !== 'ping') room.lastActivityAt = Date.now();
-
     if (m.t === 'move') {
       if (room.phase !== 'playing' || room.winner) return;
       if (room.players.size !== 2 || !Array.from(room.players.values()).every(function (seat) { return seat.online; })) {
@@ -1015,7 +1047,16 @@ checkersWss.on('connection', function (ws, req) {
       const target = typeof m.target === 'string' ? m.target.slice(0, 12) : '';
       const applied = CheckersCore.applyMove(room.pieces, player.color, from, target);
       if (!applied) { fail('ILLEGAL_MOVE', '这一步不符合跳棋规则'); return; }
+      room.lastActivityAt = Date.now();
       room.pieces = applied.pieces;
+      room.lastMove = {
+        player: player.color,
+        from: from,
+        target: target,
+        kind: applied.kind,
+        path: applied.path,
+        moveNumber: room.moveNumber
+      };
       room.moveNumber++;
       if (applied.winner) {
         room.winner = applied.winner;
@@ -1025,6 +1066,7 @@ checkersWss.on('connection', function (ws, req) {
     } else if (m.t === 'again') {
       if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以发起下一局'); return; }
       if (room.phase !== 'done') return;
+      room.lastActivityAt = Date.now();
       resetCheckersRoom(room);
       broadcastCheckersState(room);
     } else if (m.t === 'ping') {

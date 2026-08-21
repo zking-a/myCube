@@ -9,7 +9,10 @@ const HTTP_URL = 'http://127.0.0.1:' + PORT;
 const WS_URL = 'ws://127.0.0.1:' + PORT + '/checkers-ws';
 const child = spawn(process.execPath, ['server.js'], {
   cwd: __dirname,
-  env: Object.assign({}, process.env, { PORT: String(PORT), MAX_ROOMS: '4', MAX_CONNECTIONS: '8' }),
+  env: Object.assign({}, process.env, {
+    PORT: String(PORT), MAX_ROOMS: '4', MAX_ROOMS_PER_IP: '1',
+    MAX_CONNECTIONS: '8', MAX_CONNECTIONS_PER_IP: '8', MAX_SOCKET_CONNECTIONS_PER_IP: '10'
+  }),
   stdio: ['ignore', 'pipe', 'pipe']
 });
 let childLog = '';
@@ -82,7 +85,7 @@ function ok(name, condition) {
 }
 
 (async function () {
-  let A, B, A2;
+  let A, B, A2, extra;
   try {
     await waitForServer();
     const redirect = await fetch(HTTP_URL + '/checkers', { redirect: 'manual' });
@@ -101,6 +104,13 @@ function ok(name, condition) {
     A.send({ t: 'join', room: 'CHESS', nick: '红方玩家', cid: 'CHECKERS-A', intent: 'create' });
     const aSession = await A.waitFor(function (m) { return m.t === 'session'; });
     await A.waitFor(function (m) { return m.t === 'state' && m.players.length === 1; });
+
+    extra = client(); await extra.open();
+    extra.send({ t: 'join', room: 'SHARE', nick: '占房测试', cid: 'CHECKERS-X', intent: 'create' });
+    await extra.waitFor(function (m) { return m.t === 'err' && m.code === 'IP_ROOM_LIMIT'; });
+    await extra.close(); extra = null;
+    ok('同一网络不能批量创建等待房间占满全服容量', true);
+
     B.send({ t: 'join', room: 'CHESS', nick: '蓝方玩家', cid: 'CHECKERS-B', intent: 'join' });
     const bSession = await B.waitFor(function (m) { return m.t === 'session'; });
     const stateA = await A.waitFor(function (m) { return m.t === 'state' && m.phase === 'playing'; });
@@ -118,6 +128,11 @@ function ok(name, condition) {
     const afterRedB = await B.waitFor(function (m) { return m.t === 'state' && m.moveNumber === 2; });
     ok('红方合法走棋由服务器执行并同步给双方',
       afterRedA.turn === 'blue' && afterRedB.pieces[redMove.target] === 'red' && !afterRedB.pieces[redMove.from]);
+    ok('服务器把上一步来源、落点和路线权威同步给双方',
+      afterRedA.lastMove && afterRedB.lastMove &&
+      afterRedA.lastMove.from === redMove.from && afterRedB.lastMove.target === redMove.target &&
+      Array.isArray(afterRedB.lastMove.path) && afterRedB.lastMove.path[0] === redMove.from &&
+      afterRedB.lastMove.path[afterRedB.lastMove.path.length - 1] === redMove.target);
 
     A.send({ t: 'move', from: redMove.target, target: redMove.from, seq: 2 });
     await A.waitFor(function (m) { return m.t === 'err' && m.code === 'NOT_YOUR_TURN'; });
@@ -150,6 +165,7 @@ function ok(name, condition) {
     ok('健康检查统计跳棋房间与共享席位', health.roomsCheckers === 1 && health.seats === 2);
     console.log('\n✅ 中国跳棋联机集成测试全部通过（' + passed + ' 项）');
   } finally {
+    if (extra) await extra.close().catch(function () {});
     if (A2) await A2.close().catch(function () {});
     if (B) await B.close().catch(function () {});
     child.kill('SIGTERM');

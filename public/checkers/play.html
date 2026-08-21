@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eef3ff">
+  <meta name="description" content="沉浸式中国跳棋棋局。">
+  <title>中国跳棋 · 对局</title>
+  <link rel="stylesheet" href="checkers.css?v=20260823a">
+  <script src="checkers_core.js?v=20260823a" defer></script>
+  <script src="checkers.js?v=20260823a" defer></script>
+</head>
+<body class="play-page">
+  <main class="game-shell">
+    <header class="game-topbar">
+      <button type="button" class="nav-back" id="exitBtn" aria-label="返回跳棋首页">← 跳棋首页</button>
+      <div class="game-title"><span>Chinese Checkers</span><strong>中国跳棋</strong></div>
+      <div class="top-actions"><span class="mode-badge" id="modeBadge">人机对战</span><button type="button" class="sound-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效">🔊</button></div>
+    </header>
+
+    <section class="online-room-bar" id="onlineRoomBar" hidden aria-label="联机房间">
+      <div><small>房间码</small><strong id="roomCodeText">-----</strong></div>
+      <p id="onlineStatus" role="status" aria-live="polite">正在连接服务器…</p>
+      <button type="button" id="copyInviteBtn">复制邀请</button>
+      <button type="button" id="leaveRoomBtn">退出房间</button>
+    </section>
+
+    <section class="game-layout" aria-label="中国跳棋棋局">
+      <div class="board-card">
+        <div class="turn-banner" id="turnBanner" aria-live="polite">
+          <span class="turn-piece red" id="turnPiece" aria-hidden="true"></span>
+          <div><small id="turnKicker">你的视角 · 红方在下</small><strong id="turnText">你的回合</strong></div>
+          <span class="move-count" id="moveCount">第 1 手</span>
+        </div>
+
+        <div class="last-move-bar" id="lastMoveBar" hidden>
+          <span class="last-move-piece red" id="lastMovePiece" aria-hidden="true"></span>
+          <div><small>上一步</small><strong id="lastMoveText">红方移动了一枚棋子</strong></div>
+          <span id="lastMoveKind">移动</span>
+        </div>
+
+        <div class="board-frame">
+          <svg id="board" class="checker-board" viewBox="0 0 320 320" role="grid" aria-label="中国跳棋棋盘，红方视角"></svg>
+          <div class="board-wait" id="boardWait" hidden><span>🌐</span><strong>等待对手加入</strong><small>复制邀请链接发给朋友即可开始</small></div>
+        </div>
+        <div class="board-legend"><span><i class="step-dot"></i>相邻移动</span><span><i class="jump-dot"></i>跳跃落点</span><span><i class="route-line"></i>上一步路线</span></div>
+        <p class="board-tip" id="boardTip">点击己方棋子，再点击高亮位置移动。</p>
+      </div>
+
+      <aside class="match-panel" aria-label="对局信息与控制">
+        <section class="players-card">
+          <div class="panel-label">本局对阵</div>
+          <div class="player-row active" id="redPlayer">
+            <span class="player-piece red" aria-hidden="true"></span>
+            <div><strong id="redName">你 · 红方</strong><small>向蓝方营地前进</small></div><b id="redProgress">0/10</b>
+          </div>
+          <div class="versus"><span></span><b>VS</b><span></span></div>
+          <div class="player-row" id="bluePlayer">
+            <span class="player-piece blue" aria-hidden="true"></span>
+            <div><strong id="blueName">电脑 · 蓝方</strong><small>向红方营地前进</small></div><b id="blueProgress">0/10</b>
+          </div>
+        </section>
+
+        <div class="control-grid">
+          <button type="button" id="undoBtn"><span>↩</span> 撤销一步</button>
+          <button type="button" id="newGameBtn"><span>↻</span> 重新开局</button>
+        </div>
+
+        <section class="guide-card">
+          <div class="panel-label">棋盘提示</div>
+          <p><i class="guide-selected"></i><span><b>白色光环</b>表示当前选中的棋子</span></p>
+          <p><i class="guide-last"></i><span><b>彩色路线</b>表示对方刚走完的一步</span></p>
+          <p><i class="guide-goal"></i><span><b>目标进度</b>达到 10/10 即获胜</span></p>
+        </section>
+
+        <details class="rules-card">
+          <summary>玩法与视角说明 <span>⌄</span></summary>
+          <ol>
+            <li>红方先走，双方轮流移动一枚自己的棋子。</li>
+            <li>联机双方都看到己方位于屏幕下方，换手时棋盘不会翻转。</li>
+            <li>绿色落点表示相邻移动，橙色落点表示可以跳跃。</li>
+            <li>连续跳跃会绘制完整路线，上一步的起点和终点会持续标记。</li>
+            <li>先把 10 枚棋子全部移入对面营地即可获胜。</li>
+          </ol>
+        </details>
+        <p class="save-note" id="saveNote">棋局会自动保存在当前浏览器中。</p>
+      </aside>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="winner-overlay" id="winnerOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="winnerTitle">
+    <div class="winner-card">
+      <span class="winner-piece" id="winnerPiece" aria-hidden="true"></span>
+      <small>本局结束</small><h2 id="winnerTitle">红方获胜</h2>
+      <p id="winnerText">率先占满了对方营地</p>
+      <button type="button" id="winnerNewBtn">再来一局</button>
+    </div>
+  </div>
+</body>
+</html>

@@ -71,17 +71,56 @@
   }
   function hasWon(pieces, player) { return countInGoal(pieces, player) === 10; }
 
+  function findMovePath(pieces, fromKey, targetKey) {
+    const from = CELL_MAP.get(fromKey);
+    if (!from || !CELL_MAP.has(targetKey) || !pieces || !pieces[fromKey] || pieces[targetKey]) return null;
+    const legal = getLegalMoves(pieces, fromKey);
+    if (legal.steps.includes(targetKey)) return [fromKey, targetKey];
+    if (!legal.jumps.includes(targetKey)) return null;
+
+    const visited = new Set([fromKey]);
+    const parents = new Map();
+    const queue = [fromKey];
+    const occupied = function (key) { return key !== fromKey && !!pieces[key]; };
+    while (queue.length) {
+      const currentKey = queue.shift();
+      const current = CELL_MAP.get(currentKey);
+      for (let i = 0; i < DIRECTIONS.length; i++) {
+        const direction = DIRECTIONS[i];
+        const overKey = keyOf(current.row + direction[0], current.unit + direction[1]);
+        const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
+        if (!CELL_MAP.has(landingKey) || !occupied(overKey) || occupied(landingKey) || visited.has(landingKey)) continue;
+        visited.add(landingKey);
+        parents.set(landingKey, currentKey);
+        if (landingKey === targetKey) {
+          const path = [targetKey];
+          let cursor = targetKey;
+          while (cursor !== fromKey) { cursor = parents.get(cursor); path.push(cursor); }
+          return path.reverse();
+        }
+        queue.push(landingKey);
+      }
+    }
+    return null;
+  }
+
   function applyMove(pieces, player, fromKey, targetKey) {
     if (!pieces || pieces[fromKey] !== player || pieces[targetKey] || !CELL_MAP.has(targetKey)) return null;
-    const legal = getLegalMoves(pieces, fromKey);
-    if (!legal.all.includes(targetKey)) return null;
+    const path = findMovePath(pieces, fromKey, targetKey);
+    if (!path) return null;
     const next = Object.assign({}, pieces);
     delete next[fromKey];
     next[targetKey] = player;
+    const from = CELL_MAP.get(fromKey);
+    const target = CELL_MAP.get(targetKey);
+    const isStep = DIRECTIONS.some(function (direction) {
+      return from.row + direction[0] === target.row && from.unit + direction[1] === target.unit;
+    });
     return {
       pieces: next,
       winner: hasWon(next, player) ? player : '',
-      kind: legal.jumps.includes(targetKey) ? 'jump' : 'step'
+      kind: isStep ? 'step' : 'jump',
+      path: path
     };
   }
 
@@ -113,7 +152,26 @@
       pieces: pieces,
       turn: raw.turn,
       moveNumber: Math.max(1, Math.min(9999, Math.floor(Number(raw.moveNumber) || 1))),
-      winner: claimedWinner && hasWon(pieces, claimedWinner) ? claimedWinner : ''
+      winner: claimedWinner && hasWon(pieces, claimedWinner) ? claimedWinner : '',
+      lastMove: sanitizeLastMove(raw.lastMove, pieces)
+    };
+  }
+
+  function sanitizeLastMove(raw, pieces) {
+    if (!raw) return null;
+    if (!raw || (raw.player !== 'red' && raw.player !== 'blue')) return null;
+    const from = typeof raw.from === 'string' && CELL_MAP.has(raw.from) ? raw.from : '';
+    const target = typeof raw.target === 'string' && CELL_MAP.has(raw.target) ? raw.target : '';
+    if (!from || !target || !pieces || pieces[target] !== raw.player || pieces[from]) return null;
+    const path = Array.isArray(raw.path) ? raw.path.filter(function (key) { return typeof key === 'string' && CELL_MAP.has(key); }) : [];
+    if (path.length < 2 || path.length > 20 || path[0] !== from || path[path.length - 1] !== target) return null;
+    return {
+      player: raw.player,
+      from: from,
+      target: target,
+      kind: raw.kind === 'jump' ? 'jump' : 'step',
+      path: path,
+      moveNumber: Math.max(1, Math.min(9999, Math.floor(Number(raw.moveNumber) || 1)))
     };
   }
 
@@ -155,9 +213,9 @@
     BOARD_CELLS: BOARD_CELLS.map(function (cell) { return Object.assign({}, cell); }),
     TOP_CAMP: Array.from(TOP_CAMP), BOTTOM_CAMP: Array.from(BOTTOM_CAMP),
     keyOf: keyOf, buildBoardCells: buildBoardCells, createInitialPieces: createInitialPieces,
-    getLegalMoves: getLegalMoves, applyMove: applyMove,
+    getLegalMoves: getLegalMoves, findMovePath: findMovePath, applyMove: applyMove,
     countInGoal: countInGoal, hasWon: hasWon, orientPoint: orientPoint,
-    sanitizePieces: sanitizePieces, sanitizeState: sanitizeState,
+    sanitizePieces: sanitizePieces, sanitizeState: sanitizeState, sanitizeLastMove: sanitizeLastMove,
     listMoves: listMoves, chooseAiMove: chooseAiMove
   };
 });
