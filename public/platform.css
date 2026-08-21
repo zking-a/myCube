@@ -75,10 +75,12 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 .game-card:focus-visible { outline: 3px solid rgba(86,104,245,.3); outline-offset: 4px; }
 .game-card::after { position: absolute; width: 140px; height: 140px; right: -66px; top: -60px; border-radius: 50%; content: ""; opacity: .13; }
 .game-card.math::after { background: #5668f5; }
-.game-card.sudoku::after { background: #22b8cf; }
+.game-card.sudoku::after { background: #ff8a4c; }
 .game-card-icon { display: grid; width: 56px; height: 56px; place-items: center; border-radius: 17px; color: #fff; font-size: 24px; font-weight: 950; }
 .math .game-card-icon { background: linear-gradient(145deg,#7180ff,#4559df); }
-.sudoku .game-card-icon { background: linear-gradient(145deg,#38cbd8,#0891b2); }
+.sudoku .game-card-icon { background: linear-gradient(145deg,#ffa667,#f47a42); }
+.game-card.checkers::after { background: #ff8a4c; }
+.checkers .game-card-icon { background: linear-gradient(145deg,#6f7dff,#ff7a3c); }
 .game-card h2 { margin: 15px 0 6px; font-size: 22px; }
 .game-card p { min-height: 42px; margin: 0 0 15px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .game-tags { display: flex; flex-wrap: wrap; gap: 5px; }

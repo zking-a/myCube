@@ -429,7 +429,12 @@ const server = http.createServer(function (req, res) {
     return;
   }
   // 游戏目录使用稳定的尾斜杠 URL；旧数独入口继续可用。
-  const routeRedirects = { '/24': '/24/', '/sudoku': '/sudoku/', '/sudoku.html': '/sudoku/' };
+  const routeRedirects = {
+    '/24': '/24/',
+    '/sudoku': '/sudoku/',
+    '/sudoku.html': '/sudoku/',
+    '/checkers': '/checkers/'
+  };
   if (routeRedirects[urlPath]) {
     const query = (req.url || '').slice(urlPath.length);
     writeHead(res, 308, { Location: routeRedirects[urlPath] + query, 'Cache-Control': 'no-store' });

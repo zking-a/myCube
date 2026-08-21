@@ -2,13 +2,14 @@
   "name": "g24-vs-relay",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "轻量游戏站：24点单机/联机对战与数独挑战",
+  "description": "轻量游戏站：24点、数独与中国跳棋",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "node test_net.js",
     "test:e2e": "node test_local.js",
     "test:sudoku": "node test_sudoku.js",
+    "test:checkers": "node test_checkers.js",
     "test:security": "node test_security.js"
   },
   "engines": {

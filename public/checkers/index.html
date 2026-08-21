@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eef3ff">
+  <meta name="description" content="中国跳棋本地双人对战，支持连跳、撤销和自动存档。">
+  <title>中国跳棋 · 轻量游戏站</title>
+  <link rel="stylesheet" href="checkers.css?v=20260822a">
+  <script src="checkers.js?v=20260822a" defer></script>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="topbar">
+      <a class="back-link" href="../" aria-label="返回游戏大厅">← 游戏大厅</a>
+      <div class="title-wrap"><span>Chinese Checkers</span><h1>中国跳棋</h1></div>
+      <button type="button" class="icon-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效" title="切换音效">🔊</button>
+    </header>
+
+    <section class="game-layout" aria-label="中国跳棋棋局">
+      <div class="board-column">
+        <div class="turn-banner" id="turnBanner" aria-live="polite">
+          <span class="turn-piece red" id="turnPiece" aria-hidden="true"></span>
+          <div><small id="turnKicker">本地双人 · 红方先行</small><strong id="turnText">红方回合</strong></div>
+          <span class="move-count" id="moveCount">第 1 手</span>
+        </div>
+        <div class="board-frame">
+          <svg id="board" class="checker-board" viewBox="0 0 320 320" role="grid" aria-label="中国跳棋棋盘"></svg>
+        </div>
+        <p class="board-tip" id="boardTip">点击己方棋子，再点击高亮位置移动；金色圆环表示可以跳跃。</p>
+      </div>
+
+      <aside class="side-panel" aria-label="棋局信息与控制">
+        <div class="score-card">
+          <div class="player-row active" id="redPlayer">
+            <span class="player-piece red" aria-hidden="true"></span>
+            <div><strong>红方</strong><small>目标：下方营地</small></div><b id="redProgress">0/10</b>
+          </div>
+          <div class="versus">VS</div>
+          <div class="player-row" id="bluePlayer">
+            <span class="player-piece blue" aria-hidden="true"></span>
+            <div><strong>蓝方</strong><small>目标：上方营地</small></div><b id="blueProgress">0/10</b>
+          </div>
+        </div>
+        <div class="control-grid">
+          <button type="button" id="undoBtn">↩ 撤销一步</button>
+          <button type="button" id="newGameBtn">↻ 重新开局</button>
+        </div>
+        <details class="rules-card">
+          <summary>玩法说明 <span>⌄</span></summary>
+          <ol>
+            <li>红方先走，双方轮流移动一枚自己的棋子。</li>
+            <li>可以移动到相邻空位，也可以隔着任意棋子跳到其后方空位。</li>
+            <li>一次跳跃可以连续跨越多个棋子，界面会直接标出所有可达位置。</li>
+            <li>先把自己的 10 枚棋子全部移入对面营地即可获胜。</li>
+          </ol>
+        </details>
+        <p class="save-note">棋局会自动保存在当前浏览器中，刷新页面也能继续。</p>
+      </aside>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="winner-overlay" id="winnerOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="winnerTitle">
+    <div class="winner-card">
+      <span class="winner-piece" id="winnerPiece" aria-hidden="true"></span>
+      <small>本局结束</small><h2 id="winnerTitle">红方获胜</h2>
+      <p id="winnerText">率先占满了对方营地</p>
+      <button type="button" id="winnerNewBtn">再来一局</button>
+    </div>
+  </div>
+</body>
+</html>
