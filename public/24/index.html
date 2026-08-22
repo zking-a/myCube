@@ -9,6 +9,7 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>24点大挑战 · 好友实时对战</title>
+<link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
 <style>
   /* 注：本文件样式分两块——上方为联机对战/结算等专用类的原定义（.compare-*、.attr-*、.duel-*、.rpt-*、.overlay、.result-*、.act-* 等仅在此处定义，勿删），
      下方“视觉升级”块（:root 平台蓝橘变量 + 首页/对局核心类）覆盖显示。两套共存，已视觉统一，请勿整体删除旧块。 */
@@ -16,7 +17,7 @@
   html, body { margin: 0; padding: 0; }
   html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
   body {
-    font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--ui-font-sans);
     background: linear-gradient(160deg, #dbeafe 0%, #eaf2ff 60%, #fff7e6 100%);
     color: var(--ink); min-height: 100vh;
     display: flex; justify-content: center;
@@ -257,16 +258,16 @@
 
   /* ---------------- 视觉升级：轻量竞技游戏主题 ---------------- */
   :root {
-    --blue: #5668f5;
-    --blue-deep: #3347d8;
-    --orange: #ff8a4c;
-    --green: #18ad78;
-    --yellow: #f6c84c;
+    --blue: var(--ui-primary);
+    --blue-deep: var(--ui-primary-strong);
+    --orange: var(--ui-accent);
+    --green: var(--ui-success);
+    --yellow: var(--ui-warning);
     --bg: #f2f5ff;
-    --card: rgba(255,255,255,.94);
-    --ink: #18233d;
-    --muted: #71809a;
-    --line: #e4e9f5;
+    --card: var(--ui-surface-raised);
+    --ink: var(--ui-text);
+    --muted: var(--ui-text-secondary);
+    --line: var(--ui-border);
   }
   html { background: #eef3ff; }
   body {
@@ -448,13 +449,13 @@
       </div>
     </div>
     <div class="home-modes">
-      <button id="btn-challenge" class="big-btn btn-blue home-mode">
+      <button id="btn-challenge" class="big-btn btn-blue home-mode ui-button ui-button--primary">
         <span class="mode-icon">🎯</span><span class="mode-copy"><strong>闯关模式</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
       </button>
-      <button id="btn-speed" class="big-btn btn-orange home-mode">
+      <button id="btn-speed" class="big-btn btn-orange home-mode ui-button ui-button--accent">
         <span class="mode-icon">⚡</span><span class="mode-copy"><strong>竞速模式</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
       </button>
-      <button id="btn-vs" class="big-btn btn-green home-mode">
+      <button id="btn-vs" class="big-btn btn-green home-mode ui-button ui-button--success">
         <span class="mode-icon">👥</span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
       </button>
     </div>

@@ -1,0 +1,144 @@
+/*
+ * Light Games UI foundation
+ * Shared visual tokens and primitives. Page CSS may map its legacy variables
+ * to these tokens, but must not introduce competing global visual systems.
+ */
+:root {
+  /* Color */
+  --ui-canvas: #eef3ff;
+  --ui-canvas-warm: #fff7ef;
+  --ui-surface: #ffffff;
+  --ui-surface-raised: rgba(255, 255, 255, .94);
+  --ui-surface-soft: #f5f7fc;
+  --ui-surface-selected: #eef1ff;
+  --ui-border: #e1e7f3;
+  --ui-border-strong: #cfd9ee;
+  --ui-primary: #5668f5;
+  --ui-primary-strong: #3347d8;
+  --ui-primary-soft: #e7eaff;
+  --ui-accent: #ff8a4c;
+  --ui-accent-soft: #fff3e6;
+  --ui-success: #18ad78;
+  --ui-warning: #f6c84c;
+  --ui-danger: #e85d64;
+  --ui-text: #18233d;
+  --ui-text-secondary: #71809a;
+  --ui-text-muted: #94a3b8;
+  --ui-text-disabled: #b6c0cf;
+
+  /* Typography */
+  --ui-font-sans: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --ui-font-number: "DIN Alternate", "Arial Narrow", var(--ui-font-sans);
+
+  /* Spacing */
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 24px;
+  --ui-space-6: 32px;
+  --ui-space-7: 48px;
+
+  /* Geometry, elevation, and motion */
+  --ui-radius-sm: 10px;
+  --ui-radius-md: 14px;
+  --ui-radius-lg: 18px;
+  --ui-radius-xl: 24px;
+  --ui-border-width: 1px;
+  --ui-control-min-height: 40px;
+  --ui-shadow-sm: 0 8px 20px rgba(45, 61, 112, .08);
+  --ui-shadow-md: 0 14px 34px rgba(45, 61, 112, .10);
+  --ui-focus-ring: rgba(86, 104, 245, .32);
+  --ui-duration-fast: 120ms;
+  --ui-duration-base: 180ms;
+  --ui-ease-standard: cubic-bezier(.2, .8, .3, 1);
+}
+
+button, input, select, textarea, summary { font: inherit; }
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--ui-focus-ring) !important;
+  outline-offset: 3px;
+}
+
+[hidden] { display: none !important; }
+
+/* Foundation classes for subsequent component migrations. */
+.ui-panel {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface-raised);
+  box-shadow: var(--ui-shadow-md);
+}
+
+.ui-button {
+  min-height: var(--ui-control-min-height);
+  border: var(--ui-border-width) solid transparent;
+  border-radius: var(--ui-radius-md);
+  font-weight: 800;
+  transition: transform var(--ui-duration-fast) var(--ui-ease-standard),
+    background var(--ui-duration-base) var(--ui-ease-standard),
+    border-color var(--ui-duration-base) var(--ui-ease-standard),
+    box-shadow var(--ui-duration-base) var(--ui-ease-standard);
+}
+
+.ui-button--primary {
+  color: #fff;
+  background: linear-gradient(135deg, #6678ff, #4459e6);
+  box-shadow: 0 10px 22px rgba(68, 89, 230, .22);
+}
+
+.ui-button--secondary {
+  border-color: var(--ui-border);
+  color: var(--ui-primary-strong);
+  background: var(--ui-surface-selected);
+}
+
+.ui-button--accent {
+  color: #fff;
+  background: linear-gradient(135deg, #ffa667, var(--ui-accent));
+  box-shadow: 0 10px 22px rgba(244, 122, 66, .20);
+}
+
+.ui-button--success {
+  color: #fff;
+  background: linear-gradient(135deg, #28c98c, #139b6a);
+  box-shadow: 0 10px 22px rgba(19, 155, 106, .20);
+}
+
+.ui-button--danger {
+  color: #fff;
+  background: linear-gradient(135deg, #f07b80, var(--ui-danger));
+}
+
+.ui-button:not(:disabled):active { transform: scale(.98); }
+.ui-button:disabled { cursor: not-allowed; opacity: .48; }
+
+.ui-input {
+  min-height: var(--ui-control-min-height);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-text);
+  background: var(--ui-surface);
+}
+
+.ui-modal {
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: 0 24px 65px rgba(25, 36, 68, .25);
+}
+
+.ui-toast {
+  border-radius: var(--ui-radius-sm);
+  box-shadow: var(--ui-shadow-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

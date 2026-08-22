@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#eef3ff">
   <meta name="description" content="沉浸式中国跳棋棋局。">
   <title>中国跳棋 · 对局</title>
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
   <link rel="stylesheet" href="checkers.css?v=20260823a">
   <script src="checkers_core.js?v=20260823a" defer></script>
   <script src="checkers.js?v=20260823a" defer></script>
@@ -13,7 +14,7 @@
 <body class="play-page">
   <main class="game-shell">
     <header class="game-topbar">
-      <button type="button" class="nav-back" id="exitBtn" aria-label="返回跳棋首页">← 跳棋首页</button>
+      <button type="button" class="nav-back ui-button ui-button--secondary" id="exitBtn" aria-label="返回跳棋首页">← 跳棋首页</button>
       <div class="game-title"><span>Chinese Checkers</span><strong>中国跳棋</strong></div>
       <div class="top-actions"><span class="mode-badge" id="modeBadge">人机对战</span><button type="button" class="sound-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效">🔊</button></div>
     </header>
@@ -21,8 +22,8 @@
     <section class="online-room-bar" id="onlineRoomBar" hidden aria-label="联机房间">
       <div><small>房间码</small><strong id="roomCodeText">-----</strong></div>
       <p id="onlineStatus" role="status" aria-live="polite">正在连接服务器…</p>
-      <button type="button" id="copyInviteBtn">复制邀请</button>
-      <button type="button" id="leaveRoomBtn">退出房间</button>
+      <button type="button" class="ui-button ui-button--secondary" id="copyInviteBtn">复制邀请</button>
+      <button type="button" class="ui-button ui-button--danger" id="leaveRoomBtn">退出房间</button>
     </section>
 
     <section class="game-layout" aria-label="中国跳棋棋局">
@@ -62,8 +63,8 @@
         </section>
 
         <div class="control-grid">
-          <button type="button" id="undoBtn"><span>↩</span> 撤销一步</button>
-          <button type="button" id="newGameBtn"><span>↻</span> 重新开局</button>
+          <button type="button" class="ui-button ui-button--secondary" id="undoBtn"><span>↩</span> 撤销一步</button>
+          <button type="button" class="ui-button ui-button--secondary" id="newGameBtn"><span>↻</span> 重新开局</button>
         </div>
 
         <section class="guide-card">
@@ -90,11 +91,11 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="winner-overlay" id="winnerOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="winnerTitle">
-    <div class="winner-card">
+    <div class="winner-card ui-modal">
       <span class="winner-piece" id="winnerPiece" aria-hidden="true"></span>
       <small>本局结束</small><h2 id="winnerTitle">红方获胜</h2>
       <p id="winnerText">率先占满了对方营地</p>
-      <button type="button" id="winnerNewBtn">再来一局</button>
+      <button type="button" class="ui-button ui-button--primary" id="winnerNewBtn">再来一局</button>
     </div>
   </div>
 </body>

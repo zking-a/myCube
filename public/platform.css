@@ -1,8 +1,8 @@
 :root {
-  --ink: #18233d;
-  --muted: #71809a;
-  --blue: #5668f5;
-  --blue-deep: #3347d8;
+  --ink: var(--ui-text);
+  --muted: var(--ui-text-secondary);
+  --blue: var(--ui-primary);
+  --blue-deep: var(--ui-primary-strong);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -12,7 +12,7 @@ body {
   position: relative;
   overflow-x: hidden;
   color: var(--ink);
-  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--ui-font-sans);
   background:
     radial-gradient(circle at 10% 6%, rgba(91,108,255,.18), transparent 28%),
     radial-gradient(circle at 92% 18%, rgba(255,159,100,.16), transparent 30%),

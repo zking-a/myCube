@@ -1,13 +1,13 @@
 :root {
-  --ink:#17213a; --muted:#71809a; --blue:#2f80ed; --blue-deep:#3159db;
-  --orange:#f2994a; --green:#27ae60; --red:#ef5b5b; --red-deep:#c93648;
+  --ink:var(--ui-text); --muted:var(--ui-text-secondary); --blue:var(--ui-primary); --blue-deep:var(--ui-primary-strong);
+  --orange:var(--ui-accent); --green:var(--ui-success); --red:var(--ui-danger); --red-deep:#c93648;
   --piece-blue:#5577f5; --piece-blue-deep:#304bc9; --line:#dfe7f4;
-  --card:rgba(255,255,255,.94); --shadow:0 18px 46px rgba(39,65,118,.12);
+  --card:var(--ui-surface-raised); --shadow:0 18px 46px rgba(39,65,118,.12);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html,body{min-height:100%;margin:0}html{-webkit-text-size-adjust:100%;background:#edf3ff}
-body{color:var(--ink);font-family:"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;background:radial-gradient(circle at 8% 4%,rgba(47,128,237,.17),transparent 26%),radial-gradient(circle at 94% 14%,rgba(242,153,74,.15),transparent 28%),linear-gradient(155deg,#e8f1ff 0%,#f7f9ff 54%,#fff7ea 100%)}
+body{color:var(--ink);font-family:var(--ui-font-sans);background:radial-gradient(circle at 8% 4%,rgba(47,128,237,.17),transparent 26%),radial-gradient(circle at 94% 14%,rgba(242,153,74,.15),transparent 28%),linear-gradient(155deg,#e8f1ff 0%,#f7f9ff 54%,#fff7ea 100%)}
 button,a,input,summary{font:inherit}button{touch-action:manipulation}.red{background:linear-gradient(145deg,#ff8d83,var(--red-deep))}.blue{background:linear-gradient(145deg,#84a4ff,var(--piece-blue-deep))}
 
 /* ---------- 模式大厅 ---------- */
