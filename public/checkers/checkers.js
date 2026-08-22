@@ -148,6 +148,22 @@ function orientedPoint(key) {
   return cell ? Core.orientPoint(cell, viewPlayer) : null;
 }
 
+function drawBoardZones(board) {
+  const zones = [
+    { className: 'red-goal-zone', keys: ['16:0', '13:-3', '13:3'] },
+    { className: 'blue-goal-zone', keys: ['0:0', '3:-3', '3:3'] }
+  ];
+  const group = svgElement('g'); group.classList.add('board-zones'); group.setAttribute('aria-hidden', 'true');
+  zones.forEach(function (zone) {
+    const points = zone.keys.map(orientedPoint).filter(Boolean);
+    if (points.length !== 3) return;
+    const shape = svgElement('polygon'); shape.classList.add('board-zone', zone.className);
+    shape.setAttribute('points', points.map(function (point) { return point.x + ',' + point.y; }).join(' '));
+    group.appendChild(shape);
+  });
+  board.appendChild(group);
+}
+
 function drawLastMove(board) {
   if (!lastMove || !Array.isArray(lastMove.path)) return;
   const points = lastMove.path.map(orientedPoint).filter(Boolean);
@@ -174,6 +190,7 @@ function cellLabel(cell, owner, moveKind) {
 function renderBoard() {
   const board = $('board'); board.replaceChildren();
   const defs = svgElement('defs'); appendGradient(defs, 'redPieceGradient', '#ff9a8f', '#c93648'); appendGradient(defs, 'bluePieceGradient', '#91adff', '#304bc9'); board.appendChild(defs);
+  drawBoardZones(board);
   drawLastMove(board);
   const stepSet = new Set(legalMoves.steps); const jumpSet = new Set(legalMoves.jumps);
   const keyboardFocusKey = selectedKey || Object.keys(pieces).find(function (key) { return pieces[key] === turn; }) || BOARD_CELLS[0].key;

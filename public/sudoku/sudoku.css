@@ -347,14 +347,6 @@ body{
   display: flex; align-items: center; justify-content: center;
   gap: clamp(5px,2vw,10px); flex-wrap: wrap;
 }
-.bottom-bar .difficulty-select{
-  flex:1 1 210px;
-  padding: clamp(6px,1.5vw,9px) clamp(8px,2vw,14px);
-  border-radius: 8px; border: 1.5px solid var(--btn-border);
-  background: var(--btn-bg); color: var(--text-primary); font-size: clamp(12px,3.5vw,14px);
-  outline: none;
-}
-.bottom-bar .difficulty-select option{ background: var(--bg-card); color: var(--text-primary); }
 .bottom-bar button{
   padding: clamp(6px,1.5vw,9px) clamp(10px,2.5vw,16px);
   border: 1.5px solid var(--btn-border); border-radius: var(--ui-radius-sm);
@@ -375,11 +367,10 @@ body{
 .advanced-tools>.bottom-bar,.advanced-tools>.tool-label{ width:auto; margin-left:10px; margin-right:10px; }
 .advanced-tools>.bottom-bar:last-child{ margin-bottom:11px; }
 .secondary-tools .danger-tool{ color:var(--error-text); }
-.new-game-tools{ display:grid; grid-template-columns:1fr; }
 .tech-hint-body{ font-size:14px; line-height:1.8; color:var(--text-primary); padding:10px 0; }
 .share-canvas{ display:block; width:100%; border-radius:12px; margin:10px 0; }
 .finish-share-btn{ margin-top:9px; padding:7px 18px; border:0; border-radius:9px; background:linear-gradient(135deg,#6678ff,#4459e6); color:#fff; font-size:14px; font-weight:800; cursor:pointer; }
-.platform-back:focus-visible,.icon-btn:focus-visible,.bottom-bar button:focus-visible,.difficulty-select:focus-visible,.keypad button:focus-visible{ outline:3px solid rgba(86,104,245,.28); outline-offset:2px; }
+.platform-back:focus-visible,.icon-btn:focus-visible,.bottom-bar button:focus-visible,.keypad button:focus-visible{ outline:3px solid rgba(86,104,245,.28); outline-offset:2px; }
 .cell:focus-visible:not(.selected){ outline:3px solid rgba(86,104,245,.38); outline-offset:-3px; }
 .bottom-bar button:active{ transform: scale(.95); }
 .bottom-bar button:hover{ background: var(--btn-hover); border-color: var(--accent); }
@@ -516,8 +507,6 @@ body.dark .keypad button.recommended{ background: #0f2922; color: #22c55e; borde
 body.dark .keypad button.used-up{ background: var(--keypad-used) !important; color: var(--keypad-used-text) !important; border-color: var(--btn-border) !important; }
 body.dark .keypad button.clear-btn{ background: var(--btn-bg); color: var(--error-text); border-color: rgba(248,113,113,.3); }
 body.dark .keypad button.clear-btn:hover{ background: rgba(248,113,113,.1); }
-body.dark .bottom-bar .difficulty-select{ background: var(--btn-bg); border-color: var(--btn-border); color: var(--btn-text); }
-body.dark .bottom-bar .difficulty-select option{ background: var(--bg-card); color: var(--text-primary); }
 body.dark .bottom-bar button{ background: var(--btn-bg); border-color: var(--btn-border); color: var(--accent); }
 body.dark .bottom-bar button:hover{ background: var(--btn-hover); }
 body.dark .bottom-bar button.active-btn{ background: rgba(255,154,92,.15); border-color: var(--accent); color: var(--accent); }

@@ -1238,7 +1238,7 @@ function generateShareImg() {
   const canvas = $("shareCanvas");
   const ctx = canvas.getContext("2d");
   const diffNames = ["简单","中等","困难","专家","极限"];
-  const diff = diffNames[parseInt($("diffSelect").value) || 0];
+  const diff = diffNames[normalizeDifficulty(currentDifficulty)];
 
   /* 背景 */
   ctx.fillStyle = "#f0fafd";
@@ -1605,7 +1605,8 @@ function resumeGame() {
   history = [];
 
   syncAssistButtons();
-  $("diffSelect").value = String(currentDifficulty);
+  selectHomeDifficulty(currentDifficulty);
+  syncGameDifficulty();
 
   showGameScreen(true);
   startTimer();
@@ -1718,8 +1719,7 @@ function hideToast() {
   本区函数清单：
   | 函数名          | 参数 | 功能简述                    |
   |------------------|------|-----------------------------|
-  | newGame          | —    | 开始新游戏                  |
-  | onDifficultyChange | —   | 难度下拉框变更回调          |
+  | newGame          | 难度 | 按大厅选择开始新游戏         |
   | startTimer       | —    | 启动计时器                  |
   | stopTimer        | —    | 停止计时器                  |
   | checkWinAndFinish | —   | 检查是否获胜并触发完成流程  |
@@ -1734,8 +1734,13 @@ function syncHomeDifficulty() {
 
 function selectHomeDifficulty(value) {
   homeDifficulty = normalizeDifficulty(value);
-  $("diffSelect").value = String(homeDifficulty);
   syncHomeDifficulty();
+}
+
+function syncGameDifficulty() {
+  const badge = $("gameDifficulty");
+  if (!badge) return;
+  badge.textContent = ["简单", "中等", "困难", "专家", "极限"][normalizeDifficulty(currentDifficulty)] + " · Puzzle Sudoku";
 }
 
 function setHomeNewGameConfig(open) {
@@ -1794,14 +1799,8 @@ function canReplaceCurrentGame() {
 
 function startHomeGame() {
   if (!canReplaceCurrentGame()) return;
-  $("diffSelect").value = String(homeDifficulty);
   showGameScreen(true);
-  newGame();
-}
-
-function requestNewGame() {
-  if (!canReplaceCurrentGame()) return;
-  newGame();
+  newGame(homeDifficulty);
 }
 
 function requestClearBoard() {
@@ -1866,10 +1865,10 @@ function checkWinAndFinish() {
   clearSave();
 }
 
-function newGame() {
+function newGame(difficulty) {
   stopTimer();
   clearSave();
-  const idx = normalizeDifficulty($("diffSelect").value);
+  const idx = normalizeDifficulty(difficulty == null ? homeDifficulty : difficulty);
   currentDifficulty = idx;
   solution      = generateSolution();
   givens       = generateGivens(solution, idx);
@@ -1889,6 +1888,7 @@ function newGame() {
   startTimer();
 
   hideToast();
+  syncGameDifficulty();
   syncAssistButtons();
   $("finishMsg").style.display = "none";
   renderBoard();
@@ -1897,10 +1897,6 @@ function newGame() {
   updateTimer();
   clearKeypadRecommend();
   autoSave();
-}
-
-function onDifficultyChange() {
-  selectHomeDifficulty($("diffSelect").value);
 }
 
 /* ========== SECTION 20: 键盘事件 ========== */
@@ -1998,8 +1994,6 @@ function bindUiEvents() {
   document.querySelectorAll("#homeDifficulty [data-diff]").forEach(btn => {
     btn.addEventListener("click", () => selectHomeDifficulty(btn.dataset.diff));
   });
-  $("diffSelect").addEventListener("change", onDifficultyChange);
-  $("newGameBtn").addEventListener("click", requestNewGame);
   $("noteBtn").addEventListener("click", toggleNoteMode);
   $("candBtn").addEventListener("click", toggleShowAllCands);
   $("undoBtn").addEventListener("click", undo);

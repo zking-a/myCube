@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a"/>
-<link rel="stylesheet" href="sudoku.css?v=20260824a"/>
+<link rel="stylesheet" href="sudoku.css?v=20260822d"/>
 </head>
 <body>
 
@@ -74,7 +74,7 @@
   <header class="topbar">
     <button type="button" class="game-home-btn ui-button ui-button--secondary" id="gameHomeBtn" aria-label="返回数独首页">← 数独首页</button>
     <div class="title-wrap">
-      <span class="eyebrow">Puzzle Sudoku</span>
+      <span class="eyebrow" id="gameDifficulty">简单 · Puzzle Sudoku</span>
       <div class="title">数独挑战</div>
     </div>
     <div class="top-actions">
@@ -107,23 +107,12 @@
         <button type="button" id="hintBtn">💡 提示</button>
       </div>
       <details class="advanced-tools">
-        <summary>更多辅助与新局 <span>⌄</span></summary>
+        <summary>更多辅助 <span>⌄</span></summary>
         <div class="bottom-bar tool-grid secondary-tools">
           <button type="button" id="techHintBtn" title="技巧提示">🧠 技巧</button>
           <button type="button" id="statsBtn">▥ 统计</button>
           <button type="button" id="autoFillBtn" aria-pressed="false" title="自动填入唯一候选">⚡ 自动填入：关</button>
           <button type="button" id="clearBoardBtn" class="danger-tool">⌫ 清空填写</button>
-        </div>
-        <div class="tool-label">难度与新局</div>
-        <div class="bottom-bar new-game-tools">
-          <select class="difficulty-select" id="diffSelect" aria-label="选择数独难度">
-            <option value="0">简单 · 40 个已知数</option>
-            <option value="1">中等 · 34 个已知数</option>
-            <option value="2">困难 · 30 个已知数</option>
-            <option value="3">专家 · 26 个已知数</option>
-            <option value="4">极限 · 23 个已知数</option>
-          </select>
-          <button type="button" class="primary-tool ui-button ui-button--primary" id="newGameBtn">开始新局</button>
         </div>
       </details>
     </aside>
@@ -172,6 +161,6 @@
   </div>
 </div>
 
-<script src="sudoku.js?v=20260821h"></script>
+<script src="sudoku.js?v=20260822d"></script>
 </body>
 </html>

@@ -196,16 +196,108 @@
     return forward * 9 + targetGoal * 80 - leavingGoal * 110 + centerGain * .7 + (move.kind === 'jump' ? 5 : 0);
   }
 
+  function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
+
+  function distanceToGoal(cell, player) {
+    let shortest = Infinity;
+    goalFor(player).forEach(function (goalKey) {
+      const goal = CELL_MAP.get(goalKey);
+      const rowDistance = Math.abs(cell.row - goal.row);
+      const unitDistance = Math.abs(cell.unit - goal.unit) / 2;
+      shortest = Math.min(shortest, rowDistance * 1.25 + unitDistance * .58);
+    });
+    return shortest;
+  }
+
+  function playerPosition(pieces, player) {
+    let forward = 0;
+    let distance = 0;
+    let inGoal = 0;
+    Object.keys(pieces).forEach(function (key) {
+      if (pieces[key] !== player) return;
+      const cell = CELL_MAP.get(key);
+      forward += player === 'red' ? cell.row : (16 - cell.row);
+      distance += distanceToGoal(cell, player);
+      if (goalFor(player).has(key)) inGoal++;
+    });
+    return { forward: forward, distance: distance, inGoal: inGoal };
+  }
+
+  // 静态局面分：优先把棋子送进目标营地，其次压缩到目标营地的总距离。
+  // 这比只看一枚棋子的一步前进更能避免电脑在边线与营地入口来回兜圈。
+  function evaluatePosition(pieces, perspective) {
+    const mine = playerPosition(pieces, perspective);
+    const theirs = playerPosition(pieces, opposite(perspective));
+    return (mine.inGoal - theirs.inGoal) * 260 +
+      (mine.forward - theirs.forward) * 7 +
+      (theirs.distance - mine.distance) * 6;
+  }
+
+  function orderedMoves(pieces, player, limit) {
+    return listMoves(pieces, player)
+      .map(function (move) { return { move: move, score: moveScore(pieces, player, move) }; })
+      .sort(function (a, b) { return b.score - a.score; })
+      .slice(0, Math.max(1, limit))
+      .map(function (item) { return item.move; });
+  }
+
+  // 受预算保护的深度优先极大极小搜索。跳棋分支会在中局膨胀，
+  // 因而结合 alpha-beta 剪枝、走法排序和节点上限，而非全盘暴力枚举。
+  function dfsSearch(pieces, activePlayer, perspective, depth, alpha, beta, context) {
+    if (depth <= 0 || context.nodes >= context.maxNodes) return evaluatePosition(pieces, perspective);
+    context.nodes++;
+    const moves = orderedMoves(pieces, activePlayer, context.widths[Math.min(context.widths.length - 1, context.ply)]);
+    if (!moves.length) return evaluatePosition(pieces, perspective);
+    const maximizing = activePlayer === perspective;
+    let best = maximizing ? -Infinity : Infinity;
+    for (let i = 0; i < moves.length; i++) {
+      if (context.nodes >= context.maxNodes) break;
+      const result = applyMove(pieces, activePlayer, moves[i].from, moves[i].target);
+      if (!result) continue;
+      let score;
+      if (result.winner) {
+        score = result.winner === perspective ? 100000 + depth : -100000 - depth;
+      } else {
+        context.ply++;
+        score = dfsSearch(result.pieces, opposite(activePlayer), perspective, depth - 1, alpha, beta, context);
+        context.ply--;
+      }
+      if (maximizing) {
+        best = Math.max(best, score); alpha = Math.max(alpha, best);
+      } else {
+        best = Math.min(best, score); beta = Math.min(beta, best);
+      }
+      if (beta <= alpha) break;
+    }
+    return best === Infinity || best === -Infinity ? evaluatePosition(pieces, perspective) : best;
+  }
+
+  function aiSearchOptions(level) {
+    if (level === 'hard') return { depth: 3, maxNodes: 3600, widths: [20, 14, 12] };
+    return { depth: 2, maxNodes: 700, widths: [14, 12] };
+  }
+
   function chooseAiMove(pieces, player, level, randomFn) {
     const moves = listMoves(pieces, player);
     if (!moves.length) return null;
     const random = typeof randomFn === 'function' ? randomFn : Math.random;
     if (level === 'easy') return moves[Math.floor(random() * moves.length)];
-    const ranked = moves.map(function (move) {
-      return { move: move, score: moveScore(pieces, player, move) + random() * (level === 'hard' ? 1.5 : 7) };
-    }).sort(function (a, b) { return b.score - a.score; });
-    const poolSize = level === 'hard' ? Math.min(2, ranked.length) : Math.min(5, ranked.length);
-    return ranked[Math.floor(random() * poolSize)].move;
+    const options = aiSearchOptions(level);
+    const context = { nodes: 0, maxNodes: options.maxNodes, widths: options.widths, ply: 1 };
+    const candidates = orderedMoves(pieces, player, options.widths[0]);
+    let bestScore = -Infinity;
+    let bestMoves = [];
+    candidates.forEach(function (move) {
+      if (context.nodes >= context.maxNodes) return;
+      const result = applyMove(pieces, player, move.from, move.target);
+      if (!result) return;
+      const score = result.winner
+        ? 100000
+        : dfsSearch(result.pieces, opposite(player), player, options.depth - 1, -Infinity, Infinity, context);
+      if (score > bestScore) { bestScore = score; bestMoves = [move]; }
+      else if (score === bestScore) bestMoves.push(move);
+    });
+    return bestMoves.length ? bestMoves[Math.floor(random() * bestMoves.length)] : moves[0];
   }
 
   return {
@@ -216,6 +308,7 @@
     getLegalMoves: getLegalMoves, findMovePath: findMovePath, applyMove: applyMove,
     countInGoal: countInGoal, hasWon: hasWon, orientPoint: orientPoint,
     sanitizePieces: sanitizePieces, sanitizeState: sanitizeState, sanitizeLastMove: sanitizeLastMove,
-    listMoves: listMoves, chooseAiMove: chooseAiMove
+    listMoves: listMoves, moveScore: moveScore, evaluatePosition: evaluatePosition,
+    chooseAiMove: chooseAiMove
   };
 });
