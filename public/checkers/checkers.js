@@ -443,7 +443,7 @@ function init() {
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
   $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
   $('onlineRoomBar').hidden = mode !== 'online';
-  $('modeBadge').textContent = mode === 'ai' ? '🤖 人机 · ' + ({ easy:'轻松', normal:'标准', hard:'困难' }[aiLevel]) : (mode === 'local' ? '👥 本地双人' : '🌐 好友联机');
+  $('modeBadge').textContent = mode === 'ai' ? '🤖 人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难' }[aiLevel]) : (mode === 'local' ? '👥 本地双人' : '🌐 好友对战');
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 

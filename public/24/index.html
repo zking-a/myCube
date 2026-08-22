@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#eef3ff" />
-<meta name="description" content="用四个数字凑出 24，支持闯关、竞速和好友实时联机对战。" />
+<meta name="description" content="用四个数字凑出 24，支持闯关、竞速和好友实时对战。" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
@@ -386,6 +386,20 @@
     border: 1px solid #dfe5f2; background: #f8faff; box-shadow: inset 0 1px 2px rgba(36,50,91,.035);
   }
   .field input:focus, .copybox input:focus { border-color: #8996ff; box-shadow: 0 0 0 4px rgba(86,104,245,.1); }
+  .vs-entry-panel { padding: 16px; }
+  .vs-entry-panel .field { margin-bottom: 12px; }
+  .vs-intent-menu { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .vs-intent { display:flex; min-height:76px; flex-direction:column; align-items:flex-start; justify-content:center; padding:12px; border:1px solid #dfe6f2; border-radius:14px; color:#52617b; background:#fff; cursor:pointer; text-align:left; transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease; }
+  .vs-intent:hover { transform:translateY(-1px); border-color:#b8c5ed; box-shadow:0 8px 16px rgba(42,59,105,.08); }
+  .vs-intent strong { font-size:13px; font-weight:900; }
+  .vs-intent small { margin-top:4px; color:#8491a6; font-size:10px; font-weight:700; line-height:1.4; }
+  .vs-create-intent { border-color:#ccebdc; background:#f2fbf6; }
+  .vs-create-intent strong { color:#17885b; }
+  .vs-join-intent { border-color:#d8dfff; background:#f5f7ff; }
+  .vs-join-intent strong { color:#5066dc; }
+  .vs-join-config { margin-top:10px; padding:12px; border:1px solid #d8dfff; border-radius:14px; background:#f8f9ff; animation:menuConfigIn .18s ease both; }
+  .vs-join-config .field { margin-bottom:9px; }
+  @keyframes menuConfigIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:none; } }
   .room-code {
     width: fit-content; margin: 7px auto 10px; padding: 10px 17px; border-radius: 16px;
     color: var(--blue-deep); background: linear-gradient(135deg,#f0f2ff,#f8f9ff); border: 1px dashed #aeb8ff;
@@ -428,6 +442,7 @@
     .op-btn { height: 55px; min-width: 48px; }
     .room-code { font-size: 34px; letter-spacing: 6px; }
     .rule-steps { gap: 6px; }
+    .vs-intent { min-height:70px; padding:11px; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
@@ -450,10 +465,10 @@
     </div>
     <div class="home-modes">
       <button id="btn-challenge" class="big-btn btn-blue home-mode ui-button ui-button--primary">
-        <span class="mode-icon">🎯</span><span class="mode-copy"><strong>闯关模式</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon">🎯</span><span class="mode-copy"><strong>闯关挑战</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-speed" class="big-btn btn-orange home-mode ui-button ui-button--accent">
-        <span class="mode-icon">⚡</span><span class="mode-copy"><strong>竞速模式</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon">⚡</span><span class="mode-copy"><strong>竞速挑战</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-vs" class="big-btn btn-green home-mode ui-button ui-button--success">
         <span class="mode-icon">👥</span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
@@ -529,7 +544,7 @@
 
   <!-- 竞速准备 -->
   <section id="view-speedready" class="view">
-    <div class="topbar"><button id="sr-back" class="back">← 返回</button><div class="title">竞速模式</div></div>
+    <div class="topbar"><button id="sr-back" class="back">← 返回</button><div class="title">竞速挑战</div></div>
     <div class="panel rules">
       <b>规则</b><br/>
       · 连续 10 道随机题目，越快越好；<br/>
@@ -590,21 +605,26 @@
   <section id="view-vs" class="view">
     <div class="topbar">
       <button id="vs-back" class="back">← 返回</button>
-      <div class="title">联机对战</div>
+      <div class="title">好友对战</div>
       <span id="vs-netstate" class="net-badge net-wait">检测中</span>
     </div>
 
-    <div class="panel">
+    <div class="panel vs-entry-panel">
       <div class="field">
         <label>你的昵称（朋友会看到）</label>
         <input id="vs-nick" maxlength="10" placeholder="例如：小明" />
       </div>
-      <button id="vs-create" class="big-btn btn-green">🎲 创建房间</button>
-      <div class="field" style="margin-top:6px;">
-        <label>或输入朋友给你的房间码</label>
-        <input id="vs-code" class="code-input" maxlength="5" placeholder="ABCDE" />
+      <div class="vs-intent-menu" role="group" aria-label="选择联机方式">
+        <button id="vs-create" class="vs-intent vs-create-intent"><strong>创建房间</strong><small>生成邀请，等朋友加入</small></button>
+        <button id="vs-open-join" class="vs-intent vs-join-intent" aria-expanded="false" aria-controls="vs-join-config"><strong>加入朋友房间</strong><small>输入收到的房间码</small></button>
       </div>
-      <button id="vs-join" class="big-btn btn-blue">🚪 加入房间</button>
+      <section id="vs-join-config" class="vs-join-config" hidden aria-label="加入朋友房间">
+        <div class="field">
+          <label>朋友给你的房间码</label>
+          <input id="vs-code" class="code-input" maxlength="5" placeholder="ABCDE" />
+        </div>
+        <button id="vs-join" class="big-btn btn-blue">加入房间 <span aria-hidden="true">→</span></button>
+      </section>
     </div>
 
     <div class="panel">
@@ -766,6 +786,6 @@
 <script src="core.js?v=20260814b"></script>
 <script src="data.js?v=20260814c"></script>
 <script src="net.js?v=20260821b"></script>
-<script src="game.js?v=20260821b"></script>
+<script src="game.js?v=20260822c"></script>
 </body>
 </html>

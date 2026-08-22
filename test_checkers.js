@@ -111,8 +111,8 @@ const reconnectDelays = [1, 2, 4, 12].map(function (attempt) { return T.reconnec
 ok('断线重连使用有上限的指数退避，而不是固定频率重试',
   reconnectDelays[0] === 800 && reconnectDelays[1] === 1360 &&
   reconnectDelays[2] > reconnectDelays[1] && reconnectDelays[3] === 10000);
-ok('游戏平台卡片已展示人机与在线联机能力',
-  /href="checkers\/index\.html"/.test(platformHtml) && /人机挑战/.test(platformHtml) && /在线联机/.test(platformHtml));
+ok('游戏平台卡片已展示人机与好友对战能力',
+  /href="checkers\/index\.html"/.test(platformHtml) && /人机对战/.test(platformHtml) && /好友对战/.test(platformHtml));
 ok('服务器加载同一规则核心并提供权威跳棋 WebSocket',
   /require\('\.\/public\/checkers\/checkers_core'\)/.test(serverSource) &&
   /pathname === '\/checkers-ws'/.test(serverSource) &&

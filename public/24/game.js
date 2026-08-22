@@ -650,15 +650,25 @@
     else { el.className = 'net-badge net-off'; el.textContent = '离线练习'; }
   }
 
+  function setVsJoinConfig(open) {
+    var config = $('vs-join-config');
+    var trigger = $('vs-open-join');
+    if (!config || !trigger) return;
+    config.hidden = !open;
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
   // ---- 大厅 ----
   function openVsLobby() {
     var nick = Net.getNick(); if (nick) $('vs-nick').value = nick;
     var invite = Net.readInviteCode();
     if (invite) {
       $('vs-code').value = invite;
-      $('vs-join').textContent = '🚪 加入房间 ' + invite;
+      $('vs-join').textContent = '加入房间 ' + invite;
+      setVsJoinConfig(true);
     } else {
-      $('vs-join').textContent = '🚪 加入房间';
+      $('vs-join').textContent = '加入房间 →';
+      setVsJoinConfig(false);
     }
     var srv = Net.getServerUrl(); if (srv) $('vs-server').value = srv;
     if (Net.canUseOnline()) {
@@ -1277,7 +1287,7 @@
     var link = $('vr-link').value;
     var text = '来和我玩 24 点！房间码 ' + vsState.room;
     if (navigator.share && !/^\(本地文件/.test(link)) {
-      navigator.share({ title: '24点联机对战', text: text, url: link }).catch(function () {});
+      navigator.share({ title: '24点好友对战', text: text, url: link }).catch(function () {});
     } else {
       copyText(text + ' ' + link);
       $('vr-copy').textContent = '已复制';
@@ -1376,10 +1386,19 @@
     $('btn-vs').onclick = openVsLobby;
     $('vs-back').onclick = leaveVs;
     $('vs-create').onclick = createVsRoom;
+    $('vs-open-join').onclick = function () {
+      var opening = $('vs-join-config').hidden;
+      setVsJoinConfig(opening);
+      if (opening) $('vs-code').focus();
+    };
     $('vs-join').onclick = joinVsRoom;
     $('vs-code').oninput = function () { this.value = Net.normalizeRoomCode(this.value); };
     $('vs-code').onkeydown = function (e) { if (e.key === 'Enter') joinVsRoom(); };
-    $('vs-nick').onkeydown = function (e) { if (e.key === 'Enter' && Net.isValidRoomCode(Net.normalizeRoomCode($('vs-code').value))) joinVsRoom(); };
+    $('vs-nick').onkeydown = function (e) {
+      if (e.key !== 'Enter') return;
+      if (!($('vs-join-config').hidden) && Net.isValidRoomCode(Net.normalizeRoomCode($('vs-code').value))) joinVsRoom();
+      else { setVsJoinConfig(true); $('vs-code').focus(); }
+    };
     $('vr-back').onclick = leaveVs;
     $('vr-start').onclick = vsStart;
     $('vr-copy').onclick = shareVsInvite;

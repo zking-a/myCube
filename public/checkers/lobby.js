@@ -28,9 +28,21 @@ function randomRoom() {
 
 function showError(message) {
   const error = $('fieldError');
-  if (message) setModeConfig('online');
+  if (message) {
+    setModeConfig('online');
+    setOnlineJoinConfig(true);
+  }
   error.textContent = message;
   error.hidden = !message;
+}
+
+function setOnlineJoinConfig(open) {
+  const config = $('joinRoomConfig');
+  const trigger = $('openJoinRoomBtn');
+  if (!config || !trigger) return;
+  const visible = Boolean(open) && !$('onlineCard').hidden;
+  config.hidden = !visible;
+  trigger.setAttribute('aria-expanded', visible ? 'true' : 'false');
 }
 
 function setModeConfig(mode) {
@@ -40,6 +52,7 @@ function setModeConfig(mode) {
   $('onlineCard').hidden = !onlineOpen;
   $('selectAiBtn').setAttribute('aria-expanded', aiOpen ? 'true' : 'false');
   $('selectOnlineBtn').setAttribute('aria-expanded', onlineOpen ? 'true' : 'false');
+  setOnlineJoinConfig(false);
 }
 
 function toggleModeConfig(mode) {
@@ -80,7 +93,7 @@ function init() {
   selectLevel(aiLevel);
   $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
   $('startAiLabel').textContent = hasSavedGame('ai') ? '继续人机对战' : '开始人机对战';
-  $('startLocalLabel').textContent = hasSavedGame('local') ? '继续本地对战' : '开始本地对战';
+  $('startLocalLabel').textContent = hasSavedGame('local') ? '继续本地双人' : '本地双人';
 
   const launchParams = new URLSearchParams(location.search);
   const invitedRoom = normalizeRoom(launchParams.get('room'));
@@ -88,12 +101,14 @@ function init() {
   if (invitedRoom) {
     $('roomInput').value = invitedRoom;
     setModeConfig('online');
+    setOnlineJoinConfig(true);
     $('onlineCard').classList.add('invited');
     setTimeout(function () { $('onlineCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
   }
   if (launchError) {
     showError(launchError);
     setModeConfig('online');
+    setOnlineJoinConfig(true);
     $('onlineCard').classList.add('invited');
     setTimeout(function () { $('onlineCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
   }
@@ -103,6 +118,11 @@ function init() {
   });
   $('selectAiBtn').addEventListener('click', function () { toggleModeConfig('ai'); });
   $('selectOnlineBtn').addEventListener('click', function () { toggleModeConfig('online'); });
+  $('openJoinRoomBtn').addEventListener('click', function () {
+    const opening = $('joinRoomConfig').hidden;
+    setOnlineJoinConfig(opening);
+    if (opening) $('roomInput').focus();
+  });
   $('roomInput').addEventListener('input', function () {
     $('roomInput').value = normalizeRoom($('roomInput').value);
     showError('');
