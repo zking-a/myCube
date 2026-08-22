@@ -1738,6 +1738,14 @@ function selectHomeDifficulty(value) {
   syncHomeDifficulty();
 }
 
+function setHomeNewGameConfig(open) {
+  const config = $("newGameConfig");
+  const trigger = $("openNewGameBtn");
+  if (!config || !trigger) return;
+  config.hidden = !open;
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
 function showGameScreen(pushState) {
   $("sudokuHome").hidden = true;
   $("sudokuGame").hidden = false;
@@ -1770,6 +1778,7 @@ function showSudokuHome(updateUrl) {
   document.body.classList.remove("playing");
   $("sudokuGame").hidden = true;
   $("sudokuHome").hidden = false;
+  setHomeNewGameConfig(false);
   checkResume();
   if (updateUrl && window.history && location.hash === "#play") {
     window.history.replaceState({ sudoku: "home" }, "", location.pathname + location.search);
@@ -1981,6 +1990,9 @@ function bindUiEvents() {
   $("fullscreenBtn").addEventListener("click", toggleFullscreenMode);
   $("gameHomeBtn").addEventListener("click", () => showSudokuHome(true));
   $("homeStartBtn").addEventListener("click", startHomeGame);
+  $("openNewGameBtn").addEventListener("click", () => {
+    setHomeNewGameConfig($("newGameConfig").hidden);
+  });
   $("homeResumeBtn").addEventListener("click", resumeGame);
   $("homeStatsBtn").addEventListener("click", showStats);
   document.querySelectorAll("#homeDifficulty [data-diff]").forEach(btn => {

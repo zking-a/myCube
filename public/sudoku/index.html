@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a"/>
-<link rel="stylesheet" href="sudoku.css?v=20260821h"/>
+<link rel="stylesheet" href="sudoku.css?v=20260824a"/>
 </head>
 <body>
 
@@ -31,34 +31,37 @@
   </nav>
   <div class="home-hero">
     <div class="home-logo" aria-hidden="true"><span>九</span></div>
-    <span class="home-eyebrow">Puzzle Sudoku</span>
-    <h1 id="sudokuHomeTitle">数独挑战</h1>
-    <p>一次专注一盘，在九宫格里找回秩序</p>
+    <div class="home-heading"><span class="home-eyebrow">Puzzle Sudoku</span><h1 id="sudokuHomeTitle">数独挑战</h1><p>一次专注一盘，在九宫格里找回秩序</p></div>
   </div>
 
-  <article class="resume-card" id="homeResumeCard" hidden>
-    <div class="resume-copy">
-      <span class="resume-kicker">进度已自动保存</span>
-      <strong id="homeResumeTitle">继续上局</strong>
-      <span id="homeResumeMeta">简单 · 00:00 · 完成 0%</span>
-    </div>
-    <button type="button" class="ui-button ui-button--accent" id="homeResumeBtn">继续 <b>→</b></button>
-  </article>
+  <div class="sudoku-menu">
+    <article class="resume-card resume-entry" id="homeResumeCard" hidden>
+      <div class="resume-icon" aria-hidden="true">↻</div>
+      <div class="resume-copy">
+        <span class="resume-kicker">进度已自动保存</span>
+        <strong id="homeResumeTitle">继续上局</strong>
+        <span id="homeResumeMeta">简单 · 00:00 · 完成 0%</span>
+      </div>
+      <button type="button" class="ui-button ui-button--secondary" id="homeResumeBtn">继续 <b>→</b></button>
+    </article>
 
-  <section class="new-game-card" aria-labelledby="newGameTitle">
-    <div class="section-heading">
-      <div><span>开始新挑战</span><h2 id="newGameTitle">选择适合现在的难度</h2></div>
-      <span class="unique-badge">每局唯一解</span>
-    </div>
-    <div class="difficulty-cards" id="homeDifficulty" role="radiogroup" aria-label="选择数独难度">
-      <button type="button" class="difficulty-card active" data-diff="0" role="radio" aria-checked="true"><b>简单</b><span>轻松热身</span><small>40 个已知数</small></button>
-      <button type="button" class="difficulty-card" data-diff="1" role="radio" aria-checked="false"><b>中等</b><span>日常一局</span><small>34 个已知数</small></button>
-      <button type="button" class="difficulty-card" data-diff="2" role="radio" aria-checked="false"><b>困难</b><span>专注挑战</span><small>30 个已知数</small></button>
-      <button type="button" class="difficulty-card" data-diff="3" role="radio" aria-checked="false"><b>专家</b><span>进阶推理</span><small>26 个已知数</small></button>
-      <button type="button" class="difficulty-card" data-diff="4" role="radio" aria-checked="false"><b>极限</b><span>高手试炼</span><small>23 个已知数</small></button>
-    </div>
-    <button type="button" class="start-game-btn ui-button ui-button--primary" id="homeStartBtn">开始新局 <span>→</span></button>
-  </section>
+    <button type="button" class="sudoku-entry new-game-entry ui-button" id="openNewGameBtn" aria-expanded="false" aria-controls="newGameConfig">
+      <span class="sudoku-entry-icon" aria-hidden="true">九</span>
+      <span class="sudoku-entry-copy"><span class="sudoku-entry-kicker">NEW GAME</span><span class="sudoku-entry-title">开始新挑战</span><span class="sudoku-entry-desc">选择难度，开启一盘新的数独</span></span>
+      <span class="sudoku-entry-arrow" aria-hidden="true">→</span>
+    </button>
+    <section class="new-game-card" id="newGameConfig" hidden aria-labelledby="newGameTitle">
+      <div class="section-heading"><div><span>开始新挑战</span><h2 id="newGameTitle">选择适合现在的难度</h2></div><span class="unique-badge">每局唯一解</span></div>
+      <div class="difficulty-cards" id="homeDifficulty" role="radiogroup" aria-label="选择数独难度">
+        <button type="button" class="difficulty-card active" data-diff="0" role="radio" aria-checked="true"><b>简单</b><span>轻松热身</span><small>40 个已知数</small></button>
+        <button type="button" class="difficulty-card" data-diff="1" role="radio" aria-checked="false"><b>中等</b><span>日常一局</span><small>34 个已知数</small></button>
+        <button type="button" class="difficulty-card" data-diff="2" role="radio" aria-checked="false"><b>困难</b><span>专注挑战</span><small>30 个已知数</small></button>
+        <button type="button" class="difficulty-card" data-diff="3" role="radio" aria-checked="false"><b>专家</b><span>进阶推理</span><small>26 个已知数</small></button>
+        <button type="button" class="difficulty-card" data-diff="4" role="radio" aria-checked="false"><b>极限</b><span>高手试炼</span><small>23 个已知数</small></button>
+      </div>
+      <button type="button" class="start-game-btn ui-button ui-button--primary" id="homeStartBtn">开始新局 <span>→</span></button>
+    </section>
+  </div>
 
   <div class="feature-strip" aria-label="数独功能">
     <span><b>✎</b> 候选笔记</span><span><b>💡</b> 智能提示</span><span><b>↩</b> 随时撤销</span><span><b>▣</b> 自动存档</span>
