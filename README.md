@@ -82,6 +82,16 @@ npm run test:security
 
 这些测试分别检查网络协议、数独核心规则、跳棋规则与联机同步，以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
 
+### 重新训练跳棋困难电脑
+
+困难难度会将受节点预算保护的 DFS/alpha-beta 搜索与一个浏览器内价值网络混合。仓库中的模型由固定随机种子完成 96 局本地自我对弈生成，不依赖 Python 或 GPU。重新训练时运行：
+
+```bash
+npm run train:checkers-ai
+```
+
+训练器会输出每代误差、自我对弈统计、与无模型基线的固定时长竞赛、困难搜索的完整对局速度，以及 `MODEL_JSON_START` 到 `MODEL_JSON_END` 之间的可部署权重。训练参数可以用 `--seed`、`--generations`、`--games`、`--max-moves`、`--benchmark-games` 和 `--speed-games` 调整。生成模型应同时通过胜率与平均手数门槛，再更新 `public/checkers/checkers_ai_model.js`。
+
 需要验证完整双人流程时，先启动服务，再在另一个终端运行：
 
 ```bash

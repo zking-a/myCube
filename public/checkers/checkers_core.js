@@ -7,6 +7,7 @@
 
   const ROW_COUNTS = [1,2,3,4,13,12,11,10,9,10,11,12,13,4,3,2,1];
   const DIRECTIONS = [[0,-2],[0,2],[-1,-1],[-1,1],[1,-1],[1,1]];
+  const VALUE_FEATURE_VERSION = 'cc-value-v2';
   function keyOf(row, unit) { return row + ':' + unit; }
 
   function buildBoardCells() {
@@ -190,10 +191,12 @@
     const from = CELL_MAP.get(move.from);
     const target = CELL_MAP.get(move.target);
     const forward = player === 'red' ? target.row - from.row : from.row - target.row;
-    const targetGoal = goalFor(player).has(move.target) ? 1 : 0;
-    const leavingGoal = goalFor(player).has(move.from) && !goalFor(player).has(move.target) ? 1 : 0;
+    const fromGoal = goalFor(player).has(move.from);
+    const targetGoal = goalFor(player).has(move.target);
+    const enteringGoal = !fromGoal && targetGoal ? 1 : 0;
+    const leavingGoal = fromGoal && !targetGoal ? 1 : 0;
     const centerGain = Math.abs(from.unit) - Math.abs(target.unit);
-    return forward * 9 + targetGoal * 80 - leavingGoal * 110 + centerGain * .7 + (move.kind === 'jump' ? 5 : 0);
+    return forward * 9 + enteringGoal * 120 - leavingGoal * 180 + centerGain * .7 + (move.kind === 'jump' ? 5 : 0);
   }
 
   function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
@@ -209,15 +212,67 @@
     return shortest;
   }
 
+  function hexDistance(a, b) {
+    const aq = (a.unit - a.row) / 2;
+    const bq = (b.unit - b.row) / 2;
+    const dq = aq - bq;
+    const dr = a.row - b.row;
+    return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+  }
+
+  // Hungarian assignment: every checker is matched to a different target hole.
+  // This prevents all remaining checkers from being evaluated against the same nearest hole at 9/10 endgames.
+  function goalAssignmentDistance(pieceCells, player) {
+    const goals = Array.from(goalFor(player)).map(function (key) { return CELL_MAP.get(key); });
+    const size = Math.min(pieceCells.length, goals.length);
+    if (!size) return 0;
+    const u = new Array(size + 1).fill(0);
+    const v = new Array(size + 1).fill(0);
+    const matching = new Array(size + 1).fill(0);
+    const previous = new Array(size + 1).fill(0);
+    for (let row = 1; row <= size; row++) {
+      matching[0] = row;
+      let column = 0;
+      const minValue = new Array(size + 1).fill(Infinity);
+      const used = new Array(size + 1).fill(false);
+      do {
+        used[column] = true;
+        const currentRow = matching[column];
+        let delta = Infinity;
+        let nextColumn = 0;
+        for (let candidate = 1; candidate <= size; candidate++) {
+          if (used[candidate]) continue;
+          const cost = hexDistance(pieceCells[currentRow - 1], goals[candidate - 1]);
+          const current = cost - u[currentRow] - v[candidate];
+          if (current < minValue[candidate]) { minValue[candidate] = current; previous[candidate] = column; }
+          if (minValue[candidate] < delta) { delta = minValue[candidate]; nextColumn = candidate; }
+        }
+        for (let candidate = 0; candidate <= size; candidate++) {
+          if (used[candidate]) { u[matching[candidate]] += delta; v[candidate] -= delta; }
+          else minValue[candidate] -= delta;
+        }
+        column = nextColumn;
+      } while (matching[column] !== 0);
+      do {
+        const nextColumn = previous[column];
+        matching[column] = matching[nextColumn];
+        column = nextColumn;
+      } while (column !== 0);
+    }
+    return -v[0];
+  }
+
   function playerPosition(pieces, player) {
     let forward = 0;
     let distance = 0;
     let inGoal = 0;
     let axisOffset = 0;
     let tailProgress = Infinity;
+    const pieceCells = [];
     Object.keys(pieces).forEach(function (key) {
       if (pieces[key] !== player) return;
       const cell = CELL_MAP.get(key);
+      pieceCells.push(cell);
       const progress = player === 'red' ? cell.row : (16 - cell.row);
       forward += progress;
       distance += distanceToGoal(cell, player);
@@ -225,7 +280,79 @@
       tailProgress = Math.min(tailProgress, progress);
       if (goalFor(player).has(key)) inGoal++;
     });
-    return { forward: forward, distance: distance, inGoal: inGoal, axisOffset: axisOffset, tailProgress: tailProgress };
+    return {
+      forward: forward,
+      distance: distance,
+      assignmentDistance: goalAssignmentDistance(pieceCells, player),
+      inGoal: inGoal,
+      axisOffset: axisOffset,
+      tailProgress: tailProgress
+    };
+  }
+
+  // 价值网络不直接读取 DOM 棋盘，而是读取一组关于双方相对进度的对称特征。
+  // 对红蓝交换视角时，除常量项外特征会反号，便于用少量自我对弈样本学习。
+  function extractValueFeatures(pieces, perspective) {
+    const mine = playerPosition(pieces, perspective);
+    const theirs = playerPosition(pieces, opposite(perspective));
+    const myProgress = [];
+    const theirProgress = [];
+    Object.keys(pieces).forEach(function (key) {
+      const owner = pieces[key];
+      const cell = CELL_MAP.get(key);
+      const progress = owner === 'red' ? cell.row : (16 - cell.row);
+      if (owner === perspective) myProgress.push(progress);
+      else if (owner === opposite(perspective)) theirProgress.push(progress);
+    });
+    myProgress.sort(function (a, b) { return a - b; });
+    theirProgress.sort(function (a, b) { return a - b; });
+    const features = [
+      1,
+      (mine.inGoal - theirs.inGoal) / 10,
+      (mine.forward - theirs.forward) / 160,
+      (theirs.distance - mine.distance) / 130,
+      (theirs.assignmentDistance - mine.assignmentDistance) / 120,
+      (theirs.axisOffset - mine.axisOffset) / 120,
+      (mine.tailProgress - theirs.tailProgress) / 16
+    ];
+    for (let i = 0; i < 10; i++) features.push(((myProgress[i] || 0) - (theirProgress[i] || 0)) / 16);
+    features.push((mine.inGoal * mine.inGoal - theirs.inGoal * theirs.inGoal) / 100);
+    features.push(((myProgress[0] || 0) * (myProgress[1] || 0) - (theirProgress[0] || 0) * (theirProgress[1] || 0)) / 256);
+    features.push((((theirProgress[9] || 0) - (theirProgress[0] || 0)) - ((myProgress[9] || 0) - (myProgress[0] || 0))) / 16);
+    return features;
+  }
+
+  function predictValueModel(pieces, perspective, model) {
+    if (!model || model.featureVersion !== VALUE_FEATURE_VERSION || !model.weights) return 0;
+    const input = extractValueFeatures(pieces, perspective);
+    const hiddenSize = Math.max(0, Math.floor(Number(model.hiddenSize) || 0));
+    const inputSize = input.length;
+    const w1 = model.weights.input;
+    const b1 = model.weights.hiddenBias;
+    const w2 = model.weights.output;
+    if (Number(model.inputSize) !== inputSize || !hiddenSize || !Array.isArray(w1) || w1.length !== inputSize * hiddenSize ||
+      !Array.isArray(b1) || b1.length !== hiddenSize || !Array.isArray(w2) || w2.length !== hiddenSize) return 0;
+    let output = Number(model.weights.outputBias) || 0;
+    for (let hidden = 0; hidden < hiddenSize; hidden++) {
+      let activation = Number(b1[hidden]) || 0;
+      const offset = hidden * inputSize;
+      for (let feature = 0; feature < inputSize; feature++) activation += input[feature] * w1[offset + feature];
+      output += Math.tanh(activation) * w2[hidden];
+    }
+    return Math.tanh(output);
+  }
+
+  function evaluateHybridPosition(pieces, perspective, model) {
+    const base = evaluatePosition(pieces, perspective);
+    if (!model) return base;
+    const scale = Math.max(0, Math.min(260, Number(model.scale) || 0));
+    return base + predictValueModel(pieces, perspective, model) * scale;
+  }
+
+  function positionKey(pieces) {
+    return BOARD_CELLS.map(function (cell) {
+      return pieces[cell.key] === 'red' ? 'r' : (pieces[cell.key] === 'blue' ? 'b' : '.');
+    }).join('');
   }
 
   // 静态局面分：优先把棋子送进目标营地，其次压缩到目标营地的总距离。
@@ -233,11 +360,13 @@
   function evaluatePosition(pieces, perspective) {
     const mine = playerPosition(pieces, perspective);
     const theirs = playerPosition(pieces, opposite(perspective));
-    return (mine.inGoal - theirs.inGoal) * 260 +
-      (mine.forward - theirs.forward) * 7 +
-      (theirs.distance - mine.distance) * 6 +
-      (mine.tailProgress - theirs.tailProgress) * 20 +
-      (theirs.axisOffset - mine.axisOffset) * 1.5;
+    return (mine.inGoal - theirs.inGoal) * 320 +
+      (mine.inGoal * mine.inGoal - theirs.inGoal * theirs.inGoal) * 18 +
+      (mine.forward - theirs.forward) * 3 +
+      (theirs.distance - mine.distance) * 2 +
+      (theirs.assignmentDistance - mine.assignmentDistance) * 22 +
+      (mine.tailProgress - theirs.tailProgress) * 35 +
+      (theirs.axisOffset - mine.axisOffset) * .7;
   }
 
   function orderedMoves(pieces, player, limit) {
@@ -251,10 +380,10 @@
   // 受预算保护的深度优先极大极小搜索。跳棋分支会在中局膨胀，
   // 因而结合 alpha-beta 剪枝、走法排序和节点上限，而非全盘暴力枚举。
   function dfsSearch(pieces, activePlayer, perspective, depth, alpha, beta, context) {
-    if (depth <= 0 || context.nodes >= context.maxNodes) return evaluatePosition(pieces, perspective);
+    if (depth <= 0 || context.nodes >= context.maxNodes) return evaluateHybridPosition(pieces, perspective, context.model);
     context.nodes++;
     const moves = orderedMoves(pieces, activePlayer, context.widths[Math.min(context.widths.length - 1, context.ply)]);
-    if (!moves.length) return evaluatePosition(pieces, perspective);
+    if (!moves.length) return evaluateHybridPosition(pieces, perspective, context.model);
     const maximizing = activePlayer === perspective;
     let best = maximizing ? -Infinity : Infinity;
     for (let i = 0; i < moves.length; i++) {
@@ -276,7 +405,7 @@
       }
       if (beta <= alpha) break;
     }
-    return best === Infinity || best === -Infinity ? evaluatePosition(pieces, perspective) : best;
+    return best === Infinity || best === -Infinity ? evaluateHybridPosition(pieces, perspective, context.model) : best;
   }
 
   function aiSearchOptions(level) {
@@ -284,23 +413,40 @@
     return { depth: 2, maxNodes: 700, widths: [14, 12] };
   }
 
-  function chooseAiMove(pieces, player, level, randomFn) {
+  function chooseAiMove(pieces, player, level, randomFn, searchOptions) {
     const moves = listMoves(pieces, player);
     if (!moves.length) return null;
     const random = typeof randomFn === 'function' ? randomFn : Math.random;
     if (level === 'easy') return moves[Math.floor(random() * moves.length)];
     const options = aiSearchOptions(level);
-    const context = { nodes: 0, maxNodes: options.maxNodes, widths: options.widths, ply: 1 };
-    const candidates = orderedMoves(pieces, player, options.widths[0]);
+    const advanced = searchOptions && typeof searchOptions === 'object' ? searchOptions : {};
+    const learnedModel = level === 'hard' && advanced.model ? advanced.model : null;
+    const requestedTempo = Number(advanced.tempoWeight);
+    const tempoWeight = level === 'hard' && Number.isFinite(requestedTempo) ? Math.max(0, Math.min(4, requestedTempo)) : 0;
+    const requestedRootWidth = Math.floor(Number(advanced.rootWidth));
+    const widths = options.widths.slice();
+    if (level === 'hard' && Number.isFinite(requestedRootWidth)) widths[0] = Math.max(8, Math.min(24, requestedRootWidth));
+    const recentPositions = new Set(Array.isArray(advanced.recentPositions) ? advanced.recentPositions.slice(-20) : []);
+    const candidates = orderedMoves(pieces, player, widths[0]);
+    const winningMoves = candidates.filter(function (move) {
+      const result = applyMove(pieces, player, move.from, move.target);
+      return result && result.winner === player;
+    });
+    if (winningMoves.length) return winningMoves[Math.floor(random() * winningMoves.length)];
+    const candidateBudget = Math.max(24, Math.floor(options.maxNodes / Math.max(1, candidates.length)));
     let bestScore = -Infinity;
     let bestMoves = [];
     candidates.forEach(function (move) {
-      if (context.nodes >= context.maxNodes) return;
+      const context = { nodes: 0, maxNodes: candidateBudget, widths: widths, ply: 1, model: learnedModel };
       const result = applyMove(pieces, player, move.from, move.target);
       if (!result) return;
-      const score = result.winner
+      let score = result.winner
         ? 100000
         : dfsSearch(result.pieces, opposite(player), player, options.depth - 1, -Infinity, Infinity, context);
+      // 价值接近时优先长跳和真正进入目标营地的走法，避免过度防守拖慢竞速局。
+      score += moveScore(pieces, player, move) * tempoWeight;
+      // 根节点避免回到最近已经出现过的完整局面，减少两枚棋子反复横跳。
+      if (!result.winner && recentPositions.has(positionKey(result.pieces))) score -= 900;
       if (score > bestScore) { bestScore = score; bestMoves = [move]; }
       else if (score === bestScore) bestMoves.push(move);
     });
@@ -311,11 +457,14 @@
     ROW_COUNTS: ROW_COUNTS.slice(), DIRECTIONS: DIRECTIONS.map(function (d) { return d.slice(); }),
     BOARD_CELLS: BOARD_CELLS.map(function (cell) { return Object.assign({}, cell); }),
     TOP_CAMP: Array.from(TOP_CAMP), BOTTOM_CAMP: Array.from(BOTTOM_CAMP),
+    VALUE_FEATURE_VERSION: VALUE_FEATURE_VERSION,
     keyOf: keyOf, buildBoardCells: buildBoardCells, createInitialPieces: createInitialPieces,
     getLegalMoves: getLegalMoves, findMovePath: findMovePath, applyMove: applyMove,
     countInGoal: countInGoal, hasWon: hasWon, orientPoint: orientPoint,
     sanitizePieces: sanitizePieces, sanitizeState: sanitizeState, sanitizeLastMove: sanitizeLastMove,
     listMoves: listMoves, moveScore: moveScore, evaluatePosition: evaluatePosition,
+    extractValueFeatures: extractValueFeatures, predictValueModel: predictValueModel,
+    evaluateHybridPosition: evaluateHybridPosition, positionKey: positionKey,
     chooseAiMove: chooseAiMove
   };
 });

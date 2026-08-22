@@ -19,6 +19,7 @@ sandbox.addEventListener = function () {};
 vm.createContext(sandbox);
 
 const coreSource = fs.readFileSync('public/checkers/checkers_core.js', 'utf8');
+const modelSource = fs.readFileSync('public/checkers/checkers_ai_model.js', 'utf8');
 const source = fs.readFileSync('public/checkers/checkers.js', 'utf8');
 const lobbyHtml = fs.readFileSync('public/checkers/index.html', 'utf8');
 const playHtml = fs.readFileSync('public/checkers/play.html', 'utf8');
@@ -26,10 +27,12 @@ const css = fs.readFileSync('public/checkers/checkers.css', 'utf8');
 const platformHtml = fs.readFileSync('public/index.html', 'utf8');
 const serverSource = fs.readFileSync('server.js', 'utf8');
 vm.runInContext(coreSource, sandbox, { filename: 'checkers_core.js' });
+vm.runInContext(modelSource, sandbox, { filename: 'checkers_ai_model.js' });
 vm.runInContext(source, sandbox, { filename: 'checkers.js' });
 
 const T = sandbox.__checkersTest;
 const C = T.Core;
+const M = sandbox.CheckersAiModel;
 let passed = 0;
 function ok(name, condition) {
   if (!condition) throw new Error('FAIL: ' + name);
@@ -85,6 +88,28 @@ const aiApplied = C.applyMove(initial, 'blue', aiMove.from, aiMove.target);
 ok('困难电脑使用受预算保护的 DFS 搜索并优先改善局面',
   /function dfsSearch/.test(coreSource) && /maxNodes/.test(coreSource) && /tailProgress/.test(coreSource) && /axisOffset/.test(coreSource) && aiApplied &&
   C.evaluatePosition(aiApplied.pieces, 'blue') > C.evaluatePosition(initial, 'blue'));
+ok('本地训练模型的输入维度、权重形状和特征版本与规则核心一致',
+  M && M.featureVersion === C.VALUE_FEATURE_VERSION && C.extractValueFeatures(initial, 'red').length === M.inputSize &&
+  M.weights.input.length === M.inputSize * M.hiddenSize && M.training.games === 96);
+const learnedValue = C.predictValueModel(aiApplied.pieces, 'blue', M);
+ok('轻量价值网络可以直接在浏览器规则核心中推理',
+  Number.isFinite(learnedValue) && learnedValue >= -1 && learnedValue <= 1 &&
+  C.evaluateHybridPosition(aiApplied.pieces, 'blue', M) !== C.evaluatePosition(aiApplied.pieces, 'blue'));
+const learnedMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0, { model: M });
+const learnedResult = C.applyMove(initial, 'blue', learnedMove.from, learnedMove.target);
+const antiRepeatMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0, {
+  model: M, recentPositions: [C.positionKey(learnedResult.pieces)]
+});
+ok('困难电脑混合 DFS 与价值模型，并避开近期已经出现的局面',
+  learnedMove && antiRepeatMove && (learnedMove.from !== antiRepeatMove.from || learnedMove.target !== antiRepeatMove.target));
+const finishState = {};
+C.BOTTOM_CAMP.filter(key => key !== '14:0').forEach(key => { finishState[key] = 'red'; });
+finishState['12:2'] = 'red';
+C.TOP_CAMP.forEach(key => { finishState[key] = 'blue'; });
+const finishMove = C.chooseAiMove(finishState, 'red', 'hard', () => 0, { model: M });
+const finishResult = C.applyMove(finishState, 'red', finishMove.from, finishMove.target);
+ok('搜索会在分配节点预算前发现直接获胜走法，不再在 9/10 时搬动营内棋子',
+  finishMove.from === '12:2' && finishMove.target === '14:0' && finishResult && finishResult.winner === 'red');
 
 const validState = C.sanitizeState({ pieces: initial, turn: 'blue', moveNumber: 12, winner: '' });
 ok('合法棋局状态可恢复且保留回合信息', validState && validState.turn === 'blue' && validState.moveNumber === 12);
@@ -101,7 +126,10 @@ ok('大厅提供人机、本地双人、联机三种入口且不再混放棋盘'
   /id="createRoomBtn"/.test(lobbyHtml) && !/id="checkerBoard"/.test(lobbyHtml));
 ok('游戏页只承载棋局，并先加载规则核心再加载交互脚本',
   /id="board"/.test(playHtml) && !/id="createRoomBtn"/.test(playHtml) &&
-  playHtml.indexOf('checkers_core.js') >= 0 && playHtml.indexOf('checkers_core.js') < playHtml.indexOf('checkers.js'));
+  playHtml.indexOf('checkers_core.js') >= 0 && playHtml.indexOf('checkers_core.js') < playHtml.indexOf('checkers_ai_model.js') &&
+  playHtml.indexOf('checkers_ai_model.js') < playHtml.indexOf('checkers.js'));
+ok('困难模式向搜索传入训练模型和近期局面，其他难度不会依赖模型',
+  /aiLevel === 'hard'/.test(source) && /CheckersAiModel/.test(source) && /recentPositions/.test(source));
 ok('游戏页提供上一步说明，棋盘能绘制来源、落点和完整路线',
   /id="lastMoveBar"/.test(playHtml) && /last-move-path/.test(source) &&
   /move-origin/.test(source) && /move-destination/.test(source));

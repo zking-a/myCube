@@ -322,7 +322,11 @@ function scheduleAiMove() {
   aiTimer = setTimeout(function () {
     aiTimer = null;
     if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
-    const move = Core.chooseAiMove(pieces, 'blue', aiLevel); aiThinking = false;
+    const searchOptions = aiLevel === 'hard' ? {
+      model: window.CheckersAiModel || null,
+      recentPositions: history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); })
+    } : null;
+    const move = Core.chooseAiMove(pieces, 'blue', aiLevel, null, searchOptions); aiThinking = false;
     if (!move) { showToast('电脑当前没有可走位置'); render(); return; }
     applyLocalMove(move.from, move.target, 'blue');
   }, CONFIG.AI_DELAY);
@@ -460,7 +464,7 @@ function init() {
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
   $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
   $('onlineRoomBar').hidden = mode !== 'online';
-  $('modeBadge').textContent = mode === 'ai' ? '🤖 人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难' }[aiLevel]) : (mode === 'local' ? '👥 本地双人' : '🌐 好友对战');
+  $('modeBadge').textContent = mode === 'ai' ? '🤖 人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '👥 本地双人' : '🌐 好友对战');
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 

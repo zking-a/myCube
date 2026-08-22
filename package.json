@@ -12,6 +12,7 @@
     "test:sudoku:e2e": "node test_sudoku_online.js",
     "test:checkers": "node test_checkers.js",
     "test:checkers:e2e": "node test_checkers_online.js",
+    "train:checkers-ai": "node scripts/train_checkers_ai.js",
     "test:security": "node test_security.js"
   },
   "engines": {
