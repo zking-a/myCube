@@ -603,3 +603,14 @@ body.dark .advanced-tools{ background:rgba(15,23,42,.28); }
   .keypad{ max-width: 506px; }
 }
 @media (prefers-reduced-motion:reduce){ *,*::before,*::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
+
+/* ── 好友协作：沿用大厅入口与棋局面板的轻竞技层级 ── */
+.collab-resume-entry{background:linear-gradient(135deg,#4f8ee8,#3b66c7);box-shadow:0 12px 24px rgba(38,78,150,.16)}
+.collab-entry{background:linear-gradient(135deg,#6277ee,#4a55ce);box-shadow:0 12px 24px rgba(48,58,152,.18)}
+.collab-entry:hover{box-shadow:0 16px 29px rgba(48,58,152,.24)}
+.collab-card{border-color:#d9ddff;background:linear-gradient(180deg,#fff,#f8f9ff)}
+.compact-difficulty .difficulty-card{min-height:66px}.compact-difficulty .difficulty-card small{display:none}
+.collab-actions{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:12px}.collab-actions .ui-button{min-height:44px;border-radius:13px;font-size:12px}.collab-join-field{display:grid;grid-template-columns:auto minmax(0,1fr);grid-column:1/-1;align-items:center;gap:9px;color:var(--text-secondary);font-size:11px;font-weight:800}.collab-join-field .ui-input{min-width:0;height:42px;padding:8px 11px;border-radius:12px;letter-spacing:1.4px;text-transform:uppercase}.collab-config-status{min-height:18px;margin:10px 1px 0;color:var(--text-secondary);font-size:10px;line-height:1.45}
+.collab-status-bar{display:flex;grid-column:1/-1;min-height:46px;align-items:center;gap:9px;padding:8px 10px;border:1px solid #d9dffd;border-radius:14px;color:#53618b;background:linear-gradient(90deg,#f5f7ff,#fff);font-size:11px}.collab-status-title{font-weight:900;color:#4b5bd5}.collab-status-bar strong{padding:4px 7px;border-radius:7px;color:#3347d8;background:#e7eaff;font-family:var(--ui-font-number,monospace);font-size:11px;letter-spacing:1px}.collab-status-bar #collabPresence{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.collab-status-bar .ui-button{min-height:30px;padding:5px 8px;border-radius:9px;font-size:10px;white-space:nowrap}
+body.dark .collab-card{border-color:#39457b;background:linear-gradient(180deg,#202a49,#182039)}body.dark .collab-status-bar{border-color:#39457b;color:#bdc7e8;background:#202943}body.dark .collab-status-bar strong{color:#dfe4ff;background:#303d6d}
+@media(max-width:560px){.collab-actions{grid-template-columns:1fr}.collab-actions .ui-button{width:100%}.collab-status-bar{flex-wrap:wrap;gap:7px;padding:8px}.collab-status-bar #collabPresence{order:3;width:100%;flex-basis:100%;white-space:normal}.collab-status-bar .ui-button{margin-left:auto}.compact-difficulty .difficulty-card{min-height:62px}}

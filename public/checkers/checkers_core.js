@@ -213,24 +213,31 @@
     let forward = 0;
     let distance = 0;
     let inGoal = 0;
+    let axisOffset = 0;
+    let tailProgress = Infinity;
     Object.keys(pieces).forEach(function (key) {
       if (pieces[key] !== player) return;
       const cell = CELL_MAP.get(key);
-      forward += player === 'red' ? cell.row : (16 - cell.row);
+      const progress = player === 'red' ? cell.row : (16 - cell.row);
+      forward += progress;
       distance += distanceToGoal(cell, player);
+      axisOffset += Math.abs(cell.unit);
+      tailProgress = Math.min(tailProgress, progress);
       if (goalFor(player).has(key)) inGoal++;
     });
-    return { forward: forward, distance: distance, inGoal: inGoal };
+    return { forward: forward, distance: distance, inGoal: inGoal, axisOffset: axisOffset, tailProgress: tailProgress };
   }
 
   // 静态局面分：优先把棋子送进目标营地，其次压缩到目标营地的总距离。
-  // 这比只看一枚棋子的一步前进更能避免电脑在边线与营地入口来回兜圈。
+  // 中轴偏移和最后一枚棋子的进度分别避免在边线绕路、把少量棋子远远甩在后方。
   function evaluatePosition(pieces, perspective) {
     const mine = playerPosition(pieces, perspective);
     const theirs = playerPosition(pieces, opposite(perspective));
     return (mine.inGoal - theirs.inGoal) * 260 +
       (mine.forward - theirs.forward) * 7 +
-      (theirs.distance - mine.distance) * 6;
+      (theirs.distance - mine.distance) * 6 +
+      (mine.tailProgress - theirs.tailProgress) * 20 +
+      (theirs.axisOffset - mine.axisOffset) * 1.5;
   }
 
   function orderedMoves(pieces, player, limit) {

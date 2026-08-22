@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a"/>
-<link rel="stylesheet" href="sudoku.css?v=20260822d"/>
+<link rel="stylesheet" href="sudoku.css?v=20260822e"/>
 </head>
 <body>
 
@@ -45,6 +45,16 @@
       <button type="button" class="ui-button ui-button--secondary" id="homeResumeBtn">继续 <b>→</b></button>
     </article>
 
+    <article class="resume-card collab-resume-entry" id="homeCollabResumeCard" hidden>
+      <div class="resume-icon" aria-hidden="true">♢</div>
+      <div class="resume-copy">
+        <span class="resume-kicker">好友协作仍可继续</span>
+        <strong>返回协作棋局</strong>
+        <span id="homeCollabResumeMeta">房间码 · 等待重连</span>
+      </div>
+      <button type="button" class="ui-button ui-button--secondary" id="homeCollabResumeBtn">继续 <b>→</b></button>
+    </article>
+
     <button type="button" class="sudoku-entry new-game-entry ui-button" id="openNewGameBtn" aria-expanded="false" aria-controls="newGameConfig">
       <span class="sudoku-entry-icon" aria-hidden="true">九</span>
       <span class="sudoku-entry-copy"><span class="sudoku-entry-kicker">NEW GAME</span><span class="sudoku-entry-title">开始新局</span><span class="sudoku-entry-desc">选择难度，开启一盘新的数独</span></span>
@@ -60,6 +70,28 @@
         <button type="button" class="difficulty-card" data-diff="4" role="radio" aria-checked="false"><b>极限</b><span>高手试炼</span><small>23 个已知数</small></button>
       </div>
       <button type="button" class="start-game-btn ui-button ui-button--primary" id="homeStartBtn">开始新局 <span>→</span></button>
+    </section>
+
+    <button type="button" class="sudoku-entry collab-entry ui-button" id="openCollabBtn" aria-expanded="false" aria-controls="collabConfig">
+      <span class="sudoku-entry-icon" aria-hidden="true">♢</span>
+      <span class="sudoku-entry-copy"><span class="sudoku-entry-kicker">CO-OP SUDOKU</span><span class="sudoku-entry-title">好友协作</span><span class="sudoku-entry-desc">两个人实时同步，共同完成同一盘数独</span></span>
+      <span class="sudoku-entry-arrow" aria-hidden="true">→</span>
+    </button>
+    <section class="new-game-card collab-card" id="collabConfig" hidden aria-labelledby="collabTitle">
+      <div class="section-heading"><div><span>同盘协作</span><h2 id="collabTitle">邀请一位朋友，一起完成</h2></div><span class="unique-badge">实时同步</span></div>
+      <div class="difficulty-cards compact-difficulty" id="collabDifficulty" role="radiogroup" aria-label="选择协作数独难度">
+        <button type="button" class="difficulty-card active" data-collab-diff="0" role="radio" aria-checked="true"><b>简单</b><span>轻松热身</span></button>
+        <button type="button" class="difficulty-card" data-collab-diff="1" role="radio" aria-checked="false"><b>中等</b><span>日常一局</span></button>
+        <button type="button" class="difficulty-card" data-collab-diff="2" role="radio" aria-checked="false"><b>困难</b><span>专注挑战</span></button>
+        <button type="button" class="difficulty-card" data-collab-diff="3" role="radio" aria-checked="false"><b>专家</b><span>进阶推理</span></button>
+        <button type="button" class="difficulty-card" data-collab-diff="4" role="radio" aria-checked="false"><b>极限</b><span>高手试炼</span></button>
+      </div>
+      <div class="collab-actions">
+        <button type="button" class="ui-button ui-button--primary" id="collabCreateBtn">创建协作房间 <span>→</span></button>
+        <label class="collab-join-field" for="collabRoomInput"><span>朋友邀请码</span><input class="ui-input" id="collabRoomInput" maxlength="5" autocomplete="off" placeholder="例如 A2BCD"/></label>
+        <button type="button" class="ui-button ui-button--secondary" id="collabJoinBtn">加入协作</button>
+      </div>
+      <p class="collab-config-status" id="collabConfigStatus" role="status">创建后会生成邀请链接；双方填写会实时同步。</p>
     </section>
   </div>
 
@@ -88,6 +120,11 @@
   </header>
 
   <main class="card">
+    <div class="collab-status-bar" id="collabStatusBar" hidden aria-live="polite">
+      <span class="collab-status-title">♢ 好友协作</span><strong id="collabRoomCode">房间码 —</strong><span id="collabPresence">等待协作者加入</span>
+      <button type="button" class="ui-button ui-button--secondary" id="copyCollabInviteBtn">复制邀请</button>
+      <button type="button" class="ui-button ui-button--secondary" id="pauseCollabBtn">暂离</button>
+    </div>
     <div class="board-column">
       <div class="progress-box">
         <span id="progressText">进度：0%</span>
@@ -161,6 +198,6 @@
   </div>
 </div>
 
-<script src="sudoku.js?v=20260822d"></script>
+<script src="sudoku.js?v=20260822e"></script>
 </body>
 </html>

@@ -31,6 +31,7 @@ const CONFIG = {
   STORAGE_DARK      : "sudoku_dark",
   STORAGE_SOUND     : "sudoku_sound",
   STORAGE_PRAISE_IDX: "sudoku_praise_indices",
+  STORAGE_COLLAB    : "sudoku_collab_session",
 };
 
 /* ========== SECTION 4: 常量与工具函数 ========== */
@@ -165,6 +166,8 @@ let usedPraiseIndices = [];
 let lastPraiseText = "";      // 保存最近一次随机到的赞美诗，供分享复用
 let currentDifficulty = 0;
 let homeDifficulty = 0;
+let collabDifficulty = 0;
+let collabSession = null;
 let modalReturnFocus = null;
 
 function resetGameState() {
@@ -184,6 +187,277 @@ function resetGameState() {
   dragStart     = -1;
   dragCurrent   = -1;
   usedPraiseIndices = [];
+}
+
+/* ========== SECTION 5.1: 好友协作（同盘实时同步） ========== */
+function isCollabActive() { return !!collabSession; }
+
+function createCollabId() {
+  const bytes = new Uint32Array(4);
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes).map(v => v.toString(36)).join("").slice(0, 24);
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function createCollabRoomCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 5; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return code;
+}
+
+function getCollabSave() {
+  try {
+    const raw = localStorage.getItem(CONFIG.STORAGE_COLLAB);
+    const value = raw ? JSON.parse(raw) : null;
+    if (!value || !/^[A-HJ-NP-Z2-9]{5}$/.test(value.room || "") || typeof value.cid !== "string" || value.cid.length < 4 ||
+      typeof value.token !== "string" || value.token.length < 8) return null;
+    return { room: value.room, cid: value.cid, token: value.token, difficulty: normalizeDifficulty(value.difficulty) };
+  } catch (e) { return null; }
+}
+
+function saveCollabSession() {
+  if (!collabSession || !collabSession.token) return;
+  try {
+    localStorage.setItem(CONFIG.STORAGE_COLLAB, JSON.stringify({
+      room: collabSession.room, cid: collabSession.cid, token: collabSession.token,
+      difficulty: collabSession.difficulty
+    }));
+  } catch (e) {}
+}
+
+function clearCollabSave() {
+  try { localStorage.removeItem(CONFIG.STORAGE_COLLAB); } catch (e) {}
+}
+
+function collabSocketUrl() {
+  const secure = location.protocol === "https:";
+  return (secure ? "wss://" : "ws://") + location.host + "/sudoku-ws";
+}
+
+function syncCollabDifficulty() {
+  document.querySelectorAll("#collabDifficulty [data-collab-diff]").forEach(btn => {
+    const active = normalizeDifficulty(btn.dataset.collabDiff) === collabDifficulty;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-checked", active ? "true" : "false");
+  });
+}
+
+function selectCollabDifficulty(value) {
+  collabDifficulty = normalizeDifficulty(value);
+  syncCollabDifficulty();
+}
+
+function setCollabConfig(open) {
+  const config = $("collabConfig");
+  const trigger = $("openCollabBtn");
+  if (!config || !trigger) return;
+  config.hidden = !open;
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function setCollabConfigStatus(message) {
+  const status = $("collabConfigStatus");
+  if (status) status.textContent = message;
+}
+
+function updateCollabStatus() {
+  const bar = $("collabStatusBar");
+  if (!bar) return;
+  if (!collabSession) { bar.hidden = true; return; }
+  bar.hidden = false;
+  $("collabRoomCode").textContent = "房间码 " + collabSession.room;
+  const players = collabSession.players || [];
+  const online = players.filter(p => p.online).length;
+  const self = players.find(p => p.cid === collabSession.cid);
+  let message = collabSession.phase === "waiting"
+    ? "等待朋友加入后一起开始"
+    : (collabSession.phase === "done" ? "这盘数独已共同完成" : "两人正在同步填写");
+  if (collabSession.phase === "playing" && online < 2) message = "朋友暂时离线，重连后会回到同一盘";
+  $("collabPresence").textContent = (self ? "你是协作者 " + self.seat + " · " : "") + message;
+}
+
+function validCollabState(state) {
+  return state && Array.isArray(state.solution) && Array.isArray(state.givens) && Array.isArray(state.board) &&
+    state.solution.length === 81 && state.givens.length === 81 && state.board.length === 81 &&
+    state.solution.every(v => Number.isInteger(v) && v >= 1 && v <= 9) &&
+    state.givens.every((v, i) => Number.isInteger(v) && v >= 0 && v <= 9 && (!v || v === state.solution[i])) &&
+    state.board.every((v, i) => Number.isInteger(v) && v >= 0 && v <= 9 && (state.givens[i] === 0 || v === state.givens[i]));
+}
+
+function applyCollabState(state) {
+  if (!collabSession || !validCollabState(state)) return;
+  const wasFinished = finished;
+  solution = state.solution.slice();
+  givens = state.givens.slice();
+  board = state.board.slice();
+  notes = sanitizeNotes(notes, givens, board);
+  currentDifficulty = normalizeDifficulty(state.difficulty);
+  collabSession.phase = state.phase;
+  collabSession.players = Array.isArray(state.players) ? state.players : [];
+  collabSession.difficulty = currentDifficulty;
+  collabSession.startedAt = Number(state.startedAt) || 0;
+  finished = state.phase === "done";
+  if (state.lastEditor && state.lastEditor !== collabSession.cid) history = [];
+  syncGameDifficulty();
+  syncAssistButtons();
+  showGameScreen(true);
+  if (state.phase === "playing" && collabSession.startedAt) {
+    const serverNow = Number(state.serverNow) || Date.now();
+    seconds = Math.max(0, Math.floor((serverNow - collabSession.startedAt) / 1000));
+    startTimer(collabSession.startedAt - serverNow + Date.now());
+  } else {
+    stopTimer();
+    const endAt = Number(state.finishedAt) || Number(state.serverNow) || Date.now();
+    seconds = state.phase === "done" && collabSession.startedAt
+      ? Math.max(0, Math.floor((endAt - collabSession.startedAt) / 1000))
+      : 0;
+    updateTimer();
+  }
+  $("finishMsg").style.display = "none";
+  renderBoard();
+  renderKeypad();
+  updateProgress();
+  updateTimer();
+  updateCollabStatus();
+  if (finished && !wasFinished) finishCollabGame();
+}
+
+function handleCollabMessage(message) {
+  if (!message || !collabSession) return;
+  if (message.t === "session") {
+    collabSession.cid = message.cid || collabSession.cid;
+    collabSession.token = message.token || collabSession.token;
+    saveCollabSession();
+  } else if (message.t === "state") {
+    applyCollabState(message);
+  } else if (message.t === "err") {
+    const terminal = ["ROOM_NOT_FOUND", "ROOM_EXPIRED", "SESSION_INVALID", "ROOM_FULL", "ROUND_IN_PROGRESS"].includes(message.code);
+    setCollabConfigStatus(message.msg || "协作连接失败，请稍后重试");
+    showToast(message.msg || "协作连接失败，请稍后重试");
+    if (terminal) {
+      if (["ROOM_NOT_FOUND", "ROOM_EXPIRED", "SESSION_INVALID"].includes(message.code)) clearCollabSave();
+      collabSession = null;
+      updateCollabStatus();
+      checkCollabResume();
+    }
+  }
+}
+
+function connectCollab(intent, room, puzzle, difficulty, savedSession) {
+  if (typeof WebSocket !== "function") {
+    setCollabConfigStatus("当前环境不支持实时协作，请使用现代浏览器打开。");
+    return;
+  }
+  const saved = savedSession || getCollabSave();
+  collabSession = {
+    room: room,
+    cid: saved && saved.room === room ? saved.cid : createCollabId(),
+    token: saved && saved.room === room ? saved.token : "",
+    difficulty: normalizeDifficulty(difficulty),
+    phase: "waiting", players: [], socket: null, connected: false
+  };
+  const socket = new WebSocket(collabSocketUrl());
+  collabSession.socket = socket;
+  socket.addEventListener("open", () => {
+    if (!collabSession || collabSession.socket !== socket) return;
+    collabSession.connected = true;
+    socket.send(JSON.stringify({
+      t: "join", intent, room: collabSession.room, cid: collabSession.cid, token: collabSession.token,
+      difficulty: collabSession.difficulty,
+      solution: puzzle && puzzle.solution,
+      givens: puzzle && puzzle.givens
+    }));
+    setCollabConfigStatus(intent === "create" ? "房间已创建，正在等待朋友加入…" : "正在连接协作房间…");
+  });
+  socket.addEventListener("message", event => {
+    let message;
+    try { message = JSON.parse(event.data); } catch (e) { return; }
+    handleCollabMessage(message);
+  });
+  socket.addEventListener("close", () => {
+    if (!collabSession || collabSession.socket !== socket) return;
+    collabSession.connected = false;
+    collabSession.socket = null;
+    updateCollabStatus();
+  });
+  socket.addEventListener("error", () => setCollabConfigStatus("协作连接未建立，请检查网络后重试。"));
+}
+
+function startCollabGame() {
+  const diff = normalizeDifficulty(collabDifficulty);
+  const freshSolution = generateSolution();
+  const freshGivens = generateGivens(freshSolution, diff);
+  connectCollab("create", createCollabRoomCode(), { solution: freshSolution, givens: freshGivens }, diff, null);
+}
+
+function joinCollabGame() {
+  const input = $("collabRoomInput");
+  const room = String(input && input.value || "").trim().toUpperCase();
+  if (!/^[A-HJ-NP-Z2-9]{5}$/.test(room)) {
+    setCollabConfigStatus("请输入朋友分享的 5 位邀请码。");
+    if (input) input.focus();
+    return;
+  }
+  connectCollab("join", room, null, collabDifficulty, getCollabSave());
+}
+
+function resumeCollabGame() {
+  const saved = getCollabSave();
+  if (!saved) { checkCollabResume(); return; }
+  setCollabConfig(true);
+  setCollabConfigStatus("正在返回协作棋局…");
+  connectCollab("join", saved.room, null, saved.difficulty, saved);
+}
+
+function checkCollabResume() {
+  const saved = getCollabSave();
+  const card = $("homeCollabResumeCard");
+  if (!card) return !!saved;
+  if (!saved) { card.hidden = true; return false; }
+  $("homeCollabResumeMeta").textContent = "房间码 " + saved.room + " · 返回同一盘数独";
+  card.hidden = false;
+  return true;
+}
+
+function canEditCollab() {
+  if (!isCollabActive()) return true;
+  if (collabSession.phase === "playing" && collabSession.connected) return true;
+  showToast(collabSession.phase === "waiting" ? "等待朋友加入后即可共同填写" : "协作连接暂不可用，请稍后重连");
+  return false;
+}
+
+function sendCollabChanges(indices) {
+  if (!isCollabActive() || !collabSession.socket || collabSession.socket.readyState !== WebSocket.OPEN) return;
+  const unique = [...new Set(indices || [])].filter(i => Number.isInteger(i) && i >= 0 && i < 81 && givens[i] === 0);
+  if (!unique.length) return;
+  collabSession.socket.send(JSON.stringify({
+    t: "set", changes: unique.map(index => ({ index: index, value: board[index] }))
+  }));
+}
+
+function pauseCollabGame() {
+  if (!collabSession) return;
+  const socket = collabSession.socket;
+  collabSession.socket = null;
+  collabSession.connected = false;
+  saveCollabSession();
+  collabSession = null;
+  if (socket && socket.readyState < WebSocket.CLOSING) socket.close(1000, "pause collaboration");
+  updateCollabStatus();
+}
+
+function copyCollabInvite() {
+  if (!collabSession) return;
+  const url = location.origin + location.pathname + "?join=" + encodeURIComponent(collabSession.room);
+  const done = () => showToast("邀请链接已复制，发给朋友即可加入同一盘");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => { window.prompt("复制这条邀请链接：", url); });
+  } else {
+    window.prompt("复制这条邀请链接：", url);
+  }
 }
 
 /* 统一历史压栈 */
@@ -587,7 +861,7 @@ function updateTimer() {
 */
 
 function selectCell(index, isCtrl, isShift) {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   if (isShift && selected >= 0 && index >= 0) {
     const a = Math.min(selected, index);
     const b = Math.max(selected, index);
@@ -642,7 +916,7 @@ function cellFromEvent(e, preferTarget) {
 }
 
 function onBoardMouseDown(e) {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   const idx = cellFromEvent(e, true);
   if (idx < 0 || givens[idx] !== 0) return;
   e.preventDefault();
@@ -773,7 +1047,7 @@ function syncAssistButtons() {
 }
 
 function fillNumber(value) {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   if (selected < 0 && selectedCells.length === 0) return;
 
   /* ── Case 1: 清除数字（value === 0）── */
@@ -799,6 +1073,7 @@ function fillNumber(value) {
       updateProgress();
       refreshKeypadCounts();
       autoSave();
+      sendCollabChanges(changes.map(change => change.index));
     }
     return;
   }
@@ -874,10 +1149,11 @@ function fillNumber(value) {
   updateProgress();
   refreshKeypadCounts();
   autoSave();
+  sendCollabChanges(targets);
 
   /* 检查是否获胜 */
   if (isBoardFilled() && checkWin()) {
-    checkWinAndFinish();
+    if (!isCollabActive()) checkWinAndFinish();
   } else if (autoFillMode && !hasError) {
     runAutoFill(false);
   }
@@ -933,7 +1209,7 @@ function autoEraseNotes(row, col, num) {
 }
 
 function clearAllUser() {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   const changes = [];
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
     if (givens[i] === 0 && (board[i] !== 0 || (notes[i] && notes[i].length))) {
@@ -950,6 +1226,7 @@ function clearAllUser() {
     updateProgress();
     refreshKeypadCounts();
     autoSave();
+    sendCollabChanges(changes.map(change => change.index));
   }
 }
 
@@ -981,7 +1258,8 @@ function restoreHistoryEntry(targetBoard, targetNotes, last) {
 }
 
 function undo() {
-  if (finished || history.length === 0) return;
+  if (finished || history.length === 0 || !canEditCollab()) return;
+  const before = board.slice();
   const last = history.pop();
   restoreHistoryEntry(board, notes, last);
 
@@ -996,6 +1274,7 @@ function undo() {
   updateProgress();
   refreshKeypadCounts();
   autoSave();
+  sendCollabChanges(before.map((value, index) => value === board[index] ? -1 : index).filter(index => index >= 0));
 }
 
 /* ========== SECTION 11: 提示功能 ========== */
@@ -1009,7 +1288,7 @@ function undo() {
 */
 
 function showHint() {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   let best = -1, bestCount = 10;
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
     if (givens[i] === 0 && board[i] === 0) {
@@ -1033,9 +1312,10 @@ function showHint() {
   renderBoard();
   updateProgress();
   refreshKeypadCounts();
+  sendCollabChanges([best]);
 
   if (isBoardFilled() && checkWin()) {
-    checkWinAndFinish();
+    if (!isCollabActive()) checkWinAndFinish();
   }
 }
 
@@ -1118,7 +1398,7 @@ function toggleAutoFill() {
 }
 
 function runAutoFill(showEmptyToast = true) {
-  if (finished) return;
+  if (finished || !canEditCollab()) return;
   const changes = [];
   const notesSnapshot = cloneNotes(notes);
   for (let i = 0; i < CONFIG.TOTAL_CELLS; i++) {
@@ -1138,9 +1418,10 @@ function runAutoFill(showEmptyToast = true) {
     updateProgress();
     refreshKeypadCounts();
     autoSave();
+    sendCollabChanges(changes.map(change => change.index));
     playSound("fill");
     if (isBoardFilled() && checkWin()) {
-      checkWinAndFinish();
+      if (!isCollabActive()) checkWinAndFinish();
     }
   } else if (showEmptyToast) {
     showToast("当前没有唯一候选数可自动填入");
@@ -1486,7 +1767,7 @@ function createParticle(container, color) {
 */
 
 function writeSaveNow() {
-  if (finished) return;
+  if (finished || isCollabActive()) return;
   try {
     const data = {
       solution, givens, board, notes,
@@ -1499,7 +1780,7 @@ function writeSaveNow() {
 
 // 高频操作只标记为脏并合并写入；切后台/离页时通过 force 立即落盘。
 function autoSave(force) {
-  if (finished) return;
+  if (finished || isCollabActive()) return;
   saveDirty = true;
   if (force) {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
@@ -1740,7 +2021,8 @@ function selectHomeDifficulty(value) {
 function syncGameDifficulty() {
   const badge = $("gameDifficulty");
   if (!badge) return;
-  badge.textContent = ["简单", "中等", "困难", "专家", "极限"][normalizeDifficulty(currentDifficulty)] + " · Puzzle Sudoku";
+  const name = ["简单", "中等", "困难", "专家", "极限"][normalizeDifficulty(currentDifficulty)];
+  badge.textContent = isCollabActive() ? "好友协作 · " + name : name + " · Puzzle Sudoku";
 }
 
 function setHomeNewGameConfig(open) {
@@ -1780,11 +2062,13 @@ function showSudokuHome(updateUrl) {
     autoSave(true);
   }
   leaveFocusMode();
+  if (isCollabActive()) pauseCollabGame();
   document.body.classList.remove("playing");
   $("sudokuGame").hidden = true;
   $("sudokuHome").hidden = false;
   setHomeNewGameConfig(false);
   checkResume();
+  checkCollabResume();
   if (updateUrl && window.history && location.hash === "#play") {
     window.history.replaceState({ sudoku: "home" }, "", location.pathname + location.search);
   }
@@ -1799,6 +2083,7 @@ function canReplaceCurrentGame() {
 
 function startHomeGame() {
   if (!canReplaceCurrentGame()) return;
+  if (isCollabActive()) pauseCollabGame();
   showGameScreen(true);
   newGame(homeDifficulty);
 }
@@ -1824,9 +2109,9 @@ function toggleFullscreenMode() {
   }
 }
 
-function startTimer() {
+function startTimer(startedAt) {
   clearInterval(timerInterval);
-  timerStartedAt = Date.now() - seconds * 1000;
+  timerStartedAt = Number(startedAt) || (Date.now() - seconds * 1000);
   const tick = () => {
     if (finished) return;
     seconds = Math.max(0, Math.floor((Date.now() - timerStartedAt) / 1000));
@@ -1845,6 +2130,7 @@ function stopTimer() {
 }
 
 function checkWinAndFinish() {
+  if (isCollabActive()) return;
   finished = true;
   stopTimer();
   const praiseText = getRandomPraise();   // 随机一句诗
@@ -1863,6 +2149,20 @@ function checkWinAndFinish() {
   playSound("complete");
   recordStats(currentDifficulty, seconds);
   clearSave();
+}
+
+function finishCollabGame() {
+  stopTimer();
+  const praiseText = getRandomPraise();
+  lastPraiseText = praiseText;
+  const finishMsg = $("finishMsg");
+  finishMsg.style.display = "block";
+  finishMsg.textContent = "🎉 共同完成！" + praiseText + " · 用时 " + formatDuration(seconds);
+  launchFireworks();
+  playSound("complete");
+  recordStats(currentDifficulty, seconds);
+  clearCollabSave();
+  updateCollabStatus();
 }
 
 function newGame(difficulty) {
@@ -1987,13 +2287,30 @@ function bindUiEvents() {
   $("gameHomeBtn").addEventListener("click", () => showSudokuHome(true));
   $("homeStartBtn").addEventListener("click", startHomeGame);
   $("openNewGameBtn").addEventListener("click", () => {
-    setHomeNewGameConfig($("newGameConfig").hidden);
+    const opening = $("newGameConfig").hidden;
+    setCollabConfig(false);
+    setHomeNewGameConfig(opening);
   });
   $("homeResumeBtn").addEventListener("click", resumeGame);
+  $("homeCollabResumeBtn").addEventListener("click", resumeCollabGame);
   $("homeStatsBtn").addEventListener("click", showStats);
   document.querySelectorAll("#homeDifficulty [data-diff]").forEach(btn => {
     btn.addEventListener("click", () => selectHomeDifficulty(btn.dataset.diff));
   });
+  $("openCollabBtn").addEventListener("click", () => {
+    const opening = $("collabConfig").hidden;
+    setHomeNewGameConfig(false);
+    setCollabConfig(opening);
+  });
+  $("collabCreateBtn").addEventListener("click", startCollabGame);
+  $("collabJoinBtn").addEventListener("click", joinCollabGame);
+  $("collabRoomInput").addEventListener("input", e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, ""); });
+  $("collabRoomInput").addEventListener("keydown", e => { if (e.key === "Enter") joinCollabGame(); });
+  document.querySelectorAll("#collabDifficulty [data-collab-diff]").forEach(btn => {
+    btn.addEventListener("click", () => selectCollabDifficulty(btn.dataset.collabDiff));
+  });
+  $("copyCollabInviteBtn").addEventListener("click", copyCollabInvite);
+  $("pauseCollabBtn").addEventListener("click", () => showSudokuHome(true));
   $("noteBtn").addEventListener("click", toggleNoteMode);
   $("candBtn").addEventListener("click", toggleShowAllCands);
   $("undoBtn").addEventListener("click", undo);
@@ -2034,7 +2351,15 @@ function initApp() {
   bindUiEvents();
   bindKeyboardEvents();
   selectHomeDifficulty(0);
+  selectCollabDifficulty(0);
   const hadSave = checkResume();
+  checkCollabResume();
+  const invite = new URLSearchParams(location.search).get("join");
+  if (invite && /^[A-HJ-NP-Z2-9]{5}$/.test(invite.toUpperCase())) {
+    $("collabRoomInput").value = invite.toUpperCase();
+    setCollabConfig(true);
+    setCollabConfigStatus("朋友邀请你共同完成这盘数独，确认后点击“加入协作”。");
+  }
   if (location.hash === "#play" && hadSave) resumeGame();
   else showSudokuHome(location.hash === "#play");
 }

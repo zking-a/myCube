@@ -83,7 +83,7 @@ ok('电脑可以从初始棋局选择一条合法蓝方走法',
   aiMove && C.getLegalMoves(initial, aiMove.from).all.includes(aiMove.target) && initial[aiMove.from] === 'blue');
 const aiApplied = C.applyMove(initial, 'blue', aiMove.from, aiMove.target);
 ok('困难电脑使用受预算保护的 DFS 搜索并优先改善局面',
-  /function dfsSearch/.test(coreSource) && /maxNodes/.test(coreSource) && aiApplied &&
+  /function dfsSearch/.test(coreSource) && /maxNodes/.test(coreSource) && /tailProgress/.test(coreSource) && /axisOffset/.test(coreSource) && aiApplied &&
   C.evaluatePosition(aiApplied.pieces, 'blue') > C.evaluatePosition(initial, 'blue'));
 
 const validState = C.sanitizeState({ pieces: initial, turn: 'blue', moveNumber: 12, winner: '' });

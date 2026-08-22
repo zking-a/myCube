@@ -131,6 +131,13 @@ ok('数独续玩卡保持紧凑横向结构',
   /继续上局/.test(sudokuHtml) &&
   /\.resume-card\{[^}]*min-height:72px[^}]*align-items:center/.test(sudokuCss) &&
   !/\.resume-card\{[^}]*flex-direction:column/.test(sudokuCss));
+ok('数独大厅提供好友协作入口与可见的同盘状态栏',
+  /id="openCollabBtn"/.test(sudokuHtml) && /id="collabConfig"/.test(sudokuHtml) &&
+  /id="collabStatusBar"/.test(sudokuHtml) && /CO-OP SUDOKU/.test(sudokuHtml) &&
+  /collab-status-bar\{[^}]*grid-column:1\/-1/.test(sudokuCss));
+ok('协作客户端保存私密重连身份并连接数独专属通道',
+  /STORAGE_COLLAB/.test(sudokuSource) && /sudoku-ws/.test(sudokuSource) &&
+  /sendCollabChanges/.test(sudokuSource) && /resumeCollabGame/.test(sudokuSource));
 const historyBoard = [7];
 const historyNotes = { 0: [1, 2] };
 S.restoreHistoryEntry(historyBoard, historyNotes, { index: 0, prevValue: 0, prevNotes: null });

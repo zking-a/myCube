@@ -2,9 +2,10 @@
 /*
  * server.js —— 轻量游戏站联机与静态资源服务器
  *
- * 作用：静态托管小游戏，并为 24 点与中国跳棋提供独立的服务端权威联机房间。
+ * 作用：静态托管小游戏，并为 24 点、中国跳棋与数独好友协作提供独立的联机房间。
  *   - 房间码就是随机种子，双方题目天然一致；服务端按同一规则复现题目并验证表达式。
  *   - 跳棋由服务端保存棋盘、校验回合和合法走法，双方客户端只负责固定阵营视角的展示。
+ *   - 数独协作由服务端保存同一盘面，双方只提交填写，避免客户端各自漂移。
  *   - 房间仍只保存在内存，不需要数据库，适合轻量双人对局。
  *
  * 24 点协议（JSON，UTF-8；跳棋协议见文件下方 /checkers-ws 处理器）
@@ -110,6 +111,8 @@ const SECURITY_HEADERS = {
 const rooms = new Map();
 /** roomCode -> 中国跳棋房间（与 24 点共用全服房间和席位上限） */
 const checkersRooms = new Map();
+/** roomCode -> 数独好友协作房间（双方实时编辑同一盘面） */
+const sudokuRooms = new Map();
 
 function createRoom(code, creatorIp) {
   const room = {
@@ -159,6 +162,85 @@ function resetCheckersRoom(room) {
   room.lastMove = null;
   room.phase = Array.from(room.players.values()).filter(function (p) { return p.online; }).length === 2 ? 'playing' : 'waiting';
   room.lastActivityAt = Date.now();
+}
+
+function createSudokuRoom(code, creatorIp, puzzle, difficulty) {
+  const room = {
+    code: code,
+    phase: 'waiting', // waiting | playing | done
+    solution: puzzle.solution.slice(),
+    givens: puzzle.givens.slice(),
+    board: puzzle.givens.slice(),
+    difficulty: difficulty,
+    startedAt: null,
+    finishedAt: null,
+    lastEditorCid: '',
+    creatorIp: creatorIp || '',
+    players: new Map(),
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    _gc: null
+  };
+  sudokuRooms.set(code, room);
+  return room;
+}
+
+function sudokuPlayerList(room) {
+  return Array.from(room.players.values()).map(function (p) {
+    return { cid: p.cid, seat: p.seat, online: p.online };
+  });
+}
+
+function broadcastSudokuState(room) {
+  const state = JSON.stringify({
+    t: 'state', room: room.code, phase: room.phase,
+    solution: room.solution, givens: room.givens, board: room.board,
+    difficulty: room.difficulty, startedAt: room.startedAt, finishedAt: room.finishedAt, lastEditor: room.lastEditorCid,
+    serverNow: Date.now(), players: sudokuPlayerList(room)
+  });
+  room.players.forEach(function (p) { send(p.ws, state); });
+}
+
+function scheduleSudokuGC(room) {
+  if (room._gc) clearTimeout(room._gc);
+  room._gc = setTimeout(function () {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (!anyOnline && sudokuRooms.get(room.code) === room) sudokuRooms.delete(room.code);
+  }, ROOM_TTL);
+}
+
+function expireSudokuRoom(room, reason) {
+  if (!room || sudokuRooms.get(room.code) !== room) return;
+  sudokuRooms.delete(room.code);
+  if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+  room.players.forEach(function (p) {
+    send(p.ws, { t: 'err', code: 'ROOM_EXPIRED', msg: reason });
+    if (p.ws) { try { p.ws.close(1000, 'room expired'); } catch (e) {} }
+    p.online = false;
+    p.ws = null;
+  });
+}
+
+function isSudokuSolution(values) {
+  if (!Array.isArray(values) || values.length !== 81 || !values.every(function (v) { return Number.isInteger(v) && v >= 1 && v <= 9; })) return false;
+  for (let group = 0; group < 9; group++) {
+    const row = new Set(), col = new Set(), box = new Set();
+    for (let i = 0; i < 9; i++) {
+      row.add(values[group * 9 + i]);
+      col.add(values[i * 9 + group]);
+      const r = Math.floor(group / 3) * 3 + Math.floor(i / 3);
+      const c = (group % 3) * 3 + (i % 3);
+      box.add(values[r * 9 + c]);
+    }
+    if (row.size !== 9 || col.size !== 9 || box.size !== 9) return false;
+  }
+  return true;
+}
+
+function isSudokuPuzzle(solution, givens) {
+  return isSudokuSolution(solution) && Array.isArray(givens) && givens.length === 81 &&
+    givens.every(function (v, i) { return Number.isInteger(v) && v >= 0 && v <= 9 && (!v || v === solution[i]); }) &&
+    givens.filter(Boolean).length >= 17;
 }
 
 function checkersPlayerList(room) {
@@ -229,6 +311,7 @@ function countSeats() {
   let total = 0;
   rooms.forEach(function (room) { total += room.players.size; });
   checkersRooms.forEach(function (room) { total += room.players.size; });
+  sudokuRooms.forEach(function (room) { total += room.players.size; });
   return total;
 }
 
@@ -240,6 +323,9 @@ function countSeatsForIp(ip) {
   checkersRooms.forEach(function (room) {
     room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
   });
+  sudokuRooms.forEach(function (room) {
+    room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
+  });
   return total;
 }
 
@@ -248,6 +334,7 @@ function countRoomsForIp(ip) {
   let total = 0;
   rooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   checkersRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
+  sudokuRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   return total;
 }
 
@@ -433,6 +520,22 @@ setInterval(function () {
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
     }
   });
+  sudokuRooms.forEach(function (room, code) {
+    const anyOnline = Array.from(room.players.values()).some(function (p) { return p.online; });
+    if (room.phase === 'waiting' && room.players.size < 2 && now - room.createdAt > UNMATCHED_ROOM_TTL_MS) {
+      expireSudokuRoom(room, '等待协作好友超时，房间已自动释放');
+      return;
+    }
+    const idleLimit = room.phase === 'waiting' ? LOBBY_IDLE_MS : ONLINE_ROOM_IDLE_MS;
+    if (anyOnline && now - (room.lastActivityAt || room.createdAt) > idleLimit) {
+      expireSudokuRoom(room, '协作房间长时间没有操作，已自动释放');
+      return;
+    }
+    if (!anyOnline && now - (room.lastActivityAt || room.createdAt || now) > ROOM_TTL) {
+      sudokuRooms.delete(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+    }
+  });
   roomCreateLog.forEach(function (timestamps, ip) {
     const recent = timestamps.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
     if (recent.length) roomCreateLog.set(ip, recent);
@@ -545,9 +648,10 @@ const server = http.createServer(function (req, res) {
     res.end(JSON.stringify({
       ok: true,
       service: 'light-games',
-      rooms: rooms.size + checkersRooms.size,
+      rooms: rooms.size + checkersRooms.size + sudokuRooms.size,
       rooms24: rooms.size,
       roomsCheckers: checkersRooms.size,
+      roomsSudoku: sudokuRooms.size,
       seats: countSeats(),
       sockets: liveConnections,
       ts: Date.now()
@@ -577,12 +681,13 @@ server.maxHeadersCount = 50;
 // ===================== WebSocket =====================
 const wss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 const checkersWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+const sudokuWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 
 // 显式分发升级请求，避免多个 WebSocket.Server 各自监听 server 时互相抢占路径。
 server.on('upgrade', function (req, socket, head) {
   let pathname = '';
   try { pathname = new URL(req.url || '/', 'http://localhost').pathname; } catch (e) {}
-  const target = pathname === '/ws' ? wss : (pathname === '/checkers-ws' ? checkersWss : null);
+  const target = pathname === '/ws' ? wss : (pathname === '/checkers-ws' ? checkersWss : (pathname === '/sudoku-ws' ? sudokuWss : null));
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, function (ws) { target.emit('connection', ws, req); });
 });
@@ -686,7 +791,7 @@ wss.on('connection', function (ws, req) {
           return;
         }
         // ---- 全服房间数上限 ----
-        if (rooms.size + checkersRooms.size >= MAX_ROOMS) {
+        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) {
           fail('SERVER_FULL', '服务器房间已满，请稍后再试');
           return;
         }
@@ -976,7 +1081,7 @@ checkersWss.on('connection', function (ws, req) {
           fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
         }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
-        if (rooms.size + checkersRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
         room = createCheckersRoom(code, clientIp);
       } else if (intent === 'create') {
         const ownSeat = room.players.get(cid);
@@ -1107,9 +1212,175 @@ checkersWss.on('connection', function (ws, req) {
   ws.on('error', function () {});
 });
 
+// ===================== 数独好友协作 WebSocket =====================
+// 服务端保存唯一盘面；双方只提交要修改的格子，所有已连接客户端收到同一状态快照。
+sudokuWss.on('connection', function (ws, req) {
+  const clientIp = getClientIp(req);
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    const host = req.headers.host;
+    const ok = origin === ALLOWED_ORIGIN ||
+      (host && (origin === 'https://' + host || origin === 'http://' + host)) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (!ok) { ws.close(1008, 'origin not allowed'); return; }
+  }
+  if (!checkConnectionAttemptLimit(clientIp)) { ws.close(1013, 'too many connection attempts'); return; }
+  const ipConnections = liveConnectionsByIp.get(clientIp) || 0;
+  if (ipConnections >= MAX_SOCKET_CONNECTIONS_PER_IP) { ws.close(1013, 'too many connections from this ip'); return; }
+  if (liveConnections >= MAX_SOCKET_CONNECTIONS) { ws.close(1013, 'too many connections'); return; }
+
+  liveConnections++;
+  liveConnectionsByIp.set(clientIp, ipConnections + 1);
+  ws.isAlive = true;
+  ws.on('pong', function () { ws.isAlive = true; });
+
+  let tokens = RATE_BURST;
+  let lastRefill = Date.now();
+  let player = null;
+  function fail(code, msg) { send(ws, { t: 'err', code: code, msg: msg }); }
+  const joinTimer = setTimeout(function () {
+    if (!player) { try { ws.close(1000, 'join timeout'); } catch (e) {} }
+  }, JOIN_IDLE_MS);
+
+  ws.on('message', function (data) {
+    const now = Date.now();
+    tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
+    lastRefill = now;
+    if (tokens < 1) { ws.close(1008, 'rate limit'); return; }
+    tokens -= 1;
+    let m;
+    try { m = JSON.parse(data.toString()); } catch (e) { return; }
+    if (!m || typeof m.t !== 'string') return;
+
+    if (m.t === 'join') {
+      if (player) return;
+      const code = String(m.room || '').toUpperCase();
+      if (!ROOM_CODE_RE.test(code)) { fail('ROOM_INVALID', '房间码格式不正确'); return; }
+      const cid = typeof m.cid === 'string' ? m.cid.slice(0, 32) : '';
+      if (!cid || cid.length < 4) { fail('SESSION_INVALID', '玩家身份格式不正确'); return; }
+      const reconnectToken = typeof m.token === 'string' ? m.token.slice(0, 128) : '';
+      const intent = m.intent === 'create' ? 'create' : 'join';
+      let room = sudokuRooms.get(code);
+      if (!room) {
+        if (intent !== 'create') { fail('ROOM_NOT_FOUND', '协作房间不存在或已失效，请向朋友确认邀请码'); return; }
+        const difficulty = Number.isInteger(m.difficulty) && m.difficulty >= 0 && m.difficulty <= 4 ? m.difficulty : 0;
+        if (!isSudokuPuzzle(m.solution, m.givens)) { fail('PUZZLE_INVALID', '协作题目校验失败，请刷新后重试'); return; }
+        if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
+        }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) { fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return; }
+        if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
+        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        room = createSudokuRoom(code, clientIp, { solution: m.solution, givens: m.givens }, difficulty);
+      } else if (intent === 'create') {
+        const ownSeat = room.players.get(cid);
+        if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，正在换一个新房间码'); return; }
+        if (!tokenMatches(ownSeat.reconnectToken, reconnectToken)) { fail('SESSION_INVALID', '重连身份已失效，请重新创建协作房间'); return; }
+      }
+
+      let p = room.players.get(cid);
+      let replacedSocket = null;
+      if (p) {
+        if (!tokenMatches(p.reconnectToken, reconnectToken)) { fail('SESSION_INVALID', '无法验证协作者身份，请让朋友重新分享邀请码'); return; }
+        replacedSocket = p.ws && p.ws !== ws ? p.ws : null;
+        p.ws = ws;
+        p.online = true;
+        p.clientIp = clientIp;
+        p.disconnectedAt = null;
+        p._room = room;
+      } else {
+        if (room.phase !== 'waiting') { fail('ROUND_IN_PROGRESS', '这盘协作已经开始，需由原协作者重连'); return; }
+        if (countSeats() >= MAX_CONNECTIONS) { fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return; }
+        if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) { fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限'); return; }
+        if (room.players.size >= 2) { fail('ROOM_FULL', '该数独协作房间已有两位玩家'); return; }
+        p = {
+          cid: cid, seat: room.players.size + 1, ws: ws, online: true,
+          clientIp: clientIp, disconnectedAt: null,
+          reconnectToken: createReconnectToken(), _room: room
+        };
+        room.players.set(cid, p);
+      }
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+      player = p;
+      send(ws, { t: 'session', cid: p.cid, token: p.reconnectToken });
+      if (replacedSocket) { try { replacedSocket.terminate(); } catch (e) {} }
+      if (room.phase === 'waiting' && room.players.size === 2 &&
+          Array.from(room.players.values()).every(function (seat) { return seat.online; })) {
+        room.phase = 'playing';
+        room.startedAt = Date.now();
+      }
+      room.lastActivityAt = Date.now();
+      clearTimeout(joinTimer);
+      broadcastSudokuState(room);
+      return;
+    }
+
+    if (!player) return;
+    if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
+    const room = player._room;
+    if (!room || sudokuRooms.get(room.code) !== room) return;
+    if (m.t === 'set') {
+      if (room.phase !== 'playing') { fail('ROOM_NOT_READY', '等待两位协作者都进入后再开始填写'); return; }
+      if (!Array.isArray(m.changes)) return;
+      let changed = false;
+      const seen = new Set();
+      m.changes.slice(0, 81).forEach(function (entry) {
+        const index = entry && Number.isInteger(entry.index) ? entry.index : -1;
+        const value = entry && Number.isInteger(entry.value) ? entry.value : -1;
+        if (seen.has(index) || index < 0 || index >= 81 || value < 0 || value > 9 || room.givens[index] !== 0) return;
+        seen.add(index);
+        if (room.board[index] !== value) { room.board[index] = value; changed = true; }
+      });
+      if (!changed) return;
+      room.lastActivityAt = now;
+      room.lastEditorCid = player.cid;
+      if (room.board.every(function (value, index) { return value === room.solution[index]; })) {
+        room.phase = 'done';
+        room.finishedAt = now;
+      }
+      broadcastSudokuState(room);
+    } else if (m.t === 'leave') {
+      room.players.delete(player.cid);
+      player = null;
+      if (!room.players.size) {
+        sudokuRooms.delete(room.code);
+        if (room._gc) clearTimeout(room._gc);
+      } else {
+        room.phase = 'waiting';
+        room.startedAt = null;
+        room.lastActivityAt = now;
+        broadcastSudokuState(room);
+      }
+      try { ws.close(1000, 'left room'); } catch (e) {}
+    } else if (m.t === 'ping') {
+      send(ws, { t: 'pong', s: Date.now() });
+    }
+  });
+
+  ws.on('close', function () {
+    clearTimeout(joinTimer);
+    liveConnections = Math.max(0, liveConnections - 1);
+    const remainingForIp = Math.max(0, (liveConnectionsByIp.get(clientIp) || 1) - 1);
+    if (remainingForIp) liveConnectionsByIp.set(clientIp, remainingForIp);
+    else liveConnectionsByIp.delete(clientIp);
+    if (!player) return;
+    if (player.ws !== ws) { player = null; return; }
+    player.online = false;
+    player.ws = null;
+    player.disconnectedAt = Date.now();
+    const room = player._room;
+    if (room && sudokuRooms.get(room.code) === room) {
+      room.lastActivityAt = Date.now();
+      broadcastSudokuState(room);
+      scheduleSudokuGC(room);
+    }
+  });
+  ws.on('error', function () {});
+});
+
 // WebSocket 心跳：及时清理移动网络留下的“半开连接”，让重连和房主转移更可靠。
 const heartbeatTimer = setInterval(function () {
-  [wss, checkersWss].forEach(function (socketServer) {
+  [wss, checkersWss, sudokuWss].forEach(function (socketServer) {
     socketServer.clients.forEach(function (ws) {
       if (ws.isAlive === false) { try { ws.terminate(); } catch (e) {} return; }
       ws.isAlive = false;
@@ -1118,9 +1389,10 @@ const heartbeatTimer = setInterval(function () {
   });
 }, 30000);
 heartbeatTimer.unref();
-wss.on('close', function () { if (!checkersWss.clients.size) clearInterval(heartbeatTimer); });
-checkersWss.on('close', function () { if (!wss.clients.size) clearInterval(heartbeatTimer); });
+wss.on('close', function () { if (!checkersWss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
+checkersWss.on('close', function () { if (!wss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
+sudokuWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size) clearInterval(heartbeatTimer); });
 
 server.listen(PORT, function () {
-  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws)');
+  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws)');
 });
