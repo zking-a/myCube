@@ -28,8 +28,23 @@ function randomRoom() {
 
 function showError(message) {
   const error = $('fieldError');
+  if (message) setModeConfig('online');
   error.textContent = message;
   error.hidden = !message;
+}
+
+function setModeConfig(mode) {
+  const aiOpen = mode === 'ai';
+  const onlineOpen = mode === 'online';
+  $('aiConfig').hidden = !aiOpen;
+  $('onlineCard').hidden = !onlineOpen;
+  $('selectAiBtn').setAttribute('aria-expanded', aiOpen ? 'true' : 'false');
+  $('selectOnlineBtn').setAttribute('aria-expanded', onlineOpen ? 'true' : 'false');
+}
+
+function toggleModeConfig(mode) {
+  const config = mode === 'ai' ? $('aiConfig') : $('onlineCard');
+  setModeConfig(config.hidden ? mode : '');
 }
 
 function goToGame(params) {
@@ -64,19 +79,21 @@ function init() {
   aiLevel = ['easy', 'normal', 'hard'].includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal';
   selectLevel(aiLevel);
   $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
-  $('startAiBtn').firstChild.nodeValue = hasSavedGame('ai') ? '继续人机对战 ' : '开始人机对战 ';
-  $('startLocalBtn').firstChild.nodeValue = hasSavedGame('local') ? '继续本地对战 ' : '开始本地对战 ';
+  $('startAiLabel').textContent = hasSavedGame('ai') ? '继续人机对战' : '开始人机对战';
+  $('startLocalLabel').textContent = hasSavedGame('local') ? '继续本地对战' : '开始本地对战';
 
   const launchParams = new URLSearchParams(location.search);
   const invitedRoom = normalizeRoom(launchParams.get('room'));
   const launchError = String(launchParams.get('error') || '').slice(0, 80);
   if (invitedRoom) {
     $('roomInput').value = invitedRoom;
+    setModeConfig('online');
     $('onlineCard').classList.add('invited');
     setTimeout(function () { $('onlineCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
   }
   if (launchError) {
     showError(launchError);
+    setModeConfig('online');
     $('onlineCard').classList.add('invited');
     setTimeout(function () { $('onlineCard').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
   }
@@ -84,6 +101,8 @@ function init() {
   document.querySelectorAll('[data-level]').forEach(function (button) {
     button.addEventListener('click', function () { selectLevel(button.dataset.level); });
   });
+  $('selectAiBtn').addEventListener('click', function () { toggleModeConfig('ai'); });
+  $('selectOnlineBtn').addEventListener('click', function () { toggleModeConfig('online'); });
   $('roomInput').addEventListener('input', function () {
     $('roomInput').value = normalizeRoom($('roomInput').value);
     showError('');

@@ -7,8 +7,8 @@
   <meta name="description" content="中国跳棋模式大厅，支持人机、本地双人和好友在线联机。">
   <title>中国跳棋 · 选择对战模式</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="checkers.css?v=20260823a">
-  <script src="lobby.js?v=20260823a" defer></script>
+  <link rel="stylesheet" href="checkers.css?v=20260824a">
+  <script src="lobby.js?v=20260824a" defer></script>
 </head>
 <body class="lobby-page">
   <main class="lobby-shell">
@@ -37,34 +37,35 @@
         <span class="section-badge">己方始终在下</span>
       </div>
 
-      <div class="mode-card-grid">
-        <article class="mode-card ai-card">
-          <div class="mode-icon">🤖</div>
-          <span class="mode-kicker">SOLO</span>
-          <h3>人机对战</h3>
-          <p>你执红方，挑战会思考的蓝方电脑。适合熟悉路线和连续跳跃。</p>
+      <div class="mode-menu">
+        <button type="button" class="mode-entry ai-entry ui-button" id="selectAiBtn" aria-expanded="false" aria-controls="aiConfig">
+          <span class="mode-icon" aria-hidden="true">🤖</span>
+          <span class="mode-copy"><span class="mode-kicker">SOLO</span><span class="mode-entry-title">人机对战</span><span class="mode-entry-desc">磨练路线和连续跳跃</span></span>
+          <span class="mode-arrow" aria-hidden="true">→</span>
+        </button>
+        <section class="mode-config ai-config" id="aiConfig" hidden aria-label="人机对战设置">
+          <span class="config-label">选择电脑难度</span>
           <div class="difficulty-picker" role="radiogroup" aria-label="选择电脑难度">
             <button type="button" data-level="easy" role="radio" aria-checked="false">轻松</button>
             <button type="button" class="active" data-level="normal" role="radio" aria-checked="true">标准</button>
             <button type="button" data-level="hard" role="radio" aria-checked="false">困难</button>
           </div>
-          <button type="button" class="mode-start primary ui-button ui-button--primary" id="startAiBtn">开始人机对战 <span>→</span></button>
-        </article>
+          <button type="button" class="mode-start primary ui-button ui-button--primary" id="startAiBtn"><span id="startAiLabel">开始人机对战</span> <span aria-hidden="true">→</span></button>
+        </section>
 
-        <article class="mode-card local-card">
-          <div class="mode-icon">👥</div>
-          <span class="mode-kicker">TOGETHER</span>
-          <h3>本地双人</h3>
-          <p>两个人共用一台设备轮流走棋。棋盘保持红方视角，不会每回合翻转。</p>
-          <ul class="mode-points"><li>换手不转棋盘</li><li>支持撤销与自动存档</li></ul>
-          <button type="button" class="mode-start secondary ui-button ui-button--success" id="startLocalBtn">开始本地对战 <span>→</span></button>
-        </article>
+        <button type="button" class="mode-entry local-entry ui-button" id="startLocalBtn">
+          <span class="mode-icon" aria-hidden="true">👥</span>
+          <span class="mode-copy"><span class="mode-kicker">TOGETHER</span><span class="mode-entry-title" id="startLocalLabel">开始本地对战</span><span class="mode-entry-desc">一台设备，固定红方视角</span></span>
+          <span class="mode-arrow" aria-hidden="true">→</span>
+        </button>
 
-        <article class="mode-card online-card" id="onlineCard">
-          <div class="mode-icon">🌐</div>
-          <span class="mode-kicker">ONLINE</span>
-          <h3>好友联机</h3>
-          <p>创建房间邀请朋友，双方都从自己的阵营视角观察棋盘。</p>
+        <button type="button" class="mode-entry online-entry ui-button" id="selectOnlineBtn" aria-expanded="false" aria-controls="onlineCard">
+          <span class="mode-icon" aria-hidden="true">🌐</span>
+          <span class="mode-copy"><span class="mode-kicker">ONLINE</span><span class="mode-entry-title">好友联机</span><span class="mode-entry-desc">创建房间，和朋友实时对战</span></span>
+          <span class="mode-arrow" aria-hidden="true">→</span>
+        </button>
+        <section class="mode-config online-config" id="onlineCard" hidden aria-label="好友联机设置">
+          <span class="config-label">输入昵称或邀请房间码</span>
           <div class="online-fields">
             <label><span>你的昵称</span><input class="ui-input" id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="请输入昵称"></label>
             <label><span>房间码</span><input class="ui-input" id="roomInput" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="收到邀请后填写"></label>
@@ -74,7 +75,7 @@
             <button type="button" class="mode-start ghost ui-button ui-button--secondary" id="joinRoomBtn">加入房间</button>
           </div>
           <p class="field-error" id="fieldError" role="alert" hidden></p>
-        </article>
+        </section>
       </div>
     </section>
 
