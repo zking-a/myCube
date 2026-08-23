@@ -403,20 +403,6 @@
     }).join('');
   }
 
-  // 静态局面分：优先把棋子送进目标营地，其次压缩到目标营地的总距离。
-  // 中轴偏移和最后一枚棋子的进度分别避免在边线绕路、把少量棋子远远甩在后方。
-  function evaluatePosition(pieces, perspective) {
-    const mine = playerPosition(pieces, perspective);
-    const theirs = playerPosition(pieces, opposite(perspective));
-    return (mine.inGoal - theirs.inGoal) * 320 +
-      (mine.inGoal * mine.inGoal - theirs.inGoal * theirs.inGoal) * 18 +
-      (mine.forward - theirs.forward) * 3 +
-      (theirs.distance - mine.distance) * 2 +
-      (theirs.assignmentDistance - mine.assignmentDistance) * 22 +
-      (mine.tailProgress - theirs.tailProgress) * 35 +
-      (theirs.axisOffset - mine.axisOffset) * .7;
-  }
-
   function orderedMoves(pieces, player, limit) {
     return listMoves(pieces, player)
       .map(function (move) { return { move: move, score: moveScore(pieces, player, move) }; })

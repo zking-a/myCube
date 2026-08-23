@@ -140,10 +140,28 @@ class ChineseCheckersShortestPathSolver {
   neighbors(state) {
     const occupied = new Set(state);
     const results = new Map();
-    const addResult = function (pieceOffset, targetIndex, kind, path) {
+    const sortedInsertResult = function (state, pieceOffset, targetIndex) {
       const next = state.slice();
+      const originIndex = next[pieceOffset];
       next[pieceOffset] = targetIndex;
-      next.sort(function (left, right) { return left - right; });
+      if (targetIndex === originIndex) return next;
+      let cursor = pieceOffset;
+      if (targetIndex > originIndex) {
+        while (cursor + 1 < next.length && targetIndex > next[cursor + 1]) {
+          next[cursor] = next[cursor + 1];
+          cursor++;
+        }
+      } else {
+        while (cursor > 0 && targetIndex < next[cursor - 1]) {
+          next[cursor] = next[cursor - 1];
+          cursor--;
+        }
+      }
+      next[cursor] = targetIndex;
+      return next;
+    };
+    const addResult = function (pieceOffset, targetIndex, kind, path) {
+      const next = sortedInsertResult(state, pieceOffset, targetIndex);
       const key = this.stateKey(next);
       if (!results.has(key)) results.set(key, {
         state: next,
@@ -171,9 +189,10 @@ class ChineseCheckersShortestPathSolver {
 
       const visited = new Set([originIndex]);
       const queue = [originIndex];
+      let queueHead = 0;
       const parents = new Map();
-      while (queue.length) {
-        const currentIndex = queue.shift();
+      while (queueHead < queue.length) {
+        const currentIndex = queue[queueHead++];
         const current = CELL_BY_INDEX[currentIndex];
         for (let directionIndex = 0; directionIndex < Core.DIRECTIONS.length; directionIndex++) {
           const direction = Core.DIRECTIONS[directionIndex];

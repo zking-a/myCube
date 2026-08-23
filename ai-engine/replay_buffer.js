@@ -61,15 +61,8 @@ class ReplayBuffer {
       }
       return values;
     };
-    const shuffle = function (values) {
-      for (let index = values.length - 1; index > 0; index--) {
-        const swap = Math.floor(random() * (index + 1));
-        const value = values[index]; values[index] = values[swap]; values[swap] = value;
-      }
-      return values;
-    };
     const all = this.all();
-    if (!settings.balanceSources) return shuffle(all.slice()).slice(0, limit);
+    if (!settings.balanceSources) return shuffleInPlace(all).slice(0, limit);
     const sourceBuckets = new Map();
     this.games.forEach(function (game) {
       const source = String(game.metadata && game.metadata.source || game.samples[0] && game.samples[0].source || 'unknown');
@@ -90,14 +83,17 @@ class ReplayBuffer {
     while (result.length < limit && pools.length) {
       const pool = pools[cursor % pools.length];
       if (!pool.games.length) { pools.splice(cursor % pools.length, 1); continue; }
-      if (!pool.games.length) continue;
-      const gameState = pool.games[pool.cursor % pool.games.length];
+      const poolGameCount = pool.games.length;
+      if (pool.cursor >= poolGameCount) pool.cursor = 0;
+      const gameState = pool.games[pool.cursor];
       if (!gameState.samples.length) {
-        pool.games.splice(pool.cursor % pool.games.length, 1);
+        pool.games.splice(pool.cursor, 1);
         if (!pool.games.length) continue;
         if (pool.cursor >= pool.games.length) pool.cursor = 0;
       } else {
-        result.push(gameState.samples.pop());
+        const sampleIndex = gameState.samples.length - 1;
+        result.push(gameState.samples[sampleIndex]);
+        gameState.samples.length--;
         pool.cursor = (pool.cursor + 1) % pool.games.length;
         cursor++;
       }

@@ -85,8 +85,9 @@ class PuctMcts {
    * Search every legal root move for a forced one-ply win before applying any
    * policy pruning. A weak prior must never hide a legal immediate win.
    */
-  immediateWinningActions(state, player) {
-    return this.game.legalActions(state).filter((action) => {
+  immediateWinningActions(state, player, legalActions) {
+    const actions = Array.isArray(legalActions) ? legalActions : this.game.legalActions(state);
+    return actions.filter((action) => {
       const next = this.game.applyAction(state, action);
       return this.game.isTerminal(next) && this.game.terminalValue(next, player) >= 1 - 1e-9;
     }).sort((left, right) => this.actionKey(left).localeCompare(this.actionKey(right)));
@@ -170,7 +171,7 @@ class PuctMcts {
     root.children = Array.from(selected.values()).sort((left, right) => this.actionKey(left.action).localeCompare(this.actionKey(right.action)));
     const total = root.children.reduce(function (sum, child) { return sum + child.prior; }, 0) || 1;
     root.children.forEach(function (child) { child.prior /= total; });
-    return branchCount;
+    return limit;
   }
 
   /** 仅在自我博弈根节点加入 Dirichlet 噪声，增加可学习局面的覆盖率。 */
@@ -221,13 +222,14 @@ class PuctMcts {
    */
   search(state) {
     const root = new SearchNode({ state: state, player: this.game.currentPlayer(state), prior: 1 });
-    const immediateWins = this.immediateWinningActions(state, root.player);
+    const legalActions = this.game.legalActions(state);
+    const immediateWins = this.immediateWinningActions(state, root.player, legalActions);
     if (immediateWins.length) {
       const forcedAction = immediateWins[0];
       return {
         root: root, forcedAction: forcedAction, value: 1,
         policy: immediateWins.map((action, index) => ({ action: action, probability: index ? 0 : 1, visits: 1, value: 1 })),
-        telemetry: { branchCount: this.game.legalActions(state).length, activeChildren: immediateWins.length, maxVisitTieCount: 1, meanDepth: 1, modelCalls: 0, selectedPriorRank: 0 }
+        telemetry: { branchCount: legalActions.length, activeChildren: immediateWins.length, maxVisitTieCount: 1, meanDepth: 1, modelCalls: 0, selectedPriorRank: 0 }
       };
     }
     this.expand(root);

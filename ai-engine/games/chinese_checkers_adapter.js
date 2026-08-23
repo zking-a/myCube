@@ -171,12 +171,30 @@ class ChineseCheckersAdapter {
     if (!actions.length) return [];
     const base = Core.evaluateHybridPosition(state.pieces, perspective, V0Model);
     const recent = new Set(state.recent || []);
+    const stateScoreCache = new Map();
     const logits = actions.map((action) => {
-      const result = Core.applyMove(state.pieces, perspective, action.from, action.target);
-      if (result.winner === perspective) return 18;
-      const delta = Core.evaluateHybridPosition(result.pieces, perspective, V0Model) - base;
-      const repeatPenalty = recent.has(Core.positionKey(result.pieces)) ? 5 : 0;
-      return delta / 135 + Core.moveScore(state.pieces, perspective, action) / 85 - repeatPenalty;
+      const key = this.actionKey(action);
+      let cache = stateScoreCache.get(key);
+      if (!cache) {
+        const result = Core.applyMove(state.pieces, perspective, action.from, action.target);
+        if (!result) {
+          cache = { score: -Infinity };
+          stateScoreCache.set(key, cache);
+          return cache.score;
+        }
+        const score = result.winner === perspective ? 18 : (function () {
+          const stateKey = Core.positionKey(result.pieces);
+          let delta = stateScoreCache.get('state:' + stateKey);
+          if (!Number.isFinite(delta)) {
+            delta = Core.evaluateHybridPosition(result.pieces, perspective, V0Model) - base;
+            stateScoreCache.set('state:' + stateKey, delta);
+          }
+          return delta / 135 + Core.moveScore(state.pieces, perspective, action) / 85 - (recent.has(stateKey) ? 5 : 0);
+        })();
+        cache = { score: score, winner: result.winner };
+        stateScoreCache.set(key, cache);
+      }
+      return cache.score;
     });
     const temperature = Math.max(0.2, Number(this.options.heuristicTemperature) || 1);
     return softmax(logits.map(function (value) { return value / temperature; }));
