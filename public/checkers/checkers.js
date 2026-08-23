@@ -16,6 +16,7 @@ const CONFIG = {
   RECONNECT_BASE: 800,
   RECONNECT_MAX: 10000
 };
+const AI_LEVELS = ['easy', 'normal', 'hard'];
 
 const launchParams = new URLSearchParams(location.search);
 const launchRoom = normalizeRoom(launchParams.get('room'));
@@ -38,6 +39,8 @@ let soundEnabled = true;
 let aiLevel = 'normal';
 let aiThinking = false;
 let aiTimer = null;
+let aiWorker = null;
+let aiRequestId = 0;
 let toastTimer = null;
 
 const online = {
@@ -101,7 +104,7 @@ function loadGame() {
 function resetState() {
   pieces = Core.createInitialPieces(); turn = 'red'; selectedKey = ''; legalMoves = emptyMoves();
   history = []; moveNumber = 1; gameOver = ''; lastMove = null; aiThinking = false;
-  clearTimeout(aiTimer); aiTimer = null; closeWinner();
+  clearTimeout(aiTimer); aiTimer = null; cancelAiSearch(); closeWinner();
 }
 
 function pushHistory() {
@@ -316,19 +319,72 @@ function applyLocalMove(fromKey, targetKey, actor) {
   saveGame(); render(); return true;
 }
 
+/** 取消过期计算；终止 Worker 才能真正释放正在执行的深层搜索。 */
+function cancelAiSearch() {
+  aiRequestId++;
+  if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+}
+
+/**
+ * 优先在 Worker 中运行搜索。旧浏览器或 Worker 加载失败时回退到同步核心，
+ * 保证离线文件部署和历史环境仍然能够完成人机对局。
+ */
+function requestAiMove(recentPositions, callback) {
+  const requestId = ++aiRequestId;
+  const snapshot = { ...pieces };
+  const finish = function (move, error) {
+    if (requestId !== aiRequestId) return;
+    callback(move, error);
+  };
+  const fallback = function (error) {
+    if (requestId !== aiRequestId) return;
+    const searchOptions = aiLevel === 'hard' ? {
+      model: window.CheckersAiModel || null,
+      recentPositions: recentPositions
+    } : null;
+    finish(Core.chooseAiMove(snapshot, 'blue', aiLevel, null, searchOptions), error);
+  };
+
+  if (typeof window.Worker !== 'function') { fallback(null); return; }
+  try {
+    if (!aiWorker) aiWorker = new window.Worker('checkers_ai_worker.js');
+    aiWorker.onmessage = function (event) {
+      const response = event && event.data ? event.data : {};
+      if (Number(response.requestId) !== requestId) return;
+      if (response.error) fallback(response.error);
+      else finish(response.move || null, null);
+    };
+    aiWorker.onerror = function (event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+      fallback('搜索线程加载失败');
+    };
+    aiWorker.postMessage({
+      requestId: requestId,
+      pieces: snapshot,
+      player: 'blue',
+      level: aiLevel,
+      recentPositions: recentPositions
+    });
+  } catch (error) {
+    if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+    fallback(String(error && error.message || error));
+  }
+}
+
 function scheduleAiMove() {
   if (mode !== 'ai' || turn !== 'blue' || gameOver) return;
-  aiThinking = true; render(); clearTimeout(aiTimer);
+  clearTimeout(aiTimer); cancelAiSearch(); aiThinking = true; render();
   aiTimer = setTimeout(function () {
     aiTimer = null;
     if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
-    const searchOptions = aiLevel === 'hard' ? {
-      model: window.CheckersAiModel || null,
-      recentPositions: history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); })
-    } : null;
-    const move = Core.chooseAiMove(pieces, 'blue', aiLevel, null, searchOptions); aiThinking = false;
-    if (!move) { showToast('电脑当前没有可走位置'); render(); return; }
-    applyLocalMove(move.from, move.target, 'blue');
+    const recentPositions = history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); });
+    requestAiMove(recentPositions, function (move) {
+      if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
+      aiThinking = false;
+      if (!move) { showToast('电脑当前没有可走位置'); render(); return; }
+      applyLocalMove(move.from, move.target, 'blue');
+    });
   }, CONFIG.AI_DELAY);
 }
 
@@ -355,7 +411,7 @@ function handleCell(key) {
 
 function undoMove() {
   if (mode === 'online') return;
-  clearTimeout(aiTimer); aiTimer = null; aiThinking = false;
+  clearTimeout(aiTimer); aiTimer = null; cancelAiSearch(); aiThinking = false;
   let previous = history.pop(); if (!previous) return;
   if (mode === 'ai' && previous.turn === 'blue' && history.length) previous = history.pop();
   restoreHistory(previous); saveGame(); render();
@@ -453,13 +509,14 @@ function copyInvite() {
 }
 
 function exitToLobby() {
+  clearTimeout(aiTimer); cancelAiSearch();
   if (mode === 'online') leaveOnline(true);
   location.href = 'index.html';
 }
 
 function init() {
   soundEnabled = safeGet(CONFIG.SOUND_KEY) !== '0';
-  const requestedLevel = launchParams.get('level'); aiLevel = ['easy','normal','hard'].includes(requestedLevel) ? requestedLevel : (['easy','normal','hard'].includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
+  const requestedLevel = launchParams.get('level'); aiLevel = AI_LEVELS.includes(requestedLevel) ? requestedLevel : (AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel); viewPlayer = 'red';
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
   $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
@@ -472,7 +529,7 @@ function init() {
   $('board').addEventListener('keydown', function (event) { const node = event.target.closest('[data-key]'); if (node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleCell(node.dataset.key); } });
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
-  window.addEventListener('beforeunload', function () { if (online.active) sendOnline({ t: 'ping' }); });
+  window.addEventListener('beforeunload', function () { cancelAiSearch(); if (online.active) sendOnline({ t: 'ping' }); });
   render(); if (mode === 'ai' && turn === 'blue' && !gameOver) scheduleAiMove(); if (gameOver) showWinner(gameOver); if (mode === 'online') connectOnline(launchIntent);
 }
 

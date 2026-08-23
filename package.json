@@ -13,6 +13,13 @@
     "test:checkers": "node test_checkers.js",
     "test:checkers:e2e": "node test_checkers_online.js",
     "train:checkers-ai": "node scripts/train_checkers_ai.js",
+    "test:ai-engine": "node test_ai_engine.js",
+    "train:checkers-robot": "node scripts/train_checkers_robot_v11.js --version 1.4 --feature-version 2 --data-profile v14-generation1 --teacher-games 48 --league-games 272 --max-moves 160 --init-model models/checkers-policy-value-v1_3-numpy.json --init-sha256 c076e91b960287d95cd3aba1fc518f9016869b23402c92bf35e914f5d31d4eea --history-model models/checkers-policy-value-v1_3-numpy.json --history-sha256 c076e91b960287d95cd3aba1fc518f9016869b23402c92bf35e914f5d31d4eea --league-agent hybrid --arena-agent hybrid --skip-teacher-fit --skip-league-fit --live-output models/checkers-live.json",
+    "train:checkers-robot:fast": "node scripts/run_python_trainer.js",
+    "train:checkers-robot:scratch": "node scripts/run_python_trainer.js --init-components scratch --init-model models/checkers-policy-value-v1_3-numpy.json --adapter-feature-version 2",
+    "train:checkers-robot:policy-warm": "node scripts/run_python_trainer.js --init-components policy --init-model models/checkers-policy-value-v1_3-numpy.json --adapter-feature-version 2",
+    "solve:checkers-shortest": "node scripts/solve_checkers_shortest_path.js",
+    "eval:checkers-robot": "node scripts/evaluate_checkers_robot.js",
     "test:security": "node test_security.js"
   },
   "engines": {

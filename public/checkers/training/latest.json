@@ -1,0 +1,3124 @@
+{
+  "schemaVersion": 2,
+  "run": {
+    "name": "Chinese Checkers Policy-Value Robot V1.3",
+    "createdAt": "2026-08-22T07:27:36.544Z",
+    "status": "experimental",
+    "algorithm": "whole-game split + shaped value + replay buffer + opponent pool + DAgger policy distillation + PUCT",
+    "elapsedSeconds": 280.9
+  },
+  "summary": {
+    "teacher": {
+      "games": 44,
+      "completed": 34,
+      "averageMoves": 117.3
+    },
+    "selfPlay": {
+      "games": 28,
+      "completed": 23,
+      "averageMoves": 111.5
+    },
+    "validation": {
+      "samples": 1186,
+      "policyTop1": 0.3853,
+      "policyLoss": 2.8587,
+      "valueMae": 0.7066
+    },
+    "arena": {
+      "games": 4,
+      "candidateWins": 0,
+      "baselineWins": 4,
+      "draws": 0,
+      "completed": 4,
+      "averageMoves": 100.5
+    },
+    "teacherSamples": 5159,
+    "selfPlaySamples": 3122
+  },
+  "trainingContract": {
+    "version": "1.3",
+    "split": {
+      "mode": "whole-game",
+      "trainGames": 62,
+      "validationGames": 10,
+      "trainSamples": 7095,
+      "validationSamples": 1186,
+      "overlap": false
+    },
+    "opponentPool": {
+      "self": 7,
+      "history": 7,
+      "v0_normal": 7,
+      "v0_hard": 7
+    },
+    "replayBuffer": {
+      "capacity": 40000,
+      "games": 62,
+      "samples": 7095,
+      "sources": {
+        "teacher_normal": 3654,
+        "teacher_hard": 805,
+        "league_history": 338,
+        "league_candidate": 1659,
+        "league_v0_hard": 327,
+        "league_v0_normal": 312
+      }
+    },
+    "daggerWeight": 0.55,
+    "historyModel": "current-teacher-snapshot"
+  },
+  "v11": {
+    "split": {
+      "mode": "whole-game",
+      "trainGames": 62,
+      "validationGames": 10,
+      "trainSamples": 7095,
+      "validationSamples": 1186,
+      "overlap": false
+    },
+    "opponentPool": {
+      "self": 7,
+      "history": 7,
+      "v0_normal": 7,
+      "v0_hard": 7
+    },
+    "replayBuffer": {
+      "capacity": 40000,
+      "games": 62,
+      "samples": 7095,
+      "sources": {
+        "teacher_normal": 3654,
+        "teacher_hard": 805,
+        "league_history": 338,
+        "league_candidate": 1659,
+        "league_v0_hard": 327,
+        "league_v0_normal": 312
+      }
+    }
+  },
+  "histories": {
+    "teacher": [
+      {
+        "epoch": 1,
+        "policyLoss": 2.8643397578757153,
+        "valueLoss": 0.5631827815408046
+      },
+      {
+        "epoch": 2,
+        "policyLoss": 2.7385927005164556,
+        "valueLoss": 0.5701462759919275
+      },
+      {
+        "epoch": 3,
+        "policyLoss": 2.8462169582081005,
+        "valueLoss": 0.5703782944962867
+      },
+      {
+        "epoch": 4,
+        "policyLoss": 2.911909448338287,
+        "valueLoss": 0.569927476161684
+      },
+      {
+        "epoch": 5,
+        "policyLoss": 2.926386409275805,
+        "valueLoss": 0.5699549104640583
+      },
+      {
+        "epoch": 6,
+        "policyLoss": 2.9274031208046294,
+        "valueLoss": 0.5686608961510681
+      }
+    ],
+    "selfPlay": [
+      {
+        "epoch": 1,
+        "policyLoss": 2.931045490784148,
+        "valueLoss": 0.6243481123792128
+      },
+      {
+        "epoch": 2,
+        "policyLoss": 2.9063149961075303,
+        "valueLoss": 0.6237043560355033
+      },
+      {
+        "epoch": 3,
+        "policyLoss": 2.908071654690661,
+        "valueLoss": 0.6241823052794022
+      },
+      {
+        "epoch": 4,
+        "policyLoss": 2.909387615986057,
+        "valueLoss": 0.6237370746408827
+      },
+      {
+        "epoch": 5,
+        "policyLoss": 2.9140836231526883,
+        "valueLoss": 0.6234178859264767
+      }
+    ],
+    "numpy": [
+      {
+        "epoch": 1,
+        "policyLoss": 2.6989639265495433,
+        "valueLoss": 0.3316771931815566
+      },
+      {
+        "epoch": 2,
+        "policyLoss": 2.54521756214008,
+        "valueLoss": 0.1969991895909372
+      },
+      {
+        "epoch": 3,
+        "policyLoss": 2.5296353122644257,
+        "valueLoss": 0.1906068519149956
+      },
+      {
+        "epoch": 4,
+        "policyLoss": 2.51175786528671,
+        "valueLoss": 0.18852529138849491
+      },
+      {
+        "epoch": 5,
+        "policyLoss": 2.5029462826879403,
+        "valueLoss": 0.1806399280434115
+      },
+      {
+        "epoch": 6,
+        "policyLoss": 2.4979592394410517,
+        "valueLoss": 0.17614132159373216
+      },
+      {
+        "epoch": 7,
+        "policyLoss": 2.4891774110626756,
+        "valueLoss": 0.17004176516804778
+      },
+      {
+        "epoch": 8,
+        "policyLoss": 2.4781933123605295,
+        "valueLoss": 0.16808972403145672
+      },
+      {
+        "epoch": 9,
+        "policyLoss": 2.4732789093987986,
+        "valueLoss": 0.16320529638936646
+      },
+      {
+        "epoch": 10,
+        "policyLoss": 2.4652918179829917,
+        "valueLoss": 0.16075690887999117
+      },
+      {
+        "epoch": 11,
+        "policyLoss": 2.4612969034596492,
+        "valueLoss": 0.15056688044416278
+      },
+      {
+        "epoch": 12,
+        "policyLoss": 2.4536240121774506,
+        "valueLoss": 0.1462306686137852
+      },
+      {
+        "epoch": 13,
+        "policyLoss": 2.4445471993663856,
+        "valueLoss": 0.13307158995354385
+      },
+      {
+        "epoch": 14,
+        "policyLoss": 2.4407435739249514,
+        "valueLoss": 0.1241294937044905
+      },
+      {
+        "epoch": 15,
+        "policyLoss": 2.433984296363697,
+        "valueLoss": 0.1152738324333832
+      },
+      {
+        "epoch": 16,
+        "policyLoss": 2.4284530773497464,
+        "valueLoss": 0.10931171019349181
+      },
+      {
+        "epoch": 17,
+        "policyLoss": 2.4213283103809022,
+        "valueLoss": 0.10242879737103194
+      },
+      {
+        "epoch": 18,
+        "policyLoss": 2.419452556392603,
+        "valueLoss": 0.09396641662246302
+      },
+      {
+        "epoch": 19,
+        "policyLoss": 2.4193307621437206,
+        "valueLoss": 0.08886332734765713
+      },
+      {
+        "epoch": 20,
+        "policyLoss": 2.405124078717148,
+        "valueLoss": 0.08298980117889873
+      },
+      {
+        "epoch": 21,
+        "policyLoss": 2.4011834567053274,
+        "valueLoss": 0.07757258509988324
+      },
+      {
+        "epoch": 22,
+        "policyLoss": 2.3959867180439463,
+        "valueLoss": 0.07349857439597447
+      },
+      {
+        "epoch": 23,
+        "policyLoss": 2.3876451944050037,
+        "valueLoss": 0.07056118227672159
+      },
+      {
+        "epoch": 24,
+        "policyLoss": 2.3842841156742027,
+        "valueLoss": 0.06732754392974209
+      },
+      {
+        "epoch": 25,
+        "policyLoss": 2.377689560254415,
+        "valueLoss": 0.06370290669432857
+      },
+      {
+        "epoch": 26,
+        "policyLoss": 2.367852530981365,
+        "valueLoss": 0.06343735208767548
+      },
+      {
+        "epoch": 27,
+        "policyLoss": 2.364185149209541,
+        "valueLoss": 0.06139579220887339
+      },
+      {
+        "epoch": 28,
+        "policyLoss": 2.3578648253491052,
+        "valueLoss": 0.059152758631267045
+      },
+      {
+        "epoch": 29,
+        "policyLoss": 2.352288037015681,
+        "valueLoss": 0.05593972932547331
+      },
+      {
+        "epoch": 30,
+        "policyLoss": 2.346575081348419,
+        "valueLoss": 0.056756247390519106
+      },
+      {
+        "epoch": 31,
+        "policyLoss": 2.343325974648459,
+        "valueLoss": 0.055011700413990436
+      },
+      {
+        "epoch": 32,
+        "policyLoss": 2.3317097812368157,
+        "valueLoss": 0.052224736268583094
+      }
+    ]
+  },
+  "replays": [
+    {
+      "id": "teacher-1",
+      "phase": "teacher",
+      "title": "V0 教师示范",
+      "winner": "blue",
+      "moves": 92,
+      "candidateColor": "",
+      "actions": [
+        {
+          "ply": 1,
+          "player": "red",
+          "from": "2:2",
+          "target": "4:4",
+          "kind": "jump",
+          "confidence": 0.8536
+        },
+        {
+          "ply": 2,
+          "player": "blue",
+          "from": "14:2",
+          "target": "12:0",
+          "kind": "jump",
+          "confidence": 0.8557
+        },
+        {
+          "ply": 3,
+          "player": "red",
+          "from": "4:4",
+          "target": "5:3",
+          "kind": "step",
+          "confidence": 0.8458
+        },
+        {
+          "ply": 4,
+          "player": "blue",
+          "from": "12:0",
+          "target": "11:-1",
+          "kind": "step",
+          "confidence": 0.8457
+        },
+        {
+          "ply": 5,
+          "player": "red",
+          "from": "0:0",
+          "target": "6:2",
+          "kind": "jump",
+          "confidence": 0.8689
+        },
+        {
+          "ply": 6,
+          "player": "blue",
+          "from": "14:0",
+          "target": "10:0",
+          "kind": "jump",
+          "confidence": 0.8507
+        },
+        {
+          "ply": 7,
+          "player": "red",
+          "from": "3:-1",
+          "target": "4:0",
+          "kind": "step",
+          "confidence": 0.8447
+        },
+        {
+          "ply": 8,
+          "player": "blue",
+          "from": "14:-2",
+          "target": "10:2",
+          "kind": "jump",
+          "confidence": 0.8482
+        },
+        {
+          "ply": 9,
+          "player": "red",
+          "from": "1:1",
+          "target": "7:3",
+          "kind": "jump",
+          "confidence": 0.8581
+        },
+        {
+          "ply": 10,
+          "player": "blue",
+          "from": "10:2",
+          "target": "9:1",
+          "kind": "step",
+          "confidence": 0.003
+        },
+        {
+          "ply": 11,
+          "player": "red",
+          "from": "2:0",
+          "target": "8:2",
+          "kind": "jump",
+          "confidence": 0.8585
+        },
+        {
+          "ply": 12,
+          "player": "blue",
+          "from": "16:0",
+          "target": "8:0",
+          "kind": "jump",
+          "confidence": 0.8738
+        },
+        {
+          "ply": 13,
+          "player": "red",
+          "from": "5:3",
+          "target": "9:3",
+          "kind": "jump",
+          "confidence": 0.8482
+        },
+        {
+          "ply": 14,
+          "player": "blue",
+          "from": "13:1",
+          "target": "12:0",
+          "kind": "step",
+          "confidence": 0.8453
+        },
+        {
+          "ply": 15,
+          "player": "red",
+          "from": "6:2",
+          "target": "10:2",
+          "kind": "jump",
+          "confidence": 0.8507
+        },
+        {
+          "ply": 16,
+          "player": "blue",
+          "from": "13:-1",
+          "target": "11:1",
+          "kind": "jump",
+          "confidence": 0.8445
+        },
+        {
+          "ply": 17,
+          "player": "red",
+          "from": "3:-3",
+          "target": "4:-2",
+          "kind": "step",
+          "confidence": 0.8446
+        },
+        {
+          "ply": 18,
+          "player": "blue",
+          "from": "9:1",
+          "target": "7:-1",
+          "kind": "jump",
+          "confidence": 0.8463
+        },
+        {
+          "ply": 19,
+          "player": "red",
+          "from": "7:3",
+          "target": "11:3",
+          "kind": "jump",
+          "confidence": 0.8494
+        },
+        {
+          "ply": 20,
+          "player": "blue",
+          "from": "7:-1",
+          "target": "6:0",
+          "kind": "step",
+          "confidence": 0.8436
+        },
+        {
+          "ply": 21,
+          "player": "red",
+          "from": "10:2",
+          "target": "16:0",
+          "kind": "jump",
+          "confidence": 0.916
+        },
+        {
+          "ply": 22,
+          "player": "blue",
+          "from": "11:1",
+          "target": "3:-3",
+          "kind": "jump",
+          "confidence": 0.915
+        },
+        {
+          "ply": 23,
+          "player": "red",
+          "from": "3:1",
+          "target": "13:-1",
+          "kind": "jump",
+          "confidence": 0.9793
+        },
+        {
+          "ply": 24,
+          "player": "blue",
+          "from": "11:-1",
+          "target": "3:-1",
+          "kind": "jump",
+          "confidence": 0.9942
+        },
+        {
+          "ply": 25,
+          "player": "red",
+          "from": "4:0",
+          "target": "5:1",
+          "kind": "step",
+          "confidence": 0.8401
+        },
+        {
+          "ply": 26,
+          "player": "blue",
+          "from": "12:0",
+          "target": "11:-1",
+          "kind": "step",
+          "confidence": 0.8429
+        },
+        {
+          "ply": 27,
+          "player": "red",
+          "from": "9:3",
+          "target": "10:2",
+          "kind": "step",
+          "confidence": 0.8428
+        },
+        {
+          "ply": 28,
+          "player": "blue",
+          "from": "6:0",
+          "target": "4:2",
+          "kind": "jump",
+          "confidence": 0.8462
+        },
+        {
+          "ply": 29,
+          "player": "red",
+          "from": "10:2",
+          "target": "14:2",
+          "kind": "jump",
+          "confidence": 0.9169
+        },
+        {
+          "ply": 30,
+          "player": "blue",
+          "from": "4:2",
+          "target": "3:1",
+          "kind": "step",
+          "confidence": 0.9746
+        },
+        {
+          "ply": 31,
+          "player": "red",
+          "from": "11:3",
+          "target": "12:2",
+          "kind": "step",
+          "confidence": 0.8442
+        },
+        {
+          "ply": 32,
+          "player": "blue",
+          "from": "13:3",
+          "target": "7:1",
+          "kind": "jump",
+          "confidence": 0.8636
+        },
+        {
+          "ply": 33,
+          "player": "red",
+          "from": "2:-2",
+          "target": "6:2",
+          "kind": "jump",
+          "confidence": 0.8411
+        },
+        {
+          "ply": 34,
+          "player": "blue",
+          "from": "7:1",
+          "target": "6:0",
+          "kind": "step",
+          "confidence": 0.8429
+        },
+        {
+          "ply": 35,
+          "player": "red",
+          "from": "5:1",
+          "target": "9:1",
+          "kind": "jump",
+          "confidence": 0.841
+        },
+        {
+          "ply": 36,
+          "player": "blue",
+          "from": "15:1",
+          "target": "5:3",
+          "kind": "jump",
+          "confidence": 0.8793
+        },
+        {
+          "ply": 37,
+          "player": "red",
+          "from": "1:-1",
+          "target": "2:0",
+          "kind": "step",
+          "confidence": 0.8404
+        },
+        {
+          "ply": 38,
+          "player": "blue",
+          "from": "3:-3",
+          "target": "2:-2",
+          "kind": "step",
+          "confidence": 0.8444
+        },
+        {
+          "ply": 39,
+          "player": "red",
+          "from": "4:-2",
+          "target": "5:-1",
+          "kind": "step",
+          "confidence": 0.8403
+        },
+        {
+          "ply": 40,
+          "player": "blue",
+          "from": "6:0",
+          "target": "4:-2",
+          "kind": "jump",
+          "confidence": 0.8461
+        },
+        {
+          "ply": 41,
+          "player": "red",
+          "from": "2:0",
+          "target": "6:0",
+          "kind": "jump",
+          "confidence": 0.8418
+        },
+        {
+          "ply": 42,
+          "player": "blue",
+          "from": "10:0",
+          "target": "9:-1",
+          "kind": "step",
+          "confidence": 0.8402
+        },
+        {
+          "ply": 43,
+          "player": "red",
+          "from": "8:2",
+          "target": "14:0",
+          "kind": "jump",
+          "confidence": 0.9622
+        },
+        {
+          "ply": 44,
+          "player": "blue",
+          "from": "15:-1",
+          "target": "11:3",
+          "kind": "jump",
+          "confidence": 0.8418
+        },
+        {
+          "ply": 45,
+          "player": "red",
+          "from": "9:1",
+          "target": "10:2",
+          "kind": "step",
+          "confidence": 0.8402
+        },
+        {
+          "ply": 46,
+          "player": "blue",
+          "from": "11:3",
+          "target": "7:-1",
+          "kind": "jump",
+          "confidence": 0.8408
+        },
+        {
+          "ply": 47,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:1",
+          "kind": "step",
+          "confidence": 0.9169
+        },
+        {
+          "ply": 48,
+          "player": "blue",
+          "from": "9:-1",
+          "target": "7:1",
+          "kind": "jump",
+          "confidence": 0.8401
+        },
+        {
+          "ply": 49,
+          "player": "red",
+          "from": "3:3",
+          "target": "4:2",
+          "kind": "step",
+          "confidence": 0.8475
+        },
+        {
+          "ply": 50,
+          "player": "blue",
+          "from": "8:0",
+          "target": "2:2",
+          "kind": "jump",
+          "confidence": 0.9233
+        },
+        {
+          "ply": 51,
+          "player": "red",
+          "from": "4:2",
+          "target": "6:4",
+          "kind": "jump",
+          "confidence": 0.851
+        },
+        {
+          "ply": 52,
+          "player": "blue",
+          "from": "3:-1",
+          "target": "2:0",
+          "kind": "step",
+          "confidence": 0.8402
+        },
+        {
+          "ply": 53,
+          "player": "red",
+          "from": "5:-1",
+          "target": "6:-2",
+          "kind": "step",
+          "confidence": 0.8471
+        },
+        {
+          "ply": 54,
+          "player": "blue",
+          "from": "7:1",
+          "target": "1:-1",
+          "kind": "jump",
+          "confidence": 0.883
+        },
+        {
+          "ply": 55,
+          "player": "red",
+          "from": "6:-2",
+          "target": "8:0",
+          "kind": "jump",
+          "confidence": 0.8489
+        },
+        {
+          "ply": 56,
+          "player": "blue",
+          "from": "5:3",
+          "target": "3:-3",
+          "kind": "jump",
+          "confidence": 0.9077
+        },
+        {
+          "ply": 57,
+          "player": "red",
+          "from": "8:0",
+          "target": "9:-1",
+          "kind": "step",
+          "confidence": 0.8448
+        },
+        {
+          "ply": 58,
+          "player": "blue",
+          "from": "7:-1",
+          "target": "5:1",
+          "kind": "jump",
+          "confidence": 0.8404
+        },
+        {
+          "ply": 59,
+          "player": "red",
+          "from": "6:0",
+          "target": "7:1",
+          "kind": "step",
+          "confidence": 0.8453
+        },
+        {
+          "ply": 60,
+          "player": "blue",
+          "from": "11:-1",
+          "target": "10:-2",
+          "kind": "step",
+          "confidence": 0.8403
+        },
+        {
+          "ply": 61,
+          "player": "red",
+          "from": "6:4",
+          "target": "8:2",
+          "kind": "jump",
+          "confidence": 0.8489
+        },
+        {
+          "ply": 62,
+          "player": "blue",
+          "from": "10:-2",
+          "target": "8:0",
+          "kind": "jump",
+          "confidence": 0.8405
+        },
+        {
+          "ply": 63,
+          "player": "red",
+          "from": "7:1",
+          "target": "11:1",
+          "kind": "jump",
+          "confidence": 0.8565
+        },
+        {
+          "ply": 64,
+          "player": "blue",
+          "from": "4:-2",
+          "target": "4:0",
+          "kind": "step",
+          "confidence": 0.8402
+        },
+        {
+          "ply": 65,
+          "player": "red",
+          "from": "8:2",
+          "target": "12:2",
+          "kind": "jump",
+          "confidence": 0.8404
+        },
+        {
+          "ply": 66,
+          "player": "blue",
+          "from": "5:1",
+          "target": "1:1",
+          "kind": "jump",
+          "confidence": 0.9092
+        },
+        {
+          "ply": 67,
+          "player": "red",
+          "from": "10:2",
+          "target": "14:-2",
+          "kind": "jump",
+          "confidence": 0.9
+        },
+        {
+          "ply": 68,
+          "player": "blue",
+          "from": "2:2",
+          "target": "0:0",
+          "kind": "jump",
+          "confidence": 0.8403
+        },
+        {
+          "ply": 69,
+          "player": "red",
+          "from": "11:1",
+          "target": "15:1",
+          "kind": "jump",
+          "confidence": 0.9287
+        },
+        {
+          "ply": 70,
+          "player": "blue",
+          "from": "4:0",
+          "target": "2:2",
+          "kind": "jump",
+          "confidence": 0.934
+        },
+        {
+          "ply": 71,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:3",
+          "kind": "step",
+          "confidence": 0.9969
+        },
+        {
+          "ply": 72,
+          "player": "blue",
+          "from": "13:-3",
+          "target": "12:-2",
+          "kind": "step",
+          "confidence": 0.8606
+        },
+        {
+          "ply": 73,
+          "player": "red",
+          "from": "6:2",
+          "target": "7:3",
+          "kind": "step",
+          "confidence": 0.8544
+        },
+        {
+          "ply": 74,
+          "player": "blue",
+          "from": "12:-2",
+          "target": "11:-1",
+          "kind": "step",
+          "confidence": 0.8584
+        },
+        {
+          "ply": 75,
+          "player": "red",
+          "from": "7:3",
+          "target": "8:2",
+          "kind": "step",
+          "confidence": 0.8551
+        },
+        {
+          "ply": 76,
+          "player": "blue",
+          "from": "8:0",
+          "target": "7:1",
+          "kind": "step",
+          "confidence": 0.8536
+        },
+        {
+          "ply": 77,
+          "player": "red",
+          "from": "8:2",
+          "target": "9:1",
+          "kind": "step",
+          "confidence": 0.8555
+        },
+        {
+          "ply": 78,
+          "player": "blue",
+          "from": "11:-1",
+          "target": "10:0",
+          "kind": "step",
+          "confidence": 0.8576
+        },
+        {
+          "ply": 79,
+          "player": "red",
+          "from": "9:1",
+          "target": "11:-1",
+          "kind": "jump",
+          "confidence": 0.861
+        },
+        {
+          "ply": 80,
+          "player": "blue",
+          "from": "10:0",
+          "target": "8:-2",
+          "kind": "jump",
+          "confidence": 0.8723
+        },
+        {
+          "ply": 81,
+          "player": "red",
+          "from": "11:-1",
+          "target": "12:-2",
+          "kind": "step",
+          "confidence": 0.8518
+        },
+        {
+          "ply": 82,
+          "player": "blue",
+          "from": "7:1",
+          "target": "6:0",
+          "kind": "step",
+          "confidence": 0.8544
+        },
+        {
+          "ply": 83,
+          "player": "red",
+          "from": "12:-2",
+          "target": "13:-3",
+          "kind": "step",
+          "confidence": 0.9985
+        },
+        {
+          "ply": 84,
+          "player": "blue",
+          "from": "8:-2",
+          "target": "7:-1",
+          "kind": "step",
+          "confidence": 0.8576
+        },
+        {
+          "ply": 85,
+          "player": "red",
+          "from": "9:-1",
+          "target": "10:-2",
+          "kind": "step",
+          "confidence": 0.8605
+        },
+        {
+          "ply": 86,
+          "player": "blue",
+          "from": "7:-1",
+          "target": "5:1",
+          "kind": "jump",
+          "confidence": 0.8686
+        },
+        {
+          "ply": 87,
+          "player": "red",
+          "from": "10:-2",
+          "target": "11:-1",
+          "kind": "step",
+          "confidence": 0.862
+        },
+        {
+          "ply": 88,
+          "player": "blue",
+          "from": "6:0",
+          "target": "4:2",
+          "kind": "jump",
+          "confidence": 0.8681
+        },
+        {
+          "ply": 89,
+          "player": "red",
+          "from": "13:1",
+          "target": "15:-1",
+          "kind": "jump",
+          "confidence": 0.8611
+        },
+        {
+          "ply": 90,
+          "player": "blue",
+          "from": "5:1",
+          "target": "3:-1",
+          "kind": "jump",
+          "confidence": 0.9134
+        },
+        {
+          "ply": 91,
+          "player": "red",
+          "from": "13:-3",
+          "target": "13:1",
+          "kind": "jump",
+          "confidence": 0.8557
+        },
+        {
+          "ply": 92,
+          "player": "blue",
+          "from": "4:2",
+          "target": "3:3",
+          "kind": "step",
+          "confidence": 1
+        }
+      ]
+    },
+    {
+      "id": "self_play-2",
+      "phase": "self_play",
+      "title": "V1.3 联赛训练",
+      "winner": "red",
+      "moves": 85,
+      "candidateColor": "blue",
+      "actions": [
+        {
+          "ply": 1,
+          "player": "red",
+          "from": "2:-2",
+          "target": "4:-4",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 2,
+          "player": "blue",
+          "from": "13:1",
+          "target": "12:2",
+          "kind": "step",
+          "searchValue": 0.0292
+        },
+        {
+          "ply": 3,
+          "player": "red",
+          "from": "4:-4",
+          "target": "5:-3",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 4,
+          "player": "blue",
+          "from": "15:-1",
+          "target": "11:3",
+          "kind": "jump",
+          "searchValue": -0.001
+        },
+        {
+          "ply": 5,
+          "player": "red",
+          "from": "0:0",
+          "target": "6:-2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 6,
+          "player": "blue",
+          "from": "14:2",
+          "target": "12:4",
+          "kind": "jump",
+          "searchValue": 0.0082
+        },
+        {
+          "ply": 7,
+          "player": "red",
+          "from": "3:1",
+          "target": "4:0",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 8,
+          "player": "blue",
+          "from": "14:-2",
+          "target": "12:0",
+          "kind": "jump",
+          "searchValue": -0.0139
+        },
+        {
+          "ply": 9,
+          "player": "red",
+          "from": "1:-1",
+          "target": "7:-3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 10,
+          "player": "blue",
+          "from": "13:-1",
+          "target": "11:1",
+          "kind": "jump",
+          "searchValue": -0.013
+        },
+        {
+          "ply": 11,
+          "player": "red",
+          "from": "2:0",
+          "target": "8:-2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 12,
+          "player": "blue",
+          "from": "16:0",
+          "target": "12:-4",
+          "kind": "jump",
+          "searchValue": -0.0269
+        },
+        {
+          "ply": 13,
+          "player": "red",
+          "from": "5:-3",
+          "target": "9:-3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 14,
+          "player": "blue",
+          "from": "15:1",
+          "target": "13:-1",
+          "kind": "jump",
+          "searchValue": -0.0354
+        },
+        {
+          "ply": 15,
+          "player": "red",
+          "from": "6:-2",
+          "target": "10:-2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 16,
+          "player": "blue",
+          "from": "13:-3",
+          "target": "11:-5",
+          "kind": "jump",
+          "searchValue": -0.074
+        },
+        {
+          "ply": 17,
+          "player": "red",
+          "from": "9:-3",
+          "target": "15:-1",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 18,
+          "player": "blue",
+          "from": "11:-5",
+          "target": "7:-5",
+          "kind": "jump",
+          "searchValue": -0.0725
+        },
+        {
+          "ply": 19,
+          "player": "red",
+          "from": "3:3",
+          "target": "4:2",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 20,
+          "player": "blue",
+          "from": "11:3",
+          "target": "7:-1",
+          "kind": "jump",
+          "searchValue": -0.0594
+        },
+        {
+          "ply": 21,
+          "player": "red",
+          "from": "1:1",
+          "target": "5:1",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 22,
+          "player": "blue",
+          "from": "12:0",
+          "target": "10:2",
+          "kind": "jump",
+          "searchValue": -0.0464
+        },
+        {
+          "ply": 23,
+          "player": "red",
+          "from": "4:2",
+          "target": "6:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 24,
+          "player": "blue",
+          "from": "14:0",
+          "target": "12:-2",
+          "kind": "jump",
+          "searchValue": -0.0708
+        },
+        {
+          "ply": 25,
+          "player": "red",
+          "from": "10:-2",
+          "target": "11:-1",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 26,
+          "player": "blue",
+          "from": "12:2",
+          "target": "12:0",
+          "kind": "step",
+          "searchValue": -0.0941
+        },
+        {
+          "ply": 27,
+          "player": "red",
+          "from": "3:-3",
+          "target": "7:1",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 28,
+          "player": "blue",
+          "from": "12:0",
+          "target": "10:-2",
+          "kind": "jump",
+          "searchValue": -0.0716
+        },
+        {
+          "ply": 29,
+          "player": "red",
+          "from": "7:-3",
+          "target": "11:-3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 30,
+          "player": "blue",
+          "from": "12:4",
+          "target": "12:2",
+          "kind": "step",
+          "searchValue": -0.0715
+        },
+        {
+          "ply": 31,
+          "player": "red",
+          "from": "11:-1",
+          "target": "13:1",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 32,
+          "player": "blue",
+          "from": "12:2",
+          "target": "10:-4",
+          "kind": "jump",
+          "searchValue": -0.1144
+        },
+        {
+          "ply": 33,
+          "player": "red",
+          "from": "8:-2",
+          "target": "9:-3",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 34,
+          "player": "blue",
+          "from": "10:-2",
+          "target": "6:-6",
+          "kind": "jump",
+          "searchValue": -0.0988
+        },
+        {
+          "ply": 35,
+          "player": "red",
+          "from": "9:-3",
+          "target": "13:-3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 36,
+          "player": "blue",
+          "from": "12:-4",
+          "target": "10:-6",
+          "kind": "jump",
+          "searchValue": -0.14
+        },
+        {
+          "ply": 37,
+          "player": "red",
+          "from": "11:-3",
+          "target": "12:-4",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 38,
+          "player": "blue",
+          "from": "13:-1",
+          "target": "9:-5",
+          "kind": "jump",
+          "searchValue": -0.1339
+        },
+        {
+          "ply": 39,
+          "player": "red",
+          "from": "4:0",
+          "target": "8:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 40,
+          "player": "blue",
+          "from": "10:-4",
+          "target": "6:-4",
+          "kind": "jump",
+          "searchValue": -0.1472
+        },
+        {
+          "ply": 41,
+          "player": "red",
+          "from": "6:0",
+          "target": "8:2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 42,
+          "player": "blue",
+          "from": "7:-5",
+          "target": "5:-7",
+          "kind": "jump",
+          "searchValue": -0.1374
+        },
+        {
+          "ply": 43,
+          "player": "red",
+          "from": "7:1",
+          "target": "9:3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 44,
+          "player": "blue",
+          "from": "12:-2",
+          "target": "11:-1",
+          "kind": "step",
+          "searchValue": -0.1395
+        },
+        {
+          "ply": 45,
+          "player": "red",
+          "from": "8:2",
+          "target": "14:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 46,
+          "player": "blue",
+          "from": "6:-6",
+          "target": "4:-8",
+          "kind": "jump",
+          "searchValue": -0.1385
+        },
+        {
+          "ply": 47,
+          "player": "red",
+          "from": "12:-4",
+          "target": "16:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 48,
+          "player": "blue",
+          "from": "10:-6",
+          "target": "8:-4",
+          "kind": "jump",
+          "searchValue": -0.1742
+        },
+        {
+          "ply": 49,
+          "player": "red",
+          "from": "3:-1",
+          "target": "3:1",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 50,
+          "player": "blue",
+          "from": "9:-5",
+          "target": "5:-5",
+          "kind": "jump",
+          "searchValue": -0.1649
+        },
+        {
+          "ply": 51,
+          "player": "red",
+          "from": "2:2",
+          "target": "6:2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 52,
+          "player": "blue",
+          "from": "11:-1",
+          "target": "9:1",
+          "kind": "jump",
+          "searchValue": -0.1738
+        },
+        {
+          "ply": 53,
+          "player": "red",
+          "from": "5:1",
+          "target": "7:3",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 54,
+          "player": "blue",
+          "from": "10:2",
+          "target": "8:4",
+          "kind": "jump",
+          "searchValue": -0.1667
+        },
+        {
+          "ply": 55,
+          "player": "red",
+          "from": "8:0",
+          "target": "14:2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 56,
+          "player": "blue",
+          "from": "8:4",
+          "target": "4:-4",
+          "kind": "jump",
+          "searchValue": -0.1774
+        },
+        {
+          "ply": 57,
+          "player": "red",
+          "from": "6:2",
+          "target": "12:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 58,
+          "player": "blue",
+          "from": "5:-5",
+          "target": "3:-3",
+          "kind": "jump",
+          "searchValue": -0.2241
+        },
+        {
+          "ply": 59,
+          "player": "red",
+          "from": "3:1",
+          "target": "4:0",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 60,
+          "player": "blue",
+          "from": "4:-4",
+          "target": "2:-2",
+          "kind": "jump",
+          "searchValue": -0.1673
+        },
+        {
+          "ply": 61,
+          "player": "red",
+          "from": "12:0",
+          "target": "13:-1",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 62,
+          "player": "blue",
+          "from": "11:1",
+          "target": "12:0",
+          "kind": "step",
+          "searchValue": -0.1601
+        },
+        {
+          "ply": 63,
+          "player": "red",
+          "from": "4:0",
+          "target": "5:1",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 64,
+          "player": "blue",
+          "from": "7:-1",
+          "target": "7:1",
+          "kind": "step",
+          "searchValue": -0.1613
+        },
+        {
+          "ply": 65,
+          "player": "red",
+          "from": "5:1",
+          "target": "6:2",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 66,
+          "player": "blue",
+          "from": "7:1",
+          "target": "5:3",
+          "kind": "jump",
+          "searchValue": -0.1701
+        },
+        {
+          "ply": 67,
+          "player": "red",
+          "from": "6:2",
+          "target": "10:2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 68,
+          "player": "blue",
+          "from": "13:3",
+          "target": "15:1",
+          "kind": "jump",
+          "searchValue": -0.1713
+        },
+        {
+          "ply": 69,
+          "player": "red",
+          "from": "7:3",
+          "target": "8:2",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 70,
+          "player": "blue",
+          "from": "15:1",
+          "target": "13:3",
+          "kind": "jump",
+          "searchValue": -0.181
+        },
+        {
+          "ply": 71,
+          "player": "red",
+          "from": "8:2",
+          "target": "10:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 72,
+          "player": "blue",
+          "from": "4:-8",
+          "target": "6:-6",
+          "kind": "jump",
+          "searchValue": -0.1648
+        },
+        {
+          "ply": 73,
+          "player": "red",
+          "from": "9:3",
+          "target": "11:1",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 74,
+          "player": "blue",
+          "from": "6:-6",
+          "target": "4:-8",
+          "kind": "jump",
+          "searchValue": -0.1816
+        },
+        {
+          "ply": 75,
+          "player": "red",
+          "from": "14:0",
+          "target": "14:-2",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 76,
+          "player": "blue",
+          "from": "6:-4",
+          "target": "5:-3",
+          "kind": "step",
+          "searchValue": -0.1657
+        },
+        {
+          "ply": 77,
+          "player": "red",
+          "from": "10:0",
+          "target": "14:0",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 78,
+          "player": "blue",
+          "from": "12:0",
+          "target": "11:-1",
+          "kind": "step",
+          "searchValue": -0.1696
+        },
+        {
+          "ply": 79,
+          "player": "red",
+          "from": "14:2",
+          "target": "15:1",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 80,
+          "player": "blue",
+          "from": "5:3",
+          "target": "4:4",
+          "kind": "step",
+          "searchValue": -0.1696
+        },
+        {
+          "ply": 81,
+          "player": "red",
+          "from": "10:2",
+          "target": "14:2",
+          "kind": "jump",
+          "searchValue": 0
+        },
+        {
+          "ply": 82,
+          "player": "blue",
+          "from": "4:4",
+          "target": "3:3",
+          "kind": "step",
+          "searchValue": -0.2028
+        },
+        {
+          "ply": 83,
+          "player": "red",
+          "from": "11:1",
+          "target": "12:2",
+          "kind": "step",
+          "searchValue": 0
+        },
+        {
+          "ply": 84,
+          "player": "blue",
+          "from": "13:3",
+          "target": "11:1",
+          "kind": "jump",
+          "searchValue": -0.2226
+        },
+        {
+          "ply": 85,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:3",
+          "kind": "step",
+          "searchValue": 0
+        }
+      ]
+    },
+    {
+      "id": "arena-3",
+      "phase": "arena",
+      "title": "V1.3 对阵 V0",
+      "winner": "red",
+      "moves": 89,
+      "candidateColor": "blue",
+      "actions": [
+        {
+          "ply": 1,
+          "player": "red",
+          "from": "2:2",
+          "target": "4:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 2,
+          "player": "blue",
+          "from": "14:2",
+          "target": "12:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 3,
+          "player": "red",
+          "from": "4:0",
+          "target": "5:1",
+          "kind": "step"
+        },
+        {
+          "ply": 4,
+          "player": "blue",
+          "from": "16:0",
+          "target": "12:4",
+          "kind": "jump"
+        },
+        {
+          "ply": 5,
+          "player": "red",
+          "from": "2:0",
+          "target": "6:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 6,
+          "player": "blue",
+          "from": "13:-1",
+          "target": "11:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 7,
+          "player": "red",
+          "from": "0:0",
+          "target": "6:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 8,
+          "player": "blue",
+          "from": "14:0",
+          "target": "10:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 9,
+          "player": "red",
+          "from": "6:-2",
+          "target": "7:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 10,
+          "player": "blue",
+          "from": "13:1",
+          "target": "9:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 11,
+          "player": "red",
+          "from": "2:-2",
+          "target": "10:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 12,
+          "player": "blue",
+          "from": "14:-2",
+          "target": "12:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 13,
+          "player": "red",
+          "from": "1:-1",
+          "target": "2:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 14,
+          "player": "blue",
+          "from": "13:-3",
+          "target": "11:-5",
+          "kind": "jump"
+        },
+        {
+          "ply": 15,
+          "player": "red",
+          "from": "1:1",
+          "target": "2:0",
+          "kind": "step"
+        },
+        {
+          "ply": 16,
+          "player": "blue",
+          "from": "13:3",
+          "target": "11:5",
+          "kind": "jump"
+        },
+        {
+          "ply": 17,
+          "player": "red",
+          "from": "2:0",
+          "target": "4:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 18,
+          "player": "blue",
+          "from": "10:0",
+          "target": "8:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 19,
+          "player": "red",
+          "from": "3:-3",
+          "target": "9:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 20,
+          "player": "blue",
+          "from": "12:4",
+          "target": "10:6",
+          "kind": "jump"
+        },
+        {
+          "ply": 21,
+          "player": "red",
+          "from": "2:-2",
+          "target": "8:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 22,
+          "player": "blue",
+          "from": "9:1",
+          "target": "7:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 23,
+          "player": "red",
+          "from": "7:-1",
+          "target": "13:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 24,
+          "player": "blue",
+          "from": "12:-4",
+          "target": "10:-6",
+          "kind": "jump"
+        },
+        {
+          "ply": 25,
+          "player": "red",
+          "from": "3:1",
+          "target": "9:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 26,
+          "player": "blue",
+          "from": "11:-5",
+          "target": "9:-7",
+          "kind": "jump"
+        },
+        {
+          "ply": 27,
+          "player": "red",
+          "from": "5:1",
+          "target": "7:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 28,
+          "player": "blue",
+          "from": "8:2",
+          "target": "6:4",
+          "kind": "jump"
+        },
+        {
+          "ply": 29,
+          "player": "red",
+          "from": "6:0",
+          "target": "12:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 30,
+          "player": "blue",
+          "from": "7:3",
+          "target": "5:5",
+          "kind": "jump"
+        },
+        {
+          "ply": 31,
+          "player": "red",
+          "from": "7:-1",
+          "target": "13:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 32,
+          "player": "blue",
+          "from": "6:4",
+          "target": "4:6",
+          "kind": "jump"
+        },
+        {
+          "ply": 33,
+          "player": "red",
+          "from": "8:0",
+          "target": "10:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 34,
+          "player": "blue",
+          "from": "10:-6",
+          "target": "8:-8",
+          "kind": "jump"
+        },
+        {
+          "ply": 35,
+          "player": "red",
+          "from": "9:-1",
+          "target": "13:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 36,
+          "player": "blue",
+          "from": "11:1",
+          "target": "9:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 37,
+          "player": "red",
+          "from": "9:3",
+          "target": "13:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 38,
+          "player": "blue",
+          "from": "9:-7",
+          "target": "7:-9",
+          "kind": "jump"
+        },
+        {
+          "ply": 39,
+          "player": "red",
+          "from": "12:-2",
+          "target": "14:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 40,
+          "player": "blue",
+          "from": "11:5",
+          "target": "9:7",
+          "kind": "jump"
+        },
+        {
+          "ply": 41,
+          "player": "red",
+          "from": "3:3",
+          "target": "4:2",
+          "kind": "step"
+        },
+        {
+          "ply": 42,
+          "player": "blue",
+          "from": "8:-8",
+          "target": "6:-10",
+          "kind": "jump"
+        },
+        {
+          "ply": 43,
+          "player": "red",
+          "from": "3:-1",
+          "target": "5:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 44,
+          "player": "blue",
+          "from": "7:-9",
+          "target": "5:-11",
+          "kind": "jump"
+        },
+        {
+          "ply": 45,
+          "player": "red",
+          "from": "4:2",
+          "target": "5:1",
+          "kind": "step"
+        },
+        {
+          "ply": 46,
+          "player": "blue",
+          "from": "6:-10",
+          "target": "4:-12",
+          "kind": "jump"
+        },
+        {
+          "ply": 47,
+          "player": "red",
+          "from": "4:-2",
+          "target": "6:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 48,
+          "player": "blue",
+          "from": "10:6",
+          "target": "8:8",
+          "kind": "jump"
+        },
+        {
+          "ply": 49,
+          "player": "red",
+          "from": "5:-3",
+          "target": "7:-5",
+          "kind": "jump"
+        },
+        {
+          "ply": 50,
+          "player": "blue",
+          "from": "9:7",
+          "target": "7:9",
+          "kind": "jump"
+        },
+        {
+          "ply": 51,
+          "player": "red",
+          "from": "5:1",
+          "target": "6:0",
+          "kind": "step"
+        },
+        {
+          "ply": 52,
+          "player": "blue",
+          "from": "8:8",
+          "target": "6:10",
+          "kind": "jump"
+        },
+        {
+          "ply": 53,
+          "player": "red",
+          "from": "6:0",
+          "target": "7:1",
+          "kind": "step"
+        },
+        {
+          "ply": 54,
+          "player": "blue",
+          "from": "7:9",
+          "target": "5:11",
+          "kind": "jump"
+        },
+        {
+          "ply": 55,
+          "player": "red",
+          "from": "6:-4",
+          "target": "8:-6",
+          "kind": "jump"
+        },
+        {
+          "ply": 56,
+          "player": "blue",
+          "from": "6:10",
+          "target": "4:12",
+          "kind": "jump"
+        },
+        {
+          "ply": 57,
+          "player": "red",
+          "from": "8:-6",
+          "target": "8:-4",
+          "kind": "step"
+        },
+        {
+          "ply": 58,
+          "player": "blue",
+          "from": "5:-11",
+          "target": "4:-10",
+          "kind": "step"
+        },
+        {
+          "ply": 59,
+          "player": "red",
+          "from": "7:-5",
+          "target": "11:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 60,
+          "player": "blue",
+          "from": "5:5",
+          "target": "4:4",
+          "kind": "step"
+        },
+        {
+          "ply": 61,
+          "player": "red",
+          "from": "10:2",
+          "target": "16:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 62,
+          "player": "blue",
+          "from": "4:4",
+          "target": "3:3",
+          "kind": "step"
+        },
+        {
+          "ply": 63,
+          "player": "red",
+          "from": "11:3",
+          "target": "12:4",
+          "kind": "step"
+        },
+        {
+          "ply": 64,
+          "player": "blue",
+          "from": "15:1",
+          "target": "14:2",
+          "kind": "step"
+        },
+        {
+          "ply": 65,
+          "player": "red",
+          "from": "13:3",
+          "target": "15:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 66,
+          "player": "blue",
+          "from": "14:2",
+          "target": "12:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 67,
+          "player": "red",
+          "from": "7:1",
+          "target": "8:0",
+          "kind": "step"
+        },
+        {
+          "ply": 68,
+          "player": "blue",
+          "from": "9:-1",
+          "target": "7:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 69,
+          "player": "red",
+          "from": "12:4",
+          "target": "13:3",
+          "kind": "step"
+        },
+        {
+          "ply": 70,
+          "player": "blue",
+          "from": "15:-1",
+          "target": "14:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 71,
+          "player": "red",
+          "from": "13:3",
+          "target": "14:2",
+          "kind": "step"
+        },
+        {
+          "ply": 72,
+          "player": "blue",
+          "from": "5:11",
+          "target": "4:10",
+          "kind": "step"
+        },
+        {
+          "ply": 73,
+          "player": "red",
+          "from": "8:-4",
+          "target": "9:-3",
+          "kind": "step"
+        },
+        {
+          "ply": 74,
+          "player": "blue",
+          "from": "4:12",
+          "target": "2:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 75,
+          "player": "red",
+          "from": "13:1",
+          "target": "15:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 76,
+          "player": "blue",
+          "from": "3:3",
+          "target": "1:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 77,
+          "player": "red",
+          "from": "9:-3",
+          "target": "13:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 78,
+          "player": "blue",
+          "from": "2:2",
+          "target": "0:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 79,
+          "player": "red",
+          "from": "8:0",
+          "target": "9:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 80,
+          "player": "blue",
+          "from": "12:-4",
+          "target": "11:-5",
+          "kind": "step"
+        },
+        {
+          "ply": 81,
+          "player": "red",
+          "from": "9:-1",
+          "target": "11:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 82,
+          "player": "blue",
+          "from": "14:-2",
+          "target": "10:-6",
+          "kind": "jump"
+        },
+        {
+          "ply": 83,
+          "player": "red",
+          "from": "10:-2",
+          "target": "14:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 84,
+          "player": "blue",
+          "from": "11:-5",
+          "target": "9:-7",
+          "kind": "jump"
+        },
+        {
+          "ply": 85,
+          "player": "red",
+          "from": "11:-3",
+          "target": "12:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 86,
+          "player": "blue",
+          "from": "10:-6",
+          "target": "8:-8",
+          "kind": "jump"
+        },
+        {
+          "ply": 87,
+          "player": "red",
+          "from": "12:-2",
+          "target": "12:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 88,
+          "player": "blue",
+          "from": "9:-7",
+          "target": "7:-9",
+          "kind": "jump"
+        },
+        {
+          "ply": 89,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:3",
+          "kind": "step"
+        }
+      ]
+    },
+    {
+      "id": "numpy-arena",
+      "phase": "arena",
+      "title": "Chinese Checkers Policy-Value Robot V1.3 NumPy 对阵 V0",
+      "winner": "red",
+      "moves": 87,
+      "candidateColor": "blue",
+      "actions": [
+        {
+          "ply": 1,
+          "player": "red",
+          "from": "2:2",
+          "target": "4:4",
+          "kind": "jump"
+        },
+        {
+          "ply": 2,
+          "player": "blue",
+          "from": "14:2",
+          "target": "12:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 3,
+          "player": "red",
+          "from": "4:4",
+          "target": "5:3",
+          "kind": "step"
+        },
+        {
+          "ply": 4,
+          "player": "blue",
+          "from": "12:0",
+          "target": "11:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 5,
+          "player": "red",
+          "from": "0:0",
+          "target": "6:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 6,
+          "player": "blue",
+          "from": "16:0",
+          "target": "10:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 7,
+          "player": "red",
+          "from": "3:-1",
+          "target": "4:0",
+          "kind": "step"
+        },
+        {
+          "ply": 8,
+          "player": "blue",
+          "from": "14:0",
+          "target": "10:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 9,
+          "player": "red",
+          "from": "1:1",
+          "target": "7:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 10,
+          "player": "blue",
+          "from": "14:-2",
+          "target": "12:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 11,
+          "player": "red",
+          "from": "2:0",
+          "target": "8:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 12,
+          "player": "blue",
+          "from": "13:-1",
+          "target": "9:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 13,
+          "player": "red",
+          "from": "1:-1",
+          "target": "2:0",
+          "kind": "step"
+        },
+        {
+          "ply": 14,
+          "player": "blue",
+          "from": "10:-2",
+          "target": "8:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 15,
+          "player": "red",
+          "from": "2:-2",
+          "target": "4:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 16,
+          "player": "blue",
+          "from": "9:-1",
+          "target": "7:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 17,
+          "player": "red",
+          "from": "3:3",
+          "target": "5:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 18,
+          "player": "blue",
+          "from": "13:3",
+          "target": "9:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 19,
+          "player": "red",
+          "from": "7:3",
+          "target": "9:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 20,
+          "player": "blue",
+          "from": "15:-1",
+          "target": "14:0",
+          "kind": "step"
+        },
+        {
+          "ply": 21,
+          "player": "red",
+          "from": "2:0",
+          "target": "6:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 22,
+          "player": "blue",
+          "from": "15:1",
+          "target": "11:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 23,
+          "player": "red",
+          "from": "9:1",
+          "target": "10:2",
+          "kind": "step"
+        },
+        {
+          "ply": 24,
+          "player": "blue",
+          "from": "10:0",
+          "target": "8:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 25,
+          "player": "red",
+          "from": "8:2",
+          "target": "9:3",
+          "kind": "step"
+        },
+        {
+          "ply": 26,
+          "player": "blue",
+          "from": "12:0",
+          "target": "10:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 27,
+          "player": "red",
+          "from": "9:3",
+          "target": "11:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 28,
+          "player": "blue",
+          "from": "11:-1",
+          "target": "7:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 29,
+          "player": "red",
+          "from": "3:1",
+          "target": "5:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 30,
+          "player": "blue",
+          "from": "8:-2",
+          "target": "4:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 31,
+          "player": "red",
+          "from": "10:2",
+          "target": "14:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 32,
+          "player": "blue",
+          "from": "14:0",
+          "target": "8:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 33,
+          "player": "red",
+          "from": "5:1",
+          "target": "9:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 34,
+          "player": "blue",
+          "from": "4:-2",
+          "target": "3:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 35,
+          "player": "red",
+          "from": "4:0",
+          "target": "5:1",
+          "kind": "step"
+        },
+        {
+          "ply": 36,
+          "player": "blue",
+          "from": "9:-1",
+          "target": "7:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 37,
+          "player": "red",
+          "from": "4:-4",
+          "target": "8:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 38,
+          "player": "blue",
+          "from": "11:-3",
+          "target": "9:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 39,
+          "player": "red",
+          "from": "5:1",
+          "target": "11:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 40,
+          "player": "blue",
+          "from": "7:3",
+          "target": "5:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 41,
+          "player": "red",
+          "from": "3:-3",
+          "target": "4:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 42,
+          "player": "blue",
+          "from": "8:0",
+          "target": "7:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 43,
+          "player": "red",
+          "from": "6:0",
+          "target": "14:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 44,
+          "player": "blue",
+          "from": "10:-2",
+          "target": "2:-2",
+          "kind": "jump"
+        },
+        {
+          "ply": 45,
+          "player": "red",
+          "from": "6:2",
+          "target": "12:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 46,
+          "player": "blue",
+          "from": "8:-2",
+          "target": "4:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 47,
+          "player": "red",
+          "from": "12:0",
+          "target": "13:-1",
+          "kind": "step"
+        },
+        {
+          "ply": 48,
+          "player": "blue",
+          "from": "5:1",
+          "target": "3:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 49,
+          "player": "red",
+          "from": "4:-2",
+          "target": "12:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 50,
+          "player": "blue",
+          "from": "13:1",
+          "target": "12:0",
+          "kind": "step"
+        },
+        {
+          "ply": 51,
+          "player": "red",
+          "from": "11:3",
+          "target": "15:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 52,
+          "player": "blue",
+          "from": "12:0",
+          "target": "2:2",
+          "kind": "jump"
+        },
+        {
+          "ply": 53,
+          "player": "red",
+          "from": "8:-4",
+          "target": "16:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 54,
+          "player": "blue",
+          "from": "9:-1",
+          "target": "8:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 55,
+          "player": "red",
+          "from": "11:1",
+          "target": "15:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 56,
+          "player": "blue",
+          "from": "8:-2",
+          "target": "2:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 57,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:1",
+          "kind": "step"
+        },
+        {
+          "ply": 58,
+          "player": "blue",
+          "from": "4:2",
+          "target": "3:1",
+          "kind": "step"
+        },
+        {
+          "ply": 59,
+          "player": "red",
+          "from": "5:-1",
+          "target": "6:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 60,
+          "player": "blue",
+          "from": "7:-1",
+          "target": "5:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 61,
+          "player": "red",
+          "from": "5:3",
+          "target": "6:2",
+          "kind": "step"
+        },
+        {
+          "ply": 62,
+          "player": "blue",
+          "from": "5:-3",
+          "target": "4:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 63,
+          "player": "red",
+          "from": "6:-2",
+          "target": "8:-4",
+          "kind": "jump"
+        },
+        {
+          "ply": 64,
+          "player": "blue",
+          "from": "7:1",
+          "target": "5:3",
+          "kind": "jump"
+        },
+        {
+          "ply": 65,
+          "player": "red",
+          "from": "6:2",
+          "target": "7:1",
+          "kind": "step"
+        },
+        {
+          "ply": 66,
+          "player": "blue",
+          "from": "4:-2",
+          "target": "3:-3",
+          "kind": "step"
+        },
+        {
+          "ply": 67,
+          "player": "red",
+          "from": "7:1",
+          "target": "8:2",
+          "kind": "step"
+        },
+        {
+          "ply": 68,
+          "player": "blue",
+          "from": "13:-3",
+          "target": "12:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 69,
+          "player": "red",
+          "from": "8:-4",
+          "target": "9:-3",
+          "kind": "step"
+        },
+        {
+          "ply": 70,
+          "player": "blue",
+          "from": "12:-2",
+          "target": "11:-3",
+          "kind": "step"
+        },
+        {
+          "ply": 71,
+          "player": "red",
+          "from": "8:2",
+          "target": "10:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 72,
+          "player": "blue",
+          "from": "11:-3",
+          "target": "10:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 73,
+          "player": "red",
+          "from": "9:-3",
+          "target": "11:-1",
+          "kind": "jump"
+        },
+        {
+          "ply": 74,
+          "player": "blue",
+          "from": "10:-2",
+          "target": "8:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 75,
+          "player": "red",
+          "from": "11:-1",
+          "target": "12:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 76,
+          "player": "blue",
+          "from": "3:3",
+          "target": "1:1",
+          "kind": "jump"
+        },
+        {
+          "ply": 77,
+          "player": "red",
+          "from": "9:1",
+          "target": "13:-3",
+          "kind": "jump"
+        },
+        {
+          "ply": 78,
+          "player": "blue",
+          "from": "5:3",
+          "target": "4:2",
+          "kind": "step"
+        },
+        {
+          "ply": 79,
+          "player": "red",
+          "from": "14:0",
+          "target": "14:-2",
+          "kind": "step"
+        },
+        {
+          "ply": 80,
+          "player": "blue",
+          "from": "4:2",
+          "target": "3:3",
+          "kind": "step"
+        },
+        {
+          "ply": 81,
+          "player": "red",
+          "from": "12:-2",
+          "target": "14:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 82,
+          "player": "blue",
+          "from": "8:0",
+          "target": "7:1",
+          "kind": "step"
+        },
+        {
+          "ply": 83,
+          "player": "red",
+          "from": "10:0",
+          "target": "11:1",
+          "kind": "step"
+        },
+        {
+          "ply": 84,
+          "player": "blue",
+          "from": "2:2",
+          "target": "0:0",
+          "kind": "jump"
+        },
+        {
+          "ply": 85,
+          "player": "red",
+          "from": "11:1",
+          "target": "12:2",
+          "kind": "step"
+        },
+        {
+          "ply": 86,
+          "player": "blue",
+          "from": "7:1",
+          "target": "6:0",
+          "kind": "step"
+        },
+        {
+          "ply": 87,
+          "player": "red",
+          "from": "12:2",
+          "target": "13:3",
+          "kind": "step"
+        }
+      ]
+    }
+  ],
+  "numericalBackend": {
+    "language": "Python",
+    "backend": "NumPy",
+    "epochs": 32,
+    "batchSize": 64,
+    "hiddenSize": 128,
+    "actionHiddenSize": 32,
+    "elapsedSeconds": 10.54,
+    "validation": {
+      "samples": 1037,
+      "policyTop1": 0.4041,
+      "policyLoss": 2.638,
+      "valueMae": 0.3293
+    }
+  },
+  "numpyArena": {
+    "model": "checkers-policy-value-v1_3-numpy.json",
+    "status": "experimental",
+    "adapterFeatureVersion": 2,
+    "games": 16,
+    "candidateWins": 9,
+    "baselineWins": 6,
+    "draws": 1,
+    "completed": 15,
+    "averageMoves": 100.8,
+    "agent": "hybrid",
+    "simulations": 0,
+    "learnedWeight": 240,
+    "elapsedSeconds": 42.9,
+    "results": [
+      {
+        "candidateColor": "red",
+        "winner": "red",
+        "moves": 101
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "blue",
+        "moves": 98
+      },
+      {
+        "candidateColor": "red",
+        "winner": "red",
+        "moves": 99
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "limit",
+        "moves": 130
+      },
+      {
+        "candidateColor": "red",
+        "winner": "red",
+        "moves": 99
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "blue",
+        "moves": 96
+      },
+      {
+        "candidateColor": "red",
+        "winner": "red",
+        "moves": 107
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "blue",
+        "moves": 102
+      },
+      {
+        "candidateColor": "red",
+        "winner": "blue",
+        "moves": 102
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "red",
+        "moves": 93
+      },
+      {
+        "candidateColor": "red",
+        "winner": "blue",
+        "moves": 106
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "red",
+        "moves": 87
+      },
+      {
+        "candidateColor": "red",
+        "winner": "blue",
+        "moves": 98
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "red",
+        "moves": 95
+      },
+      {
+        "candidateColor": "red",
+        "winner": "red",
+        "moves": 97
+      },
+      {
+        "candidateColor": "blue",
+        "winner": "blue",
+        "moves": 102
+      }
+    ]
+  }
+}

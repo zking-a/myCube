@@ -21,9 +21,13 @@ vm.createContext(sandbox);
 const coreSource = fs.readFileSync('public/checkers/checkers_core.js', 'utf8');
 const modelSource = fs.readFileSync('public/checkers/checkers_ai_model.js', 'utf8');
 const source = fs.readFileSync('public/checkers/checkers.js', 'utf8');
+const workerSource = fs.readFileSync('public/checkers/checkers_ai_worker.js', 'utf8');
 const lobbyHtml = fs.readFileSync('public/checkers/index.html', 'utf8');
 const playHtml = fs.readFileSync('public/checkers/play.html', 'utf8');
 const css = fs.readFileSync('public/checkers/checkers.css', 'utf8');
+const labHtml = fs.readFileSync('public/checkers/lab.html', 'utf8');
+const labSource = fs.readFileSync('public/checkers/lab.js', 'utf8');
+const labRun = JSON.parse(fs.readFileSync('public/checkers/training/latest.json', 'utf8'));
 const platformHtml = fs.readFileSync('public/index.html', 'utf8');
 const serverSource = fs.readFileSync('server.js', 'utf8');
 vm.runInContext(coreSource, sandbox, { filename: 'checkers_core.js' });
@@ -88,6 +92,20 @@ const aiApplied = C.applyMove(initial, 'blue', aiMove.from, aiMove.target);
 ok('困难电脑使用受预算保护的 DFS 搜索并优先改善局面',
   /function dfsSearch/.test(coreSource) && /maxNodes/.test(coreSource) && /tailProgress/.test(coreSource) && /axisOffset/.test(coreSource) && aiApplied &&
   C.evaluatePosition(aiApplied.pieces, 'blue') > C.evaluatePosition(initial, 'blue'));
+const workerReplies = [];
+const workerSandbox = {
+  console, Math, JSON, Number, String, Array, Object, Set, Map, Error,
+  CheckersCore: C, CheckersAiModel: M,
+  importScripts() {}, postMessage(message) { workerReplies.push(message); }
+};
+workerSandbox.self = workerSandbox;
+vm.createContext(workerSandbox);
+vm.runInContext(workerSource, workerSandbox, { filename: 'checkers_ai_worker.js' });
+workerSandbox.onmessage({ data: { requestId: 17, pieces: initial, player: 'blue', level: 'hard', recentPositions: [] } });
+const workerMove = workerReplies[0] && workerReplies[0].move;
+ok('Worker 消息协议能返回与请求匹配的合法困难走法',
+  workerReplies[0] && workerReplies[0].requestId === 17 && !workerReplies[0].error && workerMove &&
+  initial[workerMove.from] === 'blue' && C.getLegalMoves(initial, workerMove.from).all.includes(workerMove.target));
 ok('本地训练模型的输入维度、权重形状和特征版本与规则核心一致',
   M && M.featureVersion === C.VALUE_FEATURE_VERSION && C.extractValueFeatures(initial, 'red').length === M.inputSize &&
   M.weights.input.length === M.inputSize * M.hiddenSize && M.training.games === 96);
@@ -111,6 +129,32 @@ const finishResult = C.applyMove(finishState, 'red', finishMove.from, finishMove
 ok('搜索会在分配节点预算前发现直接获胜走法，不再在 9/10 时搬动营内棋子',
   finishMove.from === '12:2' && finishMove.target === '14:0' && finishResult && finishResult.winner === 'red');
 
+const ttSideKey = C.transpositionKey(initial, 'red', 'red', 'test-evaluator');
+ok('TT key 同时隔离行动方、评估视角与 evaluator 版本',
+  ttSideKey !== C.transpositionKey(initial, 'blue', 'red', 'test-evaluator') &&
+  ttSideKey !== C.transpositionKey(initial, 'red', 'blue', 'test-evaluator') &&
+  ttSideKey !== C.transpositionKey(initial, 'red', 'red', 'other-evaluator'));
+const completeWithoutTt = C.analyzeAiMoves(initial, 'red', 'hard', { maxNodes: 100000 });
+const completeWithTt = C.analyzeAiMoves(initial, 'red', 'hard', {
+  maxNodes: 100000, enableTranspositionTable: true
+});
+const withoutTtScores = new Map(completeWithoutTt.candidates.map(function (candidate) {
+  return [candidate.action.from + '>' + candidate.action.target, candidate.baseDfsScore];
+}));
+ok('完整 depth-3 搜索启用 TT 前后保持每个根候选分数与最终走法一致',
+  completeWithoutTt.searchComplete && completeWithTt.searchComplete &&
+  completeWithTt.candidates.every(function (candidate) {
+    return withoutTtScores.get(candidate.action.from + '>' + candidate.action.target) === candidate.baseDfsScore;
+  }) && completeWithTt.totalNodes <= completeWithoutTt.totalNodes);
+const boundedWithTt = C.analyzeAiMoves(initial, 'red', 'hard', {
+  candidateNodeBudget: 2, enableTranspositionTable: true
+});
+ok('节点预算截断的根结果不会伪装成 EXACT 或写成完整搜索',
+  !boundedWithTt.searchComplete && boundedWithTt.budgetCutoffs > 0 &&
+  boundedWithTt.candidates.some(function (candidate) {
+    return !candidate.searchComplete && candidate.boundType === null;
+  }));
+
 const validState = C.sanitizeState({ pieces: initial, turn: 'blue', moveNumber: 12, winner: '' });
 ok('合法棋局状态可恢复且保留回合信息', validState && validState.turn === 'blue' && validState.moveNumber === 12);
 const stateWithMove = C.sanitizeState({ pieces: applied.pieces, turn: 'blue', moveNumber: 2, winner: '', lastMove: {
@@ -124,12 +168,23 @@ ok('棋子数量不完整或位置越界的状态会被拒绝',
 ok('大厅提供人机、本地双人、联机三种入口且不再混放棋盘',
   /id="startAiBtn"/.test(lobbyHtml) && /id="startLocalBtn"/.test(lobbyHtml) &&
   /id="createRoomBtn"/.test(lobbyHtml) && !/id="checkerBoard"/.test(lobbyHtml));
+ok('AI 训练实验室保持为未展示的开发工具而不进入玩家大厅',
+  !/href="lab\.html"/.test(lobbyHtml) && /id="labBoard"/.test(labHtml) &&
+  /\/ai-lab\/live/.test(labSource) && /setInterval\(pollLiveTraining, 800\)/.test(labSource) &&
+  Array.isArray(labRun.replays) && labRun.replays.length >= 4 &&
+  labRun.numericalBackend && labRun.numpyArena && labRun.v11 && labRun.v11.split.overlap === false);
 ok('游戏页只承载棋局，并先加载规则核心再加载交互脚本',
   /id="board"/.test(playHtml) && !/id="createRoomBtn"/.test(playHtml) &&
   playHtml.indexOf('checkers_core.js') >= 0 && playHtml.indexOf('checkers_core.js') < playHtml.indexOf('checkers_ai_model.js') &&
   playHtml.indexOf('checkers_ai_model.js') < playHtml.indexOf('checkers.js'));
-ok('困难模式向搜索传入训练模型和近期局面，其他难度不会依赖模型',
+ok('困难模式向搜索传入训练模型和近期局面',
   /aiLevel === 'hard'/.test(source) && /CheckersAiModel/.test(source) && /recentPositions/.test(source));
+ok('大厅仅展示通过稳定性验证的三档难度',
+  !/data-level="expert"/.test(lobbyHtml) && /difficulty-picker\{[^}]*grid-template-columns:repeat\(3,1fr\)/.test(css));
+ok('困难搜索在独立 Worker 中执行，失败时仍有同步规则核心回退',
+  /new window\.Worker\('checkers_ai_worker\.js'\)/.test(source) && /const fallback = function/.test(source) &&
+  /importScripts\('checkers_core\.js', 'checkers_ai_model\.js'\)/.test(workerSource) &&
+  /Core\.chooseAiMove/.test(workerSource) && /cancelAiSearch\(\)/.test(source));
 ok('游戏页提供上一步说明，棋盘能绘制来源、落点和完整路线',
   /id="lastMoveBar"/.test(playHtml) && /last-move-path/.test(source) &&
   /move-origin/.test(source) && /move-destination/.test(source));

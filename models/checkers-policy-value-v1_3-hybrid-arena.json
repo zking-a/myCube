@@ -1,0 +1,97 @@
+{
+  "model": "checkers-policy-value-v1_3-numpy.json",
+  "status": "experimental",
+  "adapterFeatureVersion": 2,
+  "games": 16,
+  "candidateWins": 9,
+  "baselineWins": 6,
+  "draws": 1,
+  "completed": 15,
+  "averageMoves": 100.8,
+  "agent": "hybrid",
+  "simulations": 0,
+  "learnedWeight": 240,
+  "elapsedSeconds": 42.9,
+  "results": [
+    {
+      "candidateColor": "red",
+      "winner": "red",
+      "moves": 101
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "blue",
+      "moves": 98
+    },
+    {
+      "candidateColor": "red",
+      "winner": "red",
+      "moves": 99
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "limit",
+      "moves": 130
+    },
+    {
+      "candidateColor": "red",
+      "winner": "red",
+      "moves": 99
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "blue",
+      "moves": 96
+    },
+    {
+      "candidateColor": "red",
+      "winner": "red",
+      "moves": 107
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "blue",
+      "moves": 102
+    },
+    {
+      "candidateColor": "red",
+      "winner": "blue",
+      "moves": 102
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "red",
+      "moves": 93
+    },
+    {
+      "candidateColor": "red",
+      "winner": "blue",
+      "moves": 106
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "red",
+      "moves": 87
+    },
+    {
+      "candidateColor": "red",
+      "winner": "blue",
+      "moves": 98
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "red",
+      "moves": 95
+    },
+    {
+      "candidateColor": "red",
+      "winner": "red",
+      "moves": 97
+    },
+    {
+      "candidateColor": "blue",
+      "winner": "blue",
+      "moves": 102
+    }
+  ]
+}

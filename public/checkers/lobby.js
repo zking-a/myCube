@@ -7,6 +7,7 @@ const CONFIG = {
   ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
   ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/
 };
+const AI_LEVELS = ['easy', 'normal', 'hard'];
 
 let aiLevel = 'normal';
 function $(id) { return document.getElementById(id); }
@@ -72,7 +73,7 @@ function saveNickname() {
 }
 
 function selectLevel(level) {
-  aiLevel = ['easy', 'normal', 'hard'].includes(level) ? level : 'normal';
+  aiLevel = AI_LEVELS.includes(level) ? level : 'normal';
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel);
   document.querySelectorAll('[data-level]').forEach(function (button) {
     const active = button.dataset.level === aiLevel;
@@ -89,7 +90,7 @@ function hasSavedGame(mode) {
 }
 
 function init() {
-  aiLevel = ['easy', 'normal', 'hard'].includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal';
+  aiLevel = AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal';
   selectLevel(aiLevel);
   $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
   $('startAiLabel').textContent = hasSavedGame('ai') ? '继续人机对战' : '开始人机对战';

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eef3ff">
+  <meta name="description" content="查看中国跳棋 AI 的训练指标、自我博弈与竞技场回放。">
+  <meta name="robots" content="noindex,nofollow">
+  <title>中国跳棋 · AI 训练实验室</title>
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
+  <link rel="stylesheet" href="lab.css?v=20260822a">
+  <script src="checkers_core.js?v=20260822g" defer></script>
+  <script src="lab.js?v=20260822d" defer></script>
+</head>
+<body>
+  <main class="lab-shell">
+    <nav class="lab-nav">
+      <a class="nav-back ui-button ui-button--secondary" href="index.html">← 跳棋首页</a>
+      <span>AI TRAINING LAB</span>
+      <span class="run-status" id="runStatus">读取实验…</span>
+    </nav>
+
+    <header class="lab-hero">
+      <div>
+        <span class="eyebrow">Policy · Value · PUCT</span>
+        <h1>看见 AI 的每一次进化</h1>
+        <p>这里展示真实的本地训练结果。候选机器人先学习 V0，再进入跨代对手池联赛，最后与线上基准换边对战。</p>
+      </div>
+      <div class="run-meta">
+        <span>当前实验</span>
+        <strong id="runName">等待训练日志</strong>
+        <small id="runTime">—</small>
+      </div>
+    </header>
+
+    <section class="metric-grid" aria-label="训练摘要">
+      <article><span>训练样本</span><strong id="sampleMetric">—</strong><small>教师 + 对手池联赛</small></article>
+      <article><span>策略命中</span><strong id="policyMetric">—</strong><small>验证集 Top-1</small></article>
+      <article><span>竞技场</span><strong id="arenaMetric">—</strong><small>候选 : 基准 V0</small></article>
+      <article><span>平均手数</span><strong id="movesMetric">—</strong><small>换边竞技场</small></article>
+    </section>
+
+    <section class="lab-grid">
+      <article class="replay-card ui-panel">
+        <div class="card-heading">
+          <div><span>LIVE TRAINING</span><h2>训练实时对局</h2></div>
+          <select id="replaySelect" aria-label="选择回放"></select>
+        </div>
+        <div class="replay-state">
+          <span class="phase-pill" id="phasePill">等待数据</span>
+          <div><strong id="replayTitle">训练日志载入中</strong><small id="replayDetail">—</small></div>
+          <b id="plyText">0 / 0 手</b>
+        </div>
+        <div class="lab-board-wrap">
+          <svg id="labBoard" viewBox="0 0 320 320" role="img" aria-label="AI 训练对局棋盘"></svg>
+          <div class="board-loading" id="boardLoading">正在读取本地训练记录…</div>
+        </div>
+        <div class="replay-controls">
+          <button type="button" id="prevBtn" aria-label="上一步">←</button>
+          <button type="button" class="play-button" id="playBtn">播放</button>
+          <button type="button" id="nextBtn" aria-label="下一步">→</button>
+          <label><span>进度</span><input id="replayRange" type="range" min="0" max="0" value="0"></label>
+          <select id="speedSelect" aria-label="回放速度"><option value="900">1×</option><option value="520" selected>1.5×</option><option value="260">3×</option></select>
+        </div>
+      </article>
+
+      <aside class="insight-column">
+        <article class="timeline-card ui-panel">
+          <div class="card-heading"><div><span>EVOLUTION</span><h2>训练阶段</h2></div></div>
+          <ol class="phase-list">
+            <li><i>01</i><div><strong>教师模仿</strong><small id="teacherStage">读取中</small></div><b>V0</b></li>
+            <li><i>02</i><div><strong>对手池联赛</strong><small id="selfStage">读取中</small></div><b>PUCT</b></li>
+            <li><i>03</i><div><strong>向量化训练</strong><small id="numpyStage">等候 Python 结果</small></div><b>NumPy</b></li>
+            <li><i>04</i><div><strong>竞技场门禁</strong><small id="arenaStage">读取中</small></div><b id="gateBadge">—</b></li>
+          </ol>
+        </article>
+
+        <article class="chart-card ui-panel">
+          <div class="card-heading"><div><span>LEARNING CURVE</span><h2>损失变化</h2></div><div class="legend"><span class="policy-key">策略</span><span class="value-key">价值</span></div></div>
+          <svg id="lossChart" viewBox="0 0 420 180" role="img" aria-label="训练损失曲线"></svg>
+          <p id="chartCaption">每个点代表一个训练 epoch，越低通常越稳定。</p>
+        </article>
+
+        <article class="decision-card ui-panel" id="decisionCard">
+          <span>MODEL GATE</span>
+          <h2 id="decisionTitle">等待门禁结果</h2>
+          <p id="decisionText">实验模型必须真正击败线上 V0，才会进入高难度接入评审。</p>
+        </article>
+      </aside>
+    </section>
+  </main>
+</body>
+</html>

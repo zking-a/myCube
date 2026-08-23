@@ -658,6 +658,35 @@ const server = http.createServer(function (req, res) {
     }));
     return;
   }
+  // AI 实验室是本地开发后端，不属于玩家页面。除显式开启外只允许本机读取。
+  if (urlPath === '/ai-lab/run' || urlPath === '/ai-lab/live') {
+    const remoteAddress = String(req.socket && req.socket.remoteAddress || '');
+    const localRequest = remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+    if (!localRequest && process.env.AI_LAB_ENABLED !== '1') {
+      writeHead(res, 404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end('{"error":"NOT_FOUND"}');
+      return;
+    }
+    const filePath = urlPath === '/ai-lab/live'
+      ? path.join(__dirname, 'models', 'checkers-live.json')
+      : path.join(__dirname, 'public', 'checkers', 'training', 'latest.json');
+    fs.readFile(filePath, function (error, data) {
+      if (error) {
+        writeHead(res, 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(urlPath === '/ai-lab/live' ? '{"active":false}' : '{"error":"NO_TRAINING_RUN"}');
+        return;
+      }
+      try { JSON.parse(data.toString('utf8')); }
+      catch (parseError) {
+        writeHead(res, 503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end('{"error":"TRAINING_SNAPSHOT_UPDATING"}');
+        return;
+      }
+      writeHead(res, 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      if (req.method === 'HEAD') res.end(); else res.end(data);
+    });
+    return;
+  }
   // 游戏目录使用稳定的尾斜杠 URL；旧数独入口继续可用。
   const routeRedirects = {
     '/24': '/24/',
