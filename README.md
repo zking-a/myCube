@@ -84,13 +84,108 @@ npm run test:security
 
 ### 重新训练跳棋困难电脑
 
-困难难度会将受节点预算保护的 DFS/alpha-beta 搜索与一个浏览器内价值网络混合。仓库中的模型由固定随机种子完成 96 局本地自我对弈生成，不依赖 Python 或 GPU。重新训练时运行：
+困难难度会将受预算保护的 DFS/alpha-beta 搜索与一个浏览器内价值网络混合，并在独立 Web Worker 中计算以避免阻塞棋盘交互。未通过跨种子竞技场门槛的 hard+ 与 A* 对抗代理已经从产品和评测入口移除。仓库中的轻量模型由固定随机种子完成 96 局本地自我对弈生成，不依赖 Python 或 GPU。重新训练时运行：
 
 ```bash
 npm run train:checkers-ai
 ```
 
 训练器会输出每代误差、自我对弈统计、与无模型基线的固定时长竞赛、困难搜索的完整对局速度，以及 `MODEL_JSON_START` 到 `MODEL_JSON_END` 之间的可部署权重。训练参数可以用 `--seed`、`--generations`、`--games`、`--max-moves`、`--benchmark-games` 和 `--speed-games` 调整。生成模型应同时通过胜率与平均手数门槛，再更新 `public/checkers/checkers_ai_model.js`。
+
+#### 困难机器人的强度升级（2026.08 在线版）
+
+搜索预算与形态的升级（评估公式与旧版保持逐位一致，经差分测试验证；竞技场拆解表明
+评估微调与过早加深均为负收益，已回退）：
+
+1. **决策时间预算替代固定节点数**：困难搜索从固定 3600 节点改为 Worker 内 420ms
+   墙钟预算——按根候选均分、未用份额留给后续候选、超时立即中止整棵子树。旧版在
+   尖锐局面下经常连 depth-3 都搜不完。
+2. **终局自适应加深 + 置换表**：只在真正的终局（双方合计营外棋子 ≤ 8）加深到
+   5/7 层，让搜索看到更远的强制获胜序列；中局保持 depth-3。加深阈值经过竞技场
+   修正——过早加深会在时间预算下产生半截搜索噪声。
+3. **威胁驱动阻挡**：对手一步可赢时，把"进入对手营地"的合法走法强制纳入根候选，
+   让机器人能在对手最后一子入营前找到唯一的拖延手段；不做静态阻挡偏好（阻挡是
+   亏节奏战术，竞技场验证静态偏置会打成死锁）。
+
+竞技场验证（paired 换色、固定种子，旧版 = git HEAD 的线上机器人）：两批种子合计
+**24 局 15-9（62.5% 胜率）**，无死锁局，平均手数与旧版相当（98 vs 95-100 手）。
+
+已实证为净负收益并回退的改动（评估公式始终与旧版逐位一致）：跳链机动性项、营外
+竞速分支（≤12 阈值过早）、静态阻挡偏好（打成死锁）、营内挪动排序惩罚（-40 会砍掉
+"腾出营地空孔让营外棋子跳入"的关键战术，同种子 0-7）、真终局"距完成步数下界"
+竞速项（同种子 7-9）、真终局最短路求解器决策辅助（单人最优 ≠ 双人最优，对手会
+干扰路径中段，同种子 6-10）。评测口径见 `scripts/arena_vs_old.js` 与
+`scripts/bench_checkers_robot.js`。
+
+### 策略价值机器人与训练实验室
+
+新引擎把游戏规则与数值训练分离：Node.js 游戏适配器生成标准
+`state + dynamic actions + policy + value` 样本，Python/NumPy 使用向量化小批量训练，
+再导出与 JS 推理端兼容的 `dynamic-policy-value-v1` checkpoint。候选模型必须通过独立
+换边竞技场，不会因为离线 loss 下降就自动替换线上 V0。
+
+```bash
+npm run test:ai-engine
+npm run train:checkers-robot -- --output models/checkers-candidate-generator.json --dataset-output models/checkers-training-next.jsonl --run-output public/checkers/training/latest.json --summary-only
+npm run train:checkers-robot:scratch -- --dataset models/checkers-training-next.jsonl --output models/checkers-v1_4-scratch.json
+npm run train:checkers-robot:policy-warm -- --dataset models/checkers-training-next.jsonl --output models/checkers-v1_4-policy-warm.json
+npm run eval:checkers-robot -- --model models/checkers-candidate.json --agent hybrid --run-output public/checkers/training/latest.json
+```
+
+启动服务后直接打开开发地址 `/checkers/lab.html`。训练器通过本机专用接口逐手写入
+当前对局，实验室每 0.8 秒自动跟随最新落子，同时保留已结束的教师、联赛与竞技场
+对局。玩家大厅不会展示该入口；非本机请求默认也不能读取训练状态。
+
+V1.2 在 V1.1 的整盘切分、阶段价值标签、对手池和整局回放缓冲区之上加入 DAgger
+教师重标注，并使用 V1.1 checkpoint、当前候选、V0 normal/hard 组成跨代对手池。
+最终 NumPy checkpoint 可通过 `--hidden-size` 与 `--action-hidden-size` 扩大网络容量，
+仍需通过独立换边竞技场后才允许进入线上接入评审。
+
+V1.3 进一步把目标营占位、唯一目标孔分配距离、整体进度、轴线偏移和拖后棋子等
+结构特征加入适配器，并支持“稳定 V0 DFS + 新模型根节点重排”的混合代理。当前正式
+16 局结果为 9 胜 6 负 1 截止、平均 100.8 手：已经对战领先，但因并非全部完成而仍
+保留为实验 checkpoint，不会自动替换线上困难电脑。
+
+V1.4 的第一阶段只修复训练契约，不扩大网络：所有数据生成器统一通过显式
+`trainingOutcome` 写入真实 W/L 与 `valueMask`；历史 V1.3 checkpoint 缺失或 SHA 不符时
+立即失败；联赛和竞技场强制使用 deployment-aligned hybrid。每步样本保存 DFS、模型信号、
+最终组合分数与选择索引，并使用确定性的换色开局族按 `openingFamilyId` 划分训练/验证。
+独立竞技场也使用 paired openings 与 pair-cluster bootstrap，仍不会自动晋级线上模型。
+
+V1.4 P1 的初始化消融使用同一份带 SHA-256 的冻结数据集和相同随机种子。`scratch` 组仅从
+V1.3 读取 128/32 网络尺寸，所有参数随机初始化；`policy-warm` 组只复制共享状态塔、动作塔
+和策略头，价值头按与 scratch 完全相同的种子重置，Adam 动量也统一清零。checkpoint 会逐项
+记录组件来源，验证报告只在完成局上计算价值 MAE、Brier 分数和开/中/残局校准。
+
+第一代正式数据固定为 320 局：48 局 V0 hard 锚定、160 局冻结 V1.3 hybrid 对 V0 hard、
+80 局冻结 V1.3 hybrid 镜像自对弈、32 局 safe-margin 内 top-2 受控探索。采样期间 actor
+权重不可更新；NumPy 每局从开/中/残局等量抽样，避免长局在梯度中天然获得更高权重。
+
+MTG 头只作为 completed-only 诊断指标训练，默认不参与选步。开发消融中 40 分强度安全带
+虽消除了截止局，却把同套 40 局胜率从 63.75% 降到 47.5%，因此严格按停止条件关闭；只有
+离线研究显式传入 `--enable-mtg` 才会启用该 tie-break，不影响当前候选默认行为。
+
+S1 transposition table 同样默认关闭。它使用局面、行动方、评估视角和 evaluator 版本组成
+完整 key，并禁止预算截断结果写为 `EXACT`。同套 40 局中 TT on/off 逐局一致，都是
+25–14–1；但 depth-3 的 543,140 次 probe 为零命中，节点数不变、耗时略增，因此当前浅层
+搜索没有可利用的转置收益。
+
+后续 S2/S3 已完成离线消融但未保留失败实现：TT＋迭代加深/PV 的 40 局结果为 25–15–0，
+把 S1 唯一平局变成败局；加入内部模型排序后逐局完全相同，只增加 37,234 次模型调用。
+全局 depth-4 在 8 局中为 5–2–1，但平均 110.6 手、完成率 87.5%；受限 9/10 战术延伸在
+40 局中仍为 25–15–0，并发生 2 次扩展预算回退。三项均未满足胜率、步数与成本门禁，相关
+实验开关和测试已从提交内容移除，线上 Worker 与当前最强候选保持 S1 默认行为。
+
+最短路后端把标准双人跳棋投影为 81 孔单人搬运问题，复用完整连续跳跃后继生成，
+并使用“目标营外棋子数 + 唯一目标孔最小权匹配”的可采纳下界执行受预算保护的双向 A*。
+27 步是无对手单人搬运的已知最优值，不代表双人对抗局应在 27 个总回合内结束。
+
+```bash
+npm run solve:checkers-shortest -- --max-nodes 5000 --time-limit-ms 3000 --output models/checkers-shortest-path.json
+```
+
+预算内未找到完整路径时，报告会明确返回 `optimal: false` 和前沿建议，不会将有界搜索冒充为
+27 步最优性证明。当前它只输出训练后端建议，不接管玩家对抗落子；以后若重新接入，仍须先通过独立跨种子竞技场。
 
 需要验证完整双人流程时，先启动服务，再在另一个终端运行：
 
