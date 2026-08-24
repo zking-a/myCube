@@ -80,6 +80,7 @@
     let reconnectTimer = null;
     let reconnectAttempt = 0;
     let active = true;
+    let terminalStatus = '';
     let intent = settings.intent === 'create' ? 'create' : 'join';
 
     function notifyStatus(status) {
@@ -135,7 +136,12 @@
           return;
         }
         if (message.t === 'err') {
-          if (FATAL_ERRORS.has(message.code)) active = false;
+          if (FATAL_ERRORS.has(message.code)) {
+            active = false;
+            terminalStatus = 'failed';
+            notifyStatus(terminalStatus);
+            try { socket.close(1000, 'join rejected'); } catch (error) {}
+          }
           if (typeof settings.onError === 'function') settings.onError(message);
           return;
         }
@@ -144,13 +150,14 @@
       socket.addEventListener('close', function () {
         socket = null;
         if (active) scheduleReconnect();
-        else notifyStatus('offline');
+        else notifyStatus(terminalStatus || 'offline');
       });
       socket.addEventListener('error', function () {});
     }
 
     function leave() {
       active = false;
+      terminalStatus = 'offline';
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       send({ t: 'leave' });
       safeRemove(storage, sessionKey);
@@ -160,6 +167,7 @@
 
     function dispose() {
       active = false;
+      terminalStatus = terminalStatus || 'offline';
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (socket) try { socket.close(1000, 'page closed'); } catch (error) {}
       socket = null;

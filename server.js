@@ -287,6 +287,18 @@ function expireFlightChessRoom(room, reason) {
   });
 }
 
+// 创建新房前回收同一来源已经完全离线的单人等待房。
+// 这样浏览器返回大厅或异常关闭后可以立即重建，同时不会踢掉仍在线的房主。
+function releaseAbandonedFlightChessRoomsForIp(ip) {
+  flightChessRooms.forEach(function (room) {
+    if (room.creatorIp !== ip || room.phase !== 'waiting' || room.players.size > 1) return;
+    const hasOpenPlayer = Array.from(room.players.values()).some(function (player) {
+      return player.online && player.ws && player.ws.readyState === WebSocket.OPEN;
+    });
+    if (!hasOpenPlayer) expireFlightChessRoom(room, '旧的飞行棋等待房已由新房间替换');
+  });
+}
+
 function sudokuPlayerList(room) {
   return Array.from(room.players.values()).map(function (p) {
     return { cid: p.cid, seat: p.seat, online: p.online };
@@ -1610,11 +1622,12 @@ flightChessWss.on('connection', function (ws, req) {
       let room = flightChessRooms.get(code);
       if (!room) {
         if (intent !== 'create') { fail('ROOM_NOT_FOUND', '飞行棋房间不存在或已失效，请向房主确认房间码'); return; }
+        releaseAbandonedFlightChessRoomsForIp(clientIp);
         if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
           fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
         }
         if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
-          fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
+          fail('IP_ROOM_LIMIT', '当前网络已有正在使用的房间，请先退出旧房间再创建'); return;
         }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
         if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }

@@ -7,15 +7,15 @@
   <meta name="description" content="2 至 4 人同屏或好友联机飞行棋对战棋局。">
   <title>飞行棋 · 对战棋局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="flight_chess.css?v=20260824a">
-  <script src="flight_chess_core.js?v=20260824a" defer></script>
-  <script src="flight_chess_net.js?v=20260824a" defer></script>
-  <script src="game.js?v=20260824a" defer></script>
+  <link rel="stylesheet" href="flight_chess.css?v=20260824b">
+  <script src="flight_chess_core.js?v=20260824b" defer></script>
+  <script src="flight_chess_net.js?v=20260824b" defer></script>
+  <script src="game.js?v=20260824b" defer></script>
 </head>
 <body class="flight-game-page">
   <main class="flight-game-shell">
     <nav class="flight-game-nav">
-      <a class="ui-button ui-button--secondary" href="index.html" aria-label="返回飞行棋大厅">← 玩法大厅</a>
+      <a class="ui-button ui-button--secondary" href="index.html" data-leave-room aria-label="返回飞行棋大厅">← 玩法大厅</a>
       <div class="game-nav-title"><span>Aeroplane Chess</span><strong id="gameModeTitle">本地对战</strong></div>
       <span class="turn-badge" id="roundBadge">第 1 轮</span>
     </nav>
@@ -90,7 +90,7 @@
       <h2 id="winnerTitle">红方获胜</h2>
       <p id="winnerText">四架飞机已经安全抵达中心。</p>
       <button type="button" class="ui-button ui-button--primary" id="playAgainButton">再来一局</button>
-      <a class="ui-button ui-button--secondary" href="index.html">返回玩法大厅</a>
+      <a class="ui-button ui-button--secondary" href="index.html" data-leave-room>返回玩法大厅</a>
     </section>
   </div>
 

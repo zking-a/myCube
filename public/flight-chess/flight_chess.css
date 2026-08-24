@@ -501,6 +501,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .network-badge.online i { background: var(--flight-green); box-shadow: 0 0 0 3px rgba(24,168,116,.12); }
 .network-badge.offline { color: #b66a10; background: var(--flight-yellow-soft); }
 .network-badge.offline i, .network-badge.connecting i { background: var(--flight-yellow); animation: network-pulse 1s ease-in-out infinite alternate; }
+.network-badge.failed { color: #b7494f; background: var(--flight-red-soft); }
+.network-badge.failed i { background: var(--flight-red); }
 @keyframes network-pulse { to { opacity: .35; } }
 .online-roster { display: grid; gap: 5px; }
 .online-seat {
@@ -521,6 +523,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .online-seat.empty > i { background: #c6cddd; }
 .online-seat.empty b, .online-seat.offline b { color: var(--ui-text-muted); }
 .online-waiting { margin: 0; color: var(--ui-text-secondary); font-size: 9px; line-height: 1.55; }
+.online-waiting.error { color: #b7494f; font-weight: 800; }
 .online-start-button { width: 100%; min-height: 38px; cursor: pointer; }
 .online-room-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .online-room-actions button { min-height: 34px; padding: 7px; font-size: 9px; cursor: pointer; }

@@ -21,7 +21,7 @@
     ROUND_IN_PROGRESS: '对局已经开始，只允许原玩家重连。',
     SESSION_INVALID: '重连身份已失效，请退出后重新加入。',
     SERVER_FULL: '联机服务当前已满，请稍后再试。',
-    IP_ROOM_LIMIT: '当前网络创建的房间已达上限。',
+    IP_ROOM_LIMIT: '当前网络已有正在使用的房间，请先退出旧房间再创建。',
     IP_PLAYER_LIMIT: '当前网络加入的玩家数已达上限。',
     HOST_ONLY: '只有房主可以执行这个操作。',
     ROOM_NOT_READY: '请等待所有飞行员到齐。',
@@ -40,7 +40,7 @@
   let winnerDialogShown = false;
   let netClient = null;
   const online = {
-    cid: '', seat: null, status: 'connecting', state: null, pending: false,
+    cid: '', seat: null, status: 'connecting', state: null, pending: false, error: '',
     intent: params.get('intent') === 'create' ? 'create' : 'join'
   };
 
@@ -227,7 +227,7 @@
     if (isOnline && (!online.state || online.state.phase === 'waiting')) {
       $('turnName').textContent = '等待开局';
       $('turnInstruction').textContent = '玩家到齐后由房主开始';
-      $('moveSummary').textContent = online.status === 'offline' ? '连接中断，正在自动重连…' : '邀请好友加入房间，全部到齐即可开始。';
+      $('moveSummary').textContent = online.error || (online.status === 'offline' ? '连接中断，正在自动重连…' : '邀请好友加入房间，全部到齐即可开始。');
       $('rollButton').textContent = '等待开局';
       $('rollButton').disabled = true;
       $('diceTip').textContent = '骰点由服务器安全生成';
@@ -263,7 +263,8 @@
     $('onlineRoomTitle').textContent = roomCode;
     const badge = $('networkBadge');
     badge.className = 'network-badge ' + online.status;
-    badge.innerHTML = '<i aria-hidden="true"></i>' + (online.status === 'online' ? ' 已连接' : online.status === 'offline' ? ' 重连中' : ' 连接中');
+    badge.innerHTML = '<i aria-hidden="true"></i>' + (online.status === 'online' ? ' 已连接' :
+      online.status === 'offline' ? ' 重连中' : online.status === 'failed' ? ' 连接失败' : ' 连接中');
     const roster = $('onlineRoster');
     roster.textContent = '';
     for (let seat = 0; seat < capacity; seat++) {
@@ -279,10 +280,11 @@
     }
     const joined = state ? state.players.length : 0;
     const ready = state && state.phase === 'waiting' && joined === capacity && allOnline();
-    $('onlineWaiting').textContent = state && state.phase === 'playing' ? '棋局进行中 · 离线后会自动保留席位' :
+    $('onlineWaiting').classList.toggle('error', !!online.error);
+    $('onlineWaiting').textContent = online.error || (state && state.phase === 'playing' ? '棋局进行中 · 离线后会自动保留席位' :
       state && state.phase === 'done' ? '本局已结束，房主可以发起下一局。' :
-        '已加入 ' + joined + '/' + capacity + ' 位，' + (ready ? '人员已到齐。' : '继续邀请好友加入。');
-    $('onlineStartButton').hidden = !!(state && state.phase !== 'waiting');
+        '已加入 ' + joined + '/' + capacity + ' 位，' + (ready ? '人员已到齐。' : '继续邀请好友加入。'));
+    $('onlineStartButton').hidden = online.status === 'failed' || !!(state && state.phase !== 'waiting');
     $('onlineStartButton').disabled = !isHost() || !ready || online.pending;
     $('onlineStartButton').textContent = !isHost() ? '等待房主开始' : ready ? '开始对局' : '等待玩家到齐';
   }
@@ -368,6 +370,7 @@
     const previousRevision = online.state ? online.state.revision : -1;
     online.state = message;
     online.pending = false;
+    online.error = '';
     game = nextGame;
     if (playerCountChanged) buildBoard();
     render(message.revision > previousRevision && !!game.lastRoll);
@@ -391,7 +394,8 @@
       onState: receiveOnlineState,
       onError: function (message) {
         online.pending = false;
-        showToast(ERROR_TEXT[message.code] || message.msg || '联机操作失败', 4000);
+        online.error = ERROR_TEXT[message.code] || message.msg || '联机操作失败';
+        showToast(online.error, 4000);
         render(false);
       }
     });
@@ -412,6 +416,13 @@
       navigator.clipboard.writeText(url).then(function () { showToast('邀请链接已复制'); }, function () { showToast('房间码：' + roomCode, 4000); });
     } else showToast('房间码：' + roomCode, 4000);
   }
+  function leaveOnlineRoom(event) {
+    if (!isOnline) return;
+    if (event) event.preventDefault();
+    const destination = event && event.currentTarget && event.currentTarget.href ? event.currentTarget.href : 'index.html';
+    if (netClient) netClient.leave();
+    window.setTimeout(function () { location.href = destination; }, 45);
+  }
   function initGame() {
     if (!Core) return;
     $('rollButton').addEventListener('click', roll);
@@ -419,10 +430,8 @@
     $('playAgainButton').addEventListener('click', function () { startNewGame(false); });
     $('onlineStartButton').addEventListener('click', function () { sendOnline({ t: 'start' }); });
     $('copyInviteButton').addEventListener('click', copyInvite);
-    $('leaveRoomButton').addEventListener('click', function () {
-      if (netClient) netClient.leave();
-      window.setTimeout(function () { location.href = 'index.html'; }, 45);
-    });
+    $('leaveRoomButton').addEventListener('click', leaveOnlineRoom);
+    document.querySelectorAll('[data-leave-room]').forEach(function (link) { link.addEventListener('click', leaveOnlineRoom); });
     if (isOnline) setupOnlineGame(); else setupLocalGame();
   }
 

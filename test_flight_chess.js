@@ -134,6 +134,9 @@ ok('棋局页不重复人数配置，并按规则核心、联机层、交互脚�
   !/data-player-count/.test(playHtml) &&
   playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('flight_chess_net.js') &&
   playHtml.indexOf('flight_chess_net.js') < playHtml.indexOf('game.js'));
+ok('飞行棋资源升级缓存版本且返回大厅会显式离开联机房间',
+  /flight_chess_net\.js\?v=20260824b/.test(playHtml) && /game\.js\?v=20260824b/.test(playHtml) &&
+  /data-leave-room/.test(playHtml) && /leaveOnlineRoom/.test(gameSource));
 ok('联机地址与房间码归一化支持 http/ws 和 https/wss',
   Net.normalizeRoom(' a1io-z9 ') === 'AZ9' &&
   Net.websocketUrl({ protocol: 'http:', host: 'localhost:3000' }) === 'ws://localhost:3000/flight-chess-ws' &&
@@ -141,6 +144,38 @@ ok('联机地址与房间码归一化支持 http/ws 和 https/wss',
 ok('联机身份持久化、退避重连且客户端不产生骰点',
   /SESSION_PREFIX/.test(netSource) && /sessionStorage/.test(netSource) && /reconnectDelayForAttempt/.test(netSource) &&
   !/rollDice|Math\.floor\([^\n]*\* 6/.test(netSource));
+
+const terminalStatuses = [];
+let terminalError = null;
+class MockFlightSocket {
+  constructor() {
+    this.readyState = MockFlightSocket.CONNECTING;
+    this.handlers = {};
+    this.sent = [];
+    MockFlightSocket.last = this;
+  }
+  addEventListener(type, handler) { this.handlers[type] = handler; }
+  emit(type, event) { if (this.handlers[type]) this.handlers[type](event || {}); }
+  send(value) { this.sent.push(JSON.parse(value)); }
+  close() { this.readyState = MockFlightSocket.CLOSED; this.closed = true; this.emit('close'); }
+}
+MockFlightSocket.CONNECTING = 0;
+MockFlightSocket.OPEN = 1;
+MockFlightSocket.CLOSED = 3;
+const terminalClient = Net.createClient({
+  room: 'BAD24', intent: 'create', WebSocket: MockFlightSocket,
+  storage: { getItem: function () { return null; }, setItem: function () {}, removeItem: function () {} },
+  crypto: { getRandomValues: function (bytes) { bytes.fill(7); } },
+  onStatus: function (status) { terminalStatuses.push(status); },
+  onError: function (message) { terminalError = message.code; }
+});
+terminalClient.connect();
+MockFlightSocket.last.readyState = MockFlightSocket.OPEN;
+MockFlightSocket.last.emit('open');
+MockFlightSocket.last.emit('message', { data: JSON.stringify({ t: 'err', code: 'IP_ROOM_LIMIT' }) });
+ok('致命建房错误会停止重连、关闭连接并持久标记失败状态',
+  terminalError === 'IP_ROOM_LIMIT' && terminalStatuses[terminalStatuses.length - 1] === 'failed' &&
+  MockFlightSocket.last.closed && !terminalClient.isActive());
 ok('棋盘飞机只通过规则核心给出的合法列表启用',
   /Core\.getMovablePlanes/.test(gameSource) && /Core\.movePlane/.test(gameSource) && /token\.disabled = !canMove/.test(gameSource));
 ok('棋局提供自动存档、规则说明、响应式单列和减少动效支持',
@@ -155,6 +190,8 @@ ok('飞行棋服务端独立建房并权威生成骰点、校验移动与状态�
   /pathname === '\/flight-chess-ws'/.test(serverSource) &&
   /crypto\.randomInt\(1, 7\)/.test(serverSource) &&
   /FlightChessCore\.movePlane/.test(serverSource) && /STATE_OUTDATED/.test(serverSource));
+ok('飞行棋新建房会回收同来源已离线的单人等待房',
+  /releaseAbandonedFlightChessRoomsForIp/.test(serverSource) && /旧的飞行棋等待房已由新房间替换/.test(serverSource));
 ok('package scripts 提供飞行棋测试及整站统一回归入口',
   packageJson.scripts['test:flight-chess'] === 'node test_flight_chess.js' &&
   packageJson.scripts['test:flight-chess:e2e'] === 'node test_flight_chess_online.js' &&

@@ -10,7 +10,7 @@ const WS_URL = 'ws://127.0.0.1:' + PORT + '/flight-chess-ws';
 const child = spawn(process.execPath, ['server.js'], {
   cwd: __dirname,
   env: Object.assign({}, process.env, {
-    PORT: String(PORT), MAX_ROOMS: '4', MAX_ROOMS_PER_IP: '4',
+    PORT: String(PORT), MAX_ROOMS: '4', MAX_ROOMS_PER_IP: '1',
     MAX_CONNECTIONS: '12', MAX_CONNECTIONS_PER_IP: '12', MAX_SOCKET_CONNECTIONS_PER_IP: '16',
     CONNECTION_ATTEMPT_LIMIT: '60'
   }),
@@ -86,7 +86,7 @@ function ok(name, condition) {
 }
 
 (async function () {
-  let A, B, C, A2, extra, impostor;
+  let A, B, C, A2, extra, impostor, stale;
   try {
     await waitForServer();
     const redirect = await fetch(HTTP_URL + '/flight-chess', { redirect: 'manual' });
@@ -102,11 +102,27 @@ function ok(name, condition) {
     const evilClose = await new Promise(function (resolve) { evil.once('close', function (code) { resolve(code); }); });
     ok('飞行棋联机拒绝跨站 WebSocket 连接', evilClose === 1008);
 
+    stale = client(); await stale.open();
+    stale.send({ t: 'join', room: 'PAST2', nick: '旧房主', cid: 'FLIGHT-STALE', intent: 'create', capacity: 2 });
+    await stale.waitFor(function (message) { return message.t === 'session'; });
+    await stale.waitFor(function (message) { return message.t === 'state' && message.players.length === 1; });
+    await stale.close(); stale = null;
+    await wait(100);
+
     A = client(); B = client(); C = client();
     await Promise.all([A.open(), B.open(), C.open()]);
     A.send({ t: 'join', room: 'FLY24', nick: '红方机长', cid: 'FLIGHT-A', intent: 'create', capacity: 3 });
     const aSession = await A.waitFor(function (message) { return message.t === 'session'; });
     await A.waitFor(function (message) { return message.t === 'state' && message.players.length === 1; });
+    ok('新建飞行棋房间会回收同一来源已离线的单人等待房',
+      (await (await fetch(HTTP_URL + '/health')).json()).roomsFlightChess === 1);
+
+    extra = client(); await extra.open();
+    extra.send({ t: 'join', room: 'NEW24', nick: '第二房主', cid: 'FLIGHT-EXTRA', intent: 'create', capacity: 2 });
+    await extra.waitFor(function (message) { return message.t === 'err' && message.code === 'IP_ROOM_LIMIT'; });
+    await extra.close(); extra = null;
+    ok('同一来源仍在线的等待房不会被新建请求误回收', true);
+
     A.send({ t: 'start' });
     await A.waitFor(function (message) { return message.t === 'err' && message.code === 'ROOM_NOT_READY'; });
     ok('房主可选择三人房，人数未齐时不能提前开始', aSession.seat === 0);
@@ -201,6 +217,7 @@ function ok(name, condition) {
     ok('健康检查统计飞行棋房间和共享玩家席位', health.roomsFlightChess === 1 && health.seats === 3);
     console.log('\n✅ 飞行棋联机集成测试全部通过（' + passed + ' 项）');
   } finally {
+    if (stale) await stale.close().catch(function () {});
     if (extra) await extra.close().catch(function () {});
     if (impostor) await impostor.close().catch(function () {});
     if (A) await A.close().catch(function () {});
