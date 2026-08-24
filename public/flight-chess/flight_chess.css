@@ -207,6 +207,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .flight-mode-desc { font-size: 11px; font-weight: 650; opacity: .82; }
 .flight-mode-arrow { font-size: 22px; transition: transform var(--ui-duration-fast) var(--ui-ease-standard); }
 .flight-mode-entry:hover .flight-mode-arrow { transform: translateX(3px); }
+.flight-online-entry {
+  background: linear-gradient(135deg, #28c98c, #139b6a);
+  box-shadow: 0 12px 26px rgba(19,155,106,.2);
+}
 
 .flight-mode-config {
   padding: 15px;
@@ -236,6 +240,30 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .flight-config-note { margin: 9px 2px 13px; color: var(--ui-text-muted); font-size: 11px; line-height: 1.5; }
 .flight-start { width: 100%; padding: 10px 14px; cursor: pointer; }
+.flight-online-config { display: grid; gap: 11px; }
+.flight-online-field { display: grid; gap: 6px; }
+.flight-online-field > span { color: var(--ui-text-secondary); font-size: 10px; font-weight: 900; }
+.flight-online-field input { width: 100%; padding: 9px 11px; }
+.flight-online-intents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.flight-online-intent {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 11px;
+  border-color: var(--ui-border);
+  text-align: left;
+  background: #fff;
+  cursor: pointer;
+}
+.flight-online-intent.create { border-color: #ccebdc; background: #f2fbf6; }
+.flight-online-intent.create strong { color: #17885b; }
+.flight-online-intent.join { border-color: #d8dfff; background: #f5f7ff; }
+.flight-online-intent.join strong { color: var(--ui-primary-strong); }
+.flight-online-intent span { margin-top: 3px; color: var(--ui-text-muted); font-size: 9px; font-weight: 700; }
+.flight-join-config { display: grid; gap: 9px; padding: 11px; border: 1px solid #d8dfff; border-radius: var(--ui-radius-md); background: #f8f9ff; animation: config-in var(--ui-duration-base) var(--ui-ease-standard) both; }
+.flight-field-error { margin: 0; padding: 8px 10px; border: 1px solid #ffd8d5; border-radius: var(--ui-radius-sm); color: #b7444b; font-size: 10px; background: #fff3f2; }
 
 .flight-feature-strip {
   display: grid;
@@ -450,7 +478,53 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 .flight-control-panel { display: grid; gap: 10px; }
-.turn-card, .dice-card, .players-card, .rules-card { padding: 14px; box-shadow: var(--ui-shadow-sm); }
+.turn-card, .dice-card, .players-card, .rules-card, .online-room-card { padding: 14px; box-shadow: var(--ui-shadow-sm); }
+.online-room-card { display: grid; gap: 10px; }
+.online-room-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.online-room-heading > div { display: flex; min-width: 0; flex-direction: column; }
+.online-room-heading > div > span { color: var(--ui-text-muted); font-size: 9px; font-weight: 900; letter-spacing: 1px; }
+.online-room-heading strong { color: var(--ui-primary-strong); font-family: var(--ui-font-number); font-size: 21px; letter-spacing: 3px; }
+.network-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: var(--ui-text-muted);
+  font-size: 9px;
+  font-weight: 900;
+  background: var(--ui-surface-soft);
+  white-space: nowrap;
+}
+.network-badge i { width: 7px; height: 7px; border-radius: 50%; background: #9ba6be; }
+.network-badge.online { color: #0b8359; background: var(--flight-green-soft); }
+.network-badge.online i { background: var(--flight-green); box-shadow: 0 0 0 3px rgba(24,168,116,.12); }
+.network-badge.offline { color: #b66a10; background: var(--flight-yellow-soft); }
+.network-badge.offline i, .network-badge.connecting i { background: var(--flight-yellow); animation: network-pulse 1s ease-in-out infinite alternate; }
+@keyframes network-pulse { to { opacity: .35; } }
+.online-roster { display: grid; gap: 5px; }
+.online-seat {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: var(--ui-surface-soft);
+}
+.online-seat > i { width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; background: var(--seat-color); box-shadow: 0 0 0 1px var(--ui-border); }
+.online-seat span { overflow: hidden; font-size: 10px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.online-seat b { color: var(--ui-success); font-size: 8px; }
+.online-seat.empty { border-style: dashed; opacity: .7; }
+.online-seat.empty > i { background: #c6cddd; }
+.online-seat.empty b, .online-seat.offline b { color: var(--ui-text-muted); }
+.online-waiting { margin: 0; color: var(--ui-text-secondary); font-size: 9px; line-height: 1.55; }
+.online-start-button { width: 100%; min-height: 38px; cursor: pointer; }
+.online-room-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.online-room-actions button { min-height: 34px; padding: 7px; font-size: 9px; cursor: pointer; }
+.online-leave-button { color: #b7494f; }
 .turn-card { position: relative; overflow: hidden; }
 .turn-card::after { position: absolute; width: 90px; height: 90px; right: -45px; top: -42px; border-radius: 50%; background: var(--turn-soft, var(--flight-red-soft)); content: ""; }
 .turn-kicker { color: var(--ui-text-muted); font-size: 9px; font-weight: 900; letter-spacing: 1.2px; }
@@ -531,7 +605,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .flight-game-shell { width: min(100%, 750px); }
   .flight-game-layout { grid-template-columns: 1fr; }
   .flight-control-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .players-card, .rules-card, .new-game-button { grid-column: 1 / -1; }
+  .players-card, .rules-card, .new-game-button, .online-room-card { grid-column: 1 / -1; }
 }
 
 @media (max-width: 560px) {
@@ -563,8 +637,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .plane-token { border-width: 1px; font-size: clamp(7px, 2.6vw, 11px); }
   .move-summary { margin-top: 8px; font-size: 10px; }
   .flight-control-panel { grid-template-columns: 1fr; }
-  .players-card, .rules-card, .new-game-button { grid-column: auto; }
-  .turn-card, .dice-card, .players-card, .rules-card { padding: 12px; }
+  .players-card, .rules-card, .new-game-button, .online-room-card { grid-column: auto; }
+  .turn-card, .dice-card, .players-card, .rules-card, .online-room-card { padding: 12px; }
   .dice-card { grid-template-columns: 62px 1fr; }
   .dice { width: 62px; padding: 9px; border-radius: 17px; }
   .player-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -579,5 +653,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .plane-token.movable, .dice.rolling { animation: none; }
+  .plane-token.movable, .dice.rolling, .network-badge i { animation: none; }
 }

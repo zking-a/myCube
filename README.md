@@ -8,8 +8,8 @@
 | 24点（单机 / 联机） | `/24/`；邀请链接使用 `/24/#r=房间码` |
 | 数独挑战 | `/sudoku/` |
 | 中国跳棋（人机 / 本地 / 联机） | 大厅 `/checkers/`；棋局 `/checkers/play.html` |
-| 飞行棋（2–4 人本地对战） | 大厅 `/flight-chess/`；棋局 `/flight-chess/play.html` |
-| 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws` |
+| 飞行棋（2–4 人本地 / 联机） | 大厅 `/flight-chess/`；棋局 `/flight-chess/play.html` |
+| 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws`；飞行棋 `/flight-chess-ws` |
 | 健康检查 | `/health` |
 
 部署后得到一个永久免费域名 `https://xxx.onrender.com`，前端与中转**同域**，打开即玩，联机**零配置**（不用填服务器地址）。
@@ -79,11 +79,12 @@ npm run test:sudoku
 npm run test:checkers
 npm run test:checkers:e2e
 npm run test:flight-chess
+npm run test:flight-chess:e2e
 npm run test:all
 npm run test:security
 ```
 
-这些测试分别检查网络协议、数独核心规则、跳棋规则与联机同步，以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
+这些测试分别检查网络协议、数独核心规则、跳棋与飞行棋的规则和联机同步，以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
 
 ### 重新训练跳棋困难电脑
 
@@ -223,10 +224,11 @@ server/
 │   │   ├── sudoku.css
 │   │   └── sudoku.js
 │   ├── checkers/      # 中国跳棋大厅、棋局、规则核心与训练实验室
-│   └── flight-chess/  # 2–4 人飞行棋大厅、棋局与可复用规则核心
+│   └── flight-chess/  # 2–4 人飞行棋大厅、本地/联机棋局与可复用规则核心
 │       ├── index.html
 │       ├── play.html
 │       ├── flight_chess_core.js
+│       ├── flight_chess_net.js
 │       ├── lobby.js
 │       ├── game.js
 │       └── flight_chess.css

@@ -4,18 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eef3ff">
-  <meta name="description" content="2 至 4 人本地飞行棋对战棋局。">
-  <title>飞行棋 · 本地对战</title>
+  <meta name="description" content="2 至 4 人同屏或好友联机飞行棋对战棋局。">
+  <title>飞行棋 · 对战棋局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
   <link rel="stylesheet" href="flight_chess.css?v=20260824a">
   <script src="flight_chess_core.js?v=20260824a" defer></script>
+  <script src="flight_chess_net.js?v=20260824a" defer></script>
   <script src="game.js?v=20260824a" defer></script>
 </head>
 <body class="flight-game-page">
   <main class="flight-game-shell">
     <nav class="flight-game-nav">
       <a class="ui-button ui-button--secondary" href="index.html" aria-label="返回飞行棋大厅">← 玩法大厅</a>
-      <div class="game-nav-title"><span>Aeroplane Chess</span><strong>本地对战</strong></div>
+      <div class="game-nav-title"><span>Aeroplane Chess</span><strong id="gameModeTitle">本地对战</strong></div>
       <span class="turn-badge" id="roundBadge">第 1 轮</span>
     </nav>
 
@@ -23,7 +24,7 @@
       <section class="flight-board-panel ui-panel" aria-labelledby="boardTitle">
         <div class="board-heading">
           <div><span>当前棋局</span><h1 id="boardTitle">飞行棋</h1></div>
-          <span class="save-badge"><i aria-hidden="true"></i> 已自动保存</span>
+          <span class="save-badge" id="syncBadge"><i aria-hidden="true"></i> 已自动保存</span>
         </div>
         <div class="flight-board-wrap">
           <div class="flight-board" id="flightBoard" role="group" aria-label="飞行棋棋盘"></div>
@@ -32,6 +33,20 @@
       </section>
 
       <aside class="flight-control-panel">
+        <section class="online-room-card ui-panel" id="onlineRoomCard" hidden aria-labelledby="onlineRoomTitle">
+          <div class="online-room-heading">
+            <div><span>好友房间</span><strong id="onlineRoomTitle">-----</strong></div>
+            <span class="network-badge connecting" id="networkBadge"><i aria-hidden="true"></i> 连接中</span>
+          </div>
+          <div class="online-roster" id="onlineRoster" aria-label="房间席位"></div>
+          <p class="online-waiting" id="onlineWaiting" aria-live="polite">正在连接房间…</p>
+          <button type="button" class="ui-button ui-button--primary online-start-button" id="onlineStartButton" disabled>等待玩家到齐</button>
+          <div class="online-room-actions">
+            <button type="button" class="ui-button ui-button--secondary" id="copyInviteButton">复制邀请链接</button>
+            <button type="button" class="ui-button ui-button--secondary online-leave-button" id="leaveRoomButton">退出房间</button>
+          </div>
+        </section>
+
         <section class="turn-card ui-panel" id="turnCard">
           <span class="turn-kicker">轮到</span>
           <div class="turn-player"><i id="turnColor" aria-hidden="true"></i><strong id="turnName">红方</strong></div>

@@ -2,10 +2,12 @@
 
 const fs = require('fs');
 const Core = require('./public/flight-chess/flight_chess_core');
+const Net = require('./public/flight-chess/flight_chess_net');
 
 const lobbyHtml = fs.readFileSync('public/flight-chess/index.html', 'utf8');
 const playHtml = fs.readFileSync('public/flight-chess/play.html', 'utf8');
 const lobbySource = fs.readFileSync('public/flight-chess/lobby.js', 'utf8');
+const netSource = fs.readFileSync('public/flight-chess/flight_chess_net.js', 'utf8');
 const gameSource = fs.readFileSync('public/flight-chess/game.js', 'utf8');
 const css = fs.readFileSync('public/flight-chess/flight_chess.css', 'utf8');
 const platformHtml = fs.readFileSync('public/index.html', 'utf8');
@@ -120,11 +122,25 @@ ok('大厅按统一交互先选择本地对战，再展开 2/3/4 人配置',
   /id="selectLocalBtn"[^>]*aria-expanded="false"[^>]*aria-controls="localConfig"/.test(lobbyHtml) &&
   /id="localConfig" hidden/.test(lobbyHtml) &&
   (lobbyHtml.match(/data-player-count="[234]"/g) || []).length === 3);
+ok('大厅提供 2–4 人好友房间的创建、邀请与加入入口',
+  /id="selectOnlineBtn"[^>]*aria-controls="onlineConfig"/.test(lobbyHtml) &&
+  /id="createRoomBtn"/.test(lobbyHtml) && /id="joinRoomBtn"/.test(lobbyHtml) &&
+  (lobbyHtml.match(/data-online-count="[234]"/g) || []).length === 3 &&
+  /mode: 'online'/.test(lobbySource));
 ok('大厅将继续存档和开始新局分开，并在覆盖前确认',
   /id="resumeCard" hidden/.test(lobbyHtml) && /id="resumeBtn"/.test(lobbyHtml) &&
   /开始新局会覆盖当前飞行棋进度/.test(lobbySource));
-ok('棋局页不重复人数配置，并按规则核心、交互脚本顺序加载',
-  !/data-player-count/.test(playHtml) && playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('game.js'));
+ok('棋局页不重复人数配置，并按规则核心、联机层、交互脚本顺序加载',
+  !/data-player-count/.test(playHtml) &&
+  playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('flight_chess_net.js') &&
+  playHtml.indexOf('flight_chess_net.js') < playHtml.indexOf('game.js'));
+ok('联机地址与房间码归一化支持 http/ws 和 https/wss',
+  Net.normalizeRoom(' a1io-z9 ') === 'AZ9' &&
+  Net.websocketUrl({ protocol: 'http:', host: 'localhost:3000' }) === 'ws://localhost:3000/flight-chess-ws' &&
+  Net.websocketUrl({ protocol: 'https:', host: 'game.example' }) === 'wss://game.example/flight-chess-ws');
+ok('联机身份持久化、退避重连且客户端不产生骰点',
+  /SESSION_PREFIX/.test(netSource) && /sessionStorage/.test(netSource) && /reconnectDelayForAttempt/.test(netSource) &&
+  !/rollDice|Math\.floor\([^\n]*\* 6/.test(netSource));
 ok('棋盘飞机只通过规则核心给出的合法列表启用',
   /Core\.getMovablePlanes/.test(gameSource) && /Core\.movePlane/.test(gameSource) && /token\.disabled = !canMove/.test(gameSource));
 ok('棋局提供自动存档、规则说明、响应式单列和减少动效支持',
@@ -134,7 +150,14 @@ ok('游戏平台首页已新增飞行棋入口并更新为四款游戏',
   /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /四款游戏/.test(platformHtml));
 ok('服务端为无尾斜杠飞行棋地址提供稳定重定向',
   /'\/flight-chess': '\/flight-chess\/'/.test(serverSource));
+ok('飞行棋服务端独立建房并权威生成骰点、校验移动与状态版本',
+  /new WebSocket\.Server\(\{ noServer: true[^\n]*\}\)/.test(serverSource) &&
+  /pathname === '\/flight-chess-ws'/.test(serverSource) &&
+  /crypto\.randomInt\(1, 7\)/.test(serverSource) &&
+  /FlightChessCore\.movePlane/.test(serverSource) && /STATE_OUTDATED/.test(serverSource));
 ok('package scripts 提供飞行棋测试及整站统一回归入口',
-  packageJson.scripts['test:flight-chess'] === 'node test_flight_chess.js' && /test_flight_chess\.js/.test(packageJson.scripts['test:all']));
+  packageJson.scripts['test:flight-chess'] === 'node test_flight_chess.js' &&
+  packageJson.scripts['test:flight-chess:e2e'] === 'node test_flight_chess_online.js' &&
+  /test_flight_chess_online\.js/.test(packageJson.scripts['test:all']));
 
 console.log('\n✅ 飞行棋规则与页面契约测试全部通过（' + passed + ' 项）');

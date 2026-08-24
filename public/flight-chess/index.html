@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#eef3ff">
-  <meta name="description" content="轻量游戏站飞行棋，支持 2 至 4 人在同一台设备上轮流对战。">
+  <meta name="description" content="轻量游戏站飞行棋，支持 2 至 4 人本地轮流与好友实时联机。">
   <title>飞行棋 · 选择玩法</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
   <link rel="stylesheet" href="flight_chess.css?v=20260824a">
@@ -31,7 +31,7 @@
       <div class="flight-hero-copy">
         <span class="flight-eyebrow">Aeroplane Chess</span>
         <h1 id="flightLobbyTitle">飞行棋</h1>
-        <p>一台设备，轮流掷骰。起飞、连跳、撞机，谁先让四架飞机抵达中心谁获胜。</p>
+        <p>同屏轮流或邀请好友实时联机。起飞、连跳、撞机，谁先让四架飞机抵达中心谁获胜。</p>
       </div>
     </section>
 
@@ -72,6 +72,35 @@
           <p class="flight-config-note" id="playerHint">四个阵营全部入场，最热闹的经典玩法。</p>
           <button type="button" class="flight-start ui-button ui-button--primary" id="startGameBtn"><span id="startGameLabel">开始 4 人对战</span> <span aria-hidden="true">→</span></button>
         </section>
+
+        <button type="button" class="flight-mode-entry flight-online-entry ui-button" id="selectOnlineBtn" aria-expanded="false" aria-controls="onlineConfig">
+          <span class="flight-mode-icon" aria-hidden="true">⌁</span>
+          <span class="flight-mode-copy">
+            <span class="flight-mode-kicker">ONLINE</span>
+            <span class="flight-mode-title">好友对战</span>
+            <span class="flight-mode-desc">创建房间，2–4 人实时掷骰</span>
+          </span>
+          <span class="flight-mode-arrow" aria-hidden="true">→</span>
+        </button>
+
+        <section class="flight-mode-config flight-online-config" id="onlineConfig" hidden aria-label="好友对战设置">
+          <label class="flight-online-field"><span>显示昵称</span><input class="ui-input" id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="朋友会看到这个名字"></label>
+          <span class="flight-config-label">房主选择本局人数</span>
+          <div class="flight-player-picker" role="radiogroup" aria-label="选择联机房间人数">
+            <button type="button" data-online-count="2" role="radio" aria-checked="true" class="active">2 人</button>
+            <button type="button" data-online-count="3" role="radio" aria-checked="false">3 人</button>
+            <button type="button" data-online-count="4" role="radio" aria-checked="false">4 人</button>
+          </div>
+          <div class="flight-online-intents" role="group" aria-label="选择联机方式">
+            <button type="button" class="flight-online-intent create ui-button" id="createRoomBtn"><strong>创建房间</strong><span>生成邀请，等朋友到齐</span></button>
+            <button type="button" class="flight-online-intent join ui-button" id="openJoinBtn" aria-expanded="false" aria-controls="joinConfig"><strong>加入朋友房间</strong><span>输入收到的房间码</span></button>
+          </div>
+          <section class="flight-join-config" id="joinConfig" hidden aria-label="加入朋友房间">
+            <label class="flight-online-field"><span>房间码</span><input class="ui-input" id="roomInput" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="输入 5 位房间码"></label>
+            <button type="button" class="flight-start ui-button ui-button--primary" id="joinRoomBtn">加入房间 <span aria-hidden="true">→</span></button>
+          </section>
+          <p class="flight-field-error" id="fieldError" role="alert" hidden></p>
+        </section>
       </div>
     </section>
 
@@ -79,7 +108,7 @@
       <span><b>6</b> 掷六起飞</span>
       <span><b>↟</b> 同色连跳</span>
       <span><b>✦</b> 跨越飞行</span>
-      <span><b>◎</b> 自动存档</span>
+      <span><b>⌁</b> 断线重连</span>
     </div>
     <p class="flight-lobby-tip">基础规则：掷出 6 才能从停机坪起飞，并获得一次额外掷骰；落在对方飞机所在的非安全格会把它撞回停机坪，进入终点航道后必须以恰好点数抵达中心。</p>
   </main>

@@ -2,11 +2,12 @@
 /*
  * server.js —— 轻量游戏站联机与静态资源服务器
  *
- * 作用：静态托管小游戏，并为 24 点、中国跳棋与数独好友协作提供独立的联机房间。
+ * 作用：静态托管小游戏，并为 24 点、中国跳棋、数独与飞行棋提供独立的联机房间。
  *   - 房间码就是随机种子，双方题目天然一致；服务端按同一规则复现题目并验证表达式。
  *   - 跳棋由服务端保存棋盘、校验回合和合法走法，双方客户端只负责固定阵营视角的展示。
  *   - 数独协作由服务端保存同一盘面，双方只提交填写，避免客户端各自漂移。
- *   - 房间仍只保存在内存，不需要数据库，适合轻量双人对局。
+ *   - 飞行棋由服务端掷骰并校验 2–4 人回合、移动与胜负，客户端只提交操作意图。
+ *   - 房间仍只保存在内存，不需要数据库，适合轻量好友对局。
  *
  * 24 点协议（JSON，UTF-8；跳棋协议见文件下方 /checkers-ws 处理器）
  *   客户端 → 服务端：
@@ -33,6 +34,7 @@ const zlib = require('zlib');
 const WebSocket = require('ws');
 const Questions = require('./server_questions');
 const CheckersCore = require('./public/checkers/checkers_core');
+const FlightChessCore = require('./public/flight-chess/flight_chess_core');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
@@ -54,7 +56,8 @@ const RATE_LIMIT = 20;               // 每连接每秒最多消息条数
 const RATE_BURST = 40;               // 令牌桶初始容量（允许短时突发）
 // MAX_CONNECTIONS 表示玩家席位，不再等同于底层 Socket 数；额外 Socket 专供握手与重连。
 const MAX_CONNECTIONS = Math.max(1, parseInt(process.env.MAX_CONNECTIONS, 10) || 4);
-const MAX_CONNECTIONS_PER_IP = Math.max(1, parseInt(process.env.MAX_CONNECTIONS_PER_IP, 10) || 2);
+// 飞行棋最多四人；默认允许同一家庭网络的四台设备坐满一局。
+const MAX_CONNECTIONS_PER_IP = Math.max(1, parseInt(process.env.MAX_CONNECTIONS_PER_IP, 10) || 4);
 const MAX_ROOMS_PER_IP = Math.max(1, parseInt(process.env.MAX_ROOMS_PER_IP, 10) || 1);
 const MAX_SOCKET_CONNECTIONS = Math.max(MAX_CONNECTIONS + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS, 10) || (MAX_CONNECTIONS + 4));
 const MAX_SOCKET_CONNECTIONS_PER_IP = Math.max(MAX_CONNECTIONS_PER_IP + 1, parseInt(process.env.MAX_SOCKET_CONNECTIONS_PER_IP, 10) || (MAX_CONNECTIONS_PER_IP + 2));
@@ -113,6 +116,8 @@ const rooms = new Map();
 const checkersRooms = new Map();
 /** roomCode -> 数独好友协作房间（双方实时编辑同一盘面） */
 const sudokuRooms = new Map();
+/** roomCode -> 飞行棋房间（2–4 人，服务端权威骰点与棋局） */
+const flightChessRooms = new Map();
 
 function createRoom(code, creatorIp) {
   const room = {
@@ -183,6 +188,103 @@ function createSudokuRoom(code, creatorIp, puzzle, difficulty) {
   };
   sudokuRooms.set(code, room);
   return room;
+}
+
+function createFlightChessRoom(code, creatorIp, capacity) {
+  const room = {
+    code: code,
+    phase: 'waiting', // waiting | playing | done
+    capacity: FlightChessCore.normalizePlayerCount(capacity),
+    round: 1,
+    revision: 0,
+    game: null,
+    hostCid: null,
+    creatorIp: creatorIp || '',
+    players: new Map(),
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    _gc: null
+  };
+  flightChessRooms.set(code, room);
+  return room;
+}
+
+function flightChessPlayerList(room) {
+  const colors = FlightChessCore.createGame(room.capacity).players.map(function (player) { return player.colorId; });
+  return Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; }).map(function (player) {
+    return {
+      cid: player.cid,
+      nick: player.nick,
+      seat: player.seat,
+      colorId: colors[player.seat],
+      online: player.online
+    };
+  });
+}
+
+function broadcastFlightChessState(room) {
+  const state = JSON.stringify({
+    t: 'state',
+    room: room.code,
+    phase: room.phase,
+    capacity: room.capacity,
+    round: room.round,
+    revision: room.revision,
+    host: room.hostCid,
+    players: flightChessPlayerList(room),
+    game: room.game,
+    serverNow: Date.now()
+  });
+  room.players.forEach(function (player) { send(player.ws, state); });
+}
+
+function pickFlightChessHost(room) {
+  const next = Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; })
+    .find(function (player) { return player.online; }) || room.players.values().next().value;
+  room.hostCid = next ? next.cid : null;
+}
+
+function nextFlightChessSeat(room) {
+  const used = new Set(Array.from(room.players.values()).map(function (player) { return player.seat; }));
+  for (let seat = 0; seat < room.capacity; seat++) if (!used.has(seat)) return seat;
+  return -1;
+}
+
+function startFlightChessGame(room, nextRound) {
+  const players = Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; });
+  if (nextRound) room.round += 1;
+  room.game = FlightChessCore.createGame(room.capacity, players.map(function (player) { return player.nick; }));
+  room.phase = 'playing';
+  room.revision += 1;
+  room.lastActivityAt = Date.now();
+}
+
+function resetFlightChessWaitingRoom(room) {
+  room.phase = 'waiting';
+  room.game = null;
+  room.revision += 1;
+  room.createdAt = Date.now();
+  room.lastActivityAt = Date.now();
+}
+
+function scheduleFlightChessGC(room) {
+  if (room._gc) clearTimeout(room._gc);
+  room._gc = setTimeout(function () {
+    const anyOnline = Array.from(room.players.values()).some(function (player) { return player.online; });
+    if (!anyOnline && flightChessRooms.get(room.code) === room) flightChessRooms.delete(room.code);
+  }, ROOM_TTL);
+}
+
+function expireFlightChessRoom(room, reason) {
+  if (!room || flightChessRooms.get(room.code) !== room) return;
+  flightChessRooms.delete(room.code);
+  if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+  room.players.forEach(function (player) {
+    send(player.ws, { t: 'err', code: 'ROOM_EXPIRED', msg: reason });
+    if (player.ws) { try { player.ws.close(1000, 'room expired'); } catch (error) {} }
+    player.online = false;
+    player.ws = null;
+  });
 }
 
 function sudokuPlayerList(room) {
@@ -312,6 +414,7 @@ function countSeats() {
   rooms.forEach(function (room) { total += room.players.size; });
   checkersRooms.forEach(function (room) { total += room.players.size; });
   sudokuRooms.forEach(function (room) { total += room.players.size; });
+  flightChessRooms.forEach(function (room) { total += room.players.size; });
   return total;
 }
 
@@ -326,6 +429,9 @@ function countSeatsForIp(ip) {
   sudokuRooms.forEach(function (room) {
     room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
   });
+  flightChessRooms.forEach(function (room) {
+    room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
+  });
   return total;
 }
 
@@ -335,7 +441,12 @@ function countRoomsForIp(ip) {
   rooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   checkersRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   sudokuRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
+  flightChessRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   return total;
+}
+
+function countRooms() {
+  return rooms.size + checkersRooms.size + sudokuRooms.size + flightChessRooms.size;
 }
 
 function createReconnectToken() {
@@ -536,6 +647,22 @@ setInterval(function () {
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
     }
   });
+  flightChessRooms.forEach(function (room, code) {
+    const anyOnline = Array.from(room.players.values()).some(function (player) { return player.online; });
+    if (room.phase === 'waiting' && room.players.size < room.capacity && now - room.createdAt > UNMATCHED_ROOM_TTL_MS) {
+      expireFlightChessRoom(room, '等待飞行员超时，房间已自动释放');
+      return;
+    }
+    const idleLimit = room.phase === 'waiting' ? LOBBY_IDLE_MS : ONLINE_ROOM_IDLE_MS;
+    if (anyOnline && now - (room.lastActivityAt || room.createdAt) > idleLimit) {
+      expireFlightChessRoom(room, '飞行棋房间长时间没有操作，已自动释放');
+      return;
+    }
+    if (!anyOnline && now - (room.lastActivityAt || room.createdAt || now) > ROOM_TTL) {
+      flightChessRooms.delete(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+    }
+  });
   roomCreateLog.forEach(function (timestamps, ip) {
     const recent = timestamps.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
     if (recent.length) roomCreateLog.set(ip, recent);
@@ -648,10 +775,11 @@ const server = http.createServer(function (req, res) {
     res.end(JSON.stringify({
       ok: true,
       service: 'light-games',
-      rooms: rooms.size + checkersRooms.size + sudokuRooms.size,
+      rooms: countRooms(),
       rooms24: rooms.size,
       roomsCheckers: checkersRooms.size,
       roomsSudoku: sudokuRooms.size,
+      roomsFlightChess: flightChessRooms.size,
       seats: countSeats(),
       sockets: liveConnections,
       ts: Date.now()
@@ -712,12 +840,16 @@ server.maxHeadersCount = 50;
 const wss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 const checkersWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 const sudokuWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+const flightChessWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 
 // 显式分发升级请求，避免多个 WebSocket.Server 各自监听 server 时互相抢占路径。
 server.on('upgrade', function (req, socket, head) {
   let pathname = '';
   try { pathname = new URL(req.url || '/', 'http://localhost').pathname; } catch (e) {}
-  const target = pathname === '/ws' ? wss : (pathname === '/checkers-ws' ? checkersWss : (pathname === '/sudoku-ws' ? sudokuWss : null));
+  const target = pathname === '/ws' ? wss
+    : (pathname === '/checkers-ws' ? checkersWss
+      : (pathname === '/sudoku-ws' ? sudokuWss
+        : (pathname === '/flight-chess-ws' ? flightChessWss : null)));
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, function (ws) { target.emit('connection', ws, req); });
 });
@@ -821,7 +953,7 @@ wss.on('connection', function (ws, req) {
           return;
         }
         // ---- 全服房间数上限 ----
-        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) {
+        if (countRooms() >= MAX_ROOMS) {
           fail('SERVER_FULL', '服务器房间已满，请稍后再试');
           return;
         }
@@ -1111,7 +1243,7 @@ checkersWss.on('connection', function (ws, req) {
           fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
         }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
-        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
         room = createCheckersRoom(code, clientIp);
       } else if (intent === 'create') {
         const ownSeat = room.players.get(cid);
@@ -1300,7 +1432,7 @@ sudokuWss.on('connection', function (ws, req) {
         }
         if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) { fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return; }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
-        if (rooms.size + checkersRooms.size + sudokuRooms.size >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
         room = createSudokuRoom(code, clientIp, { solution: m.solution, givens: m.givens }, difficulty);
       } else if (intent === 'create') {
         const ownSeat = room.players.get(cid);
@@ -1408,9 +1540,226 @@ sudokuWss.on('connection', function (ws, req) {
   ws.on('error', function () {});
 });
 
+// ===================== 飞行棋 WebSocket =====================
+// 服务端生成骰点并持有唯一棋局；客户端只能请求“掷骰”或提交飞机编号。
+flightChessWss.on('connection', function (ws, req) {
+  const clientIp = getClientIp(req);
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    const host = req.headers.host;
+    const ok = origin === ALLOWED_ORIGIN ||
+      (host && (origin === 'https://' + host || origin === 'http://' + host)) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (!ok) { ws.close(1008, 'origin not allowed'); return; }
+  }
+  if (!checkConnectionAttemptLimit(clientIp)) { ws.close(1013, 'too many connection attempts'); return; }
+  const ipConnections = liveConnectionsByIp.get(clientIp) || 0;
+  if (ipConnections >= MAX_SOCKET_CONNECTIONS_PER_IP) { ws.close(1013, 'too many connections from this ip'); return; }
+  if (liveConnections >= MAX_SOCKET_CONNECTIONS) { ws.close(1013, 'too many connections'); return; }
+
+  liveConnections++;
+  liveConnectionsByIp.set(clientIp, ipConnections + 1);
+  ws.isAlive = true;
+  ws.on('pong', function () { ws.isAlive = true; });
+
+  let tokens = RATE_BURST;
+  let lastRefill = Date.now();
+  let player = null;
+  function fail(code, msg) { send(ws, { t: 'err', code: code, msg: msg }); }
+  const joinTimer = setTimeout(function () {
+    if (!player) { try { ws.close(1000, 'join timeout'); } catch (error) {} }
+  }, JOIN_IDLE_MS);
+
+  function allSeatsOnline(room) {
+    return room.players.size === room.capacity &&
+      Array.from(room.players.values()).every(function (seat) { return seat.online; });
+  }
+
+  function requireCurrentRevision(room, message) {
+    if (Number(message.rev) === room.revision) return true;
+    fail('STATE_OUTDATED', '棋局状态已更新，请按最新状态操作');
+    broadcastFlightChessState(room);
+    return false;
+  }
+
+  ws.on('message', function (data) {
+    const now = Date.now();
+    tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
+    lastRefill = now;
+    if (tokens < 1) { ws.close(1008, 'rate limit'); return; }
+    tokens -= 1;
+
+    let message;
+    try { message = JSON.parse(data.toString()); } catch (error) { return; }
+    if (!message || typeof message.t !== 'string') return;
+
+    if (message.t === 'join') {
+      if (player) return;
+      const code = String(message.room || '').toUpperCase();
+      if (!ROOM_CODE_RE.test(code)) { fail('ROOM_INVALID', '房间码格式不正确'); return; }
+      const cid = typeof message.cid === 'string' ? message.cid.slice(0, 32) : '';
+      if (!cid || cid.length < 4) { fail('SESSION_INVALID', '玩家身份格式不正确'); return; }
+      const nick = typeof message.nick === 'string' && message.nick.trim()
+        ? message.nick.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16)
+        : '玩家';
+      const reconnectToken = typeof message.token === 'string' ? message.token.slice(0, 128) : '';
+      const intent = message.intent === 'create' ? 'create' : 'join';
+      const capacity = Number.isInteger(message.capacity) && message.capacity >= 2 && message.capacity <= 4
+        ? message.capacity : 4;
+
+      let room = flightChessRooms.get(code);
+      if (!room) {
+        if (intent !== 'create') { fail('ROOM_NOT_FOUND', '飞行棋房间不存在或已失效，请向房主确认房间码'); return; }
+        if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
+        }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
+          fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
+        }
+        if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
+        if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        room = createFlightChessRoom(code, clientIp, capacity);
+      } else if (intent === 'create') {
+        const ownSeat = room.players.get(cid);
+        if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，请重新创建'); return; }
+        if (!tokenMatches(ownSeat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '重连身份已失效，请退出房间后重新加入'); return;
+        }
+      }
+
+      let seat = room.players.get(cid);
+      let replacedSocket = null;
+      if (seat) {
+        if (!tokenMatches(seat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '无法验证该玩家身份，请退出房间后重新加入'); return;
+        }
+        replacedSocket = seat.ws && seat.ws !== ws ? seat.ws : null;
+        seat.ws = ws;
+        seat.nick = nick;
+        seat.online = true;
+        seat.clientIp = clientIp;
+        seat.disconnectedAt = null;
+        seat._room = room;
+      } else {
+        if (room.phase !== 'waiting') { fail('ROUND_IN_PROGRESS', '棋局已经开始，只允许原玩家重连'); return; }
+        if (room.players.size >= room.capacity) { fail('ROOM_FULL', '该房间的飞行员已经到齐'); return; }
+        if (countSeats() >= MAX_CONNECTIONS) { fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return; }
+        if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) { fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限'); return; }
+        const seatIndex = nextFlightChessSeat(room);
+        if (seatIndex < 0) { fail('ROOM_FULL', '该房间的飞行员已经到齐'); return; }
+        seat = {
+          cid: cid,
+          nick: nick,
+          seat: seatIndex,
+          ws: ws,
+          online: true,
+          clientIp: clientIp,
+          disconnectedAt: null,
+          reconnectToken: createReconnectToken(),
+          _room: room
+        };
+        room.players.set(cid, seat);
+        if (!room.hostCid) room.hostCid = cid;
+      }
+
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+      player = seat;
+      send(ws, { t: 'session', cid: seat.cid, token: seat.reconnectToken, seat: seat.seat });
+      if (replacedSocket) { try { replacedSocket.terminate(); } catch (error) {} }
+      room.lastActivityAt = Date.now();
+      clearTimeout(joinTimer);
+      broadcastFlightChessState(room);
+      return;
+    }
+
+    if (!player) return;
+    if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (error) {} return; }
+    const room = player._room;
+    if (!room || flightChessRooms.get(room.code) !== room) return;
+
+    if (message.t === 'start') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以开始棋局'); return; }
+      if (room.phase !== 'waiting') return;
+      if (room.players.size !== room.capacity) { fail('ROOM_NOT_READY', '请等待 ' + room.capacity + ' 位飞行员全部加入'); return; }
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '有飞行员暂时离线，请等待其重连'); return; }
+      startFlightChessGame(room, false);
+      broadcastFlightChessState(room);
+    } else if (message.t === 'roll') {
+      if (room.phase !== 'playing' || !room.game) return;
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '有飞行员暂时离线，棋局已暂停'); return; }
+      if (!requireCurrentRevision(room, message)) return;
+      if (room.game.currentPlayer !== player.seat) { fail('NOT_YOUR_TURN', '还没有轮到你掷骰子'); return; }
+      if (room.game.phase !== 'roll') { fail('PLANE_REQUIRED', '请先选择一架可移动的飞机'); return; }
+      try {
+        // 骰点只由服务端生成，忽略客户端携带的任何点数。
+        room.game = FlightChessCore.rollDice(room.game, crypto.randomInt(1, 7));
+      } catch (error) { fail('ROLL_REJECTED', '当前不能掷骰子'); return; }
+      room.revision += 1;
+      room.lastActivityAt = now;
+      broadcastFlightChessState(room);
+    } else if (message.t === 'move') {
+      if (room.phase !== 'playing' || !room.game) return;
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '有飞行员暂时离线，棋局已暂停'); return; }
+      if (!requireCurrentRevision(room, message)) return;
+      if (room.game.currentPlayer !== player.seat) { fail('NOT_YOUR_TURN', '还没有轮到你移动飞机'); return; }
+      if (room.game.phase !== 'move') { fail('ROLL_REQUIRED', '请先掷骰子'); return; }
+      const planeIndex = Number(message.plane);
+      if (!Number.isInteger(planeIndex) || planeIndex < 0 || planeIndex >= FlightChessCore.PLANE_COUNT) {
+        fail('PLANE_INVALID', '飞机编号不正确'); return;
+      }
+      try { room.game = FlightChessCore.movePlane(room.game, planeIndex); }
+      catch (error) { fail('ILLEGAL_MOVE', '这架飞机当前不能移动'); return; }
+      room.revision += 1;
+      room.lastActivityAt = now;
+      if (room.game.phase === 'gameover') room.phase = 'done';
+      broadcastFlightChessState(room);
+    } else if (message.t === 'again') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以发起下一局'); return; }
+      if (room.phase !== 'done') return;
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '请等待所有飞行员重连后再开新局'); return; }
+      startFlightChessGame(room, true);
+      broadcastFlightChessState(room);
+    } else if (message.t === 'leave') {
+      room.players.delete(player.cid);
+      if (room.hostCid === player.cid) pickFlightChessHost(room);
+      player = null;
+      if (!room.players.size) {
+        flightChessRooms.delete(room.code);
+        if (room._gc) clearTimeout(room._gc);
+      } else {
+        resetFlightChessWaitingRoom(room);
+        broadcastFlightChessState(room);
+      }
+      try { ws.close(1000, 'left room'); } catch (error) {}
+    } else if (message.t === 'ping') {
+      send(ws, { t: 'pong', s: Date.now() });
+    }
+  });
+
+  ws.on('close', function () {
+    clearTimeout(joinTimer);
+    liveConnections = Math.max(0, liveConnections - 1);
+    const remainingForIp = Math.max(0, (liveConnectionsByIp.get(clientIp) || 1) - 1);
+    if (remainingForIp) liveConnectionsByIp.set(clientIp, remainingForIp);
+    else liveConnectionsByIp.delete(clientIp);
+    if (!player) return;
+    if (player.ws !== ws) { player = null; return; }
+    player.online = false;
+    player.ws = null;
+    player.disconnectedAt = Date.now();
+    const room = player._room;
+    if (room && flightChessRooms.get(room.code) === room) {
+      room.lastActivityAt = Date.now();
+      broadcastFlightChessState(room);
+      scheduleFlightChessGC(room);
+    }
+  });
+  ws.on('error', function () {});
+});
+
 // WebSocket 心跳：及时清理移动网络留下的“半开连接”，让重连和房主转移更可靠。
 const heartbeatTimer = setInterval(function () {
-  [wss, checkersWss, sudokuWss].forEach(function (socketServer) {
+  [wss, checkersWss, sudokuWss, flightChessWss].forEach(function (socketServer) {
     socketServer.clients.forEach(function (ws) {
       if (ws.isAlive === false) { try { ws.terminate(); } catch (e) {} return; }
       ws.isAlive = false;
@@ -1419,10 +1768,11 @@ const heartbeatTimer = setInterval(function () {
   });
 }, 30000);
 heartbeatTimer.unref();
-wss.on('close', function () { if (!checkersWss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
-checkersWss.on('close', function () { if (!wss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
-sudokuWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size) clearInterval(heartbeatTimer); });
+wss.on('close', function () { if (!checkersWss.clients.size && !sudokuWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
+checkersWss.on('close', function () { if (!wss.clients.size && !sudokuWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
+sudokuWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
+flightChessWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
 
 server.listen(PORT, function () {
-  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws)');
+  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws，飞行棋 /flight-chess-ws)');
 });

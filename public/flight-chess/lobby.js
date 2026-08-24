@@ -1,20 +1,40 @@
 'use strict';
 
 (function setupFlightChessLobby() {
-  const SAVE_KEY = 'light_games_flight_chess_save_v1';
+  const CONFIG = {
+    SAVE_KEY: 'light_games_flight_chess_save_v1',
+    NICK_KEY: 'light_games_nickname',
+    ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+    ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/
+  };
   const PLAYER_HINTS = {
     2: '红蓝双方对角入场，节奏更快，适合两个人。',
     3: '三个阵营依次行动，路线碰撞更频繁。',
     4: '四个阵营全部入场，最热闹的经典玩法。'
   };
-  let playerCount = 4;
+  let localPlayerCount = 4;
+  let onlinePlayerCount = 2;
 
   function $(id) { return document.getElementById(id); }
   function safeGet(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
+  function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (error) {} }
+
+  function normalizeRoom(value) {
+    return String(value || '').toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 5);
+  }
+
+  function randomRoom() {
+    const bytes = new Uint8Array(5);
+    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
+    else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    let room = '';
+    for (let i = 0; i < bytes.length; i++) room += CONFIG.ROOM_ALPHABET[bytes[i] % CONFIG.ROOM_ALPHABET.length];
+    return room;
+  }
 
   function readSavedGame() {
     try {
-      const raw = JSON.parse(safeGet(SAVE_KEY) || 'null');
+      const raw = JSON.parse(safeGet(CONFIG.SAVE_KEY) || 'null');
       const game = window.FlightChessCore && window.FlightChessCore.hydrateGame(raw);
       return game && game.phase !== 'gameover' ? game : null;
     } catch (error) {
@@ -22,21 +42,55 @@
     }
   }
 
-  function setConfigOpen(open) {
-    const visible = Boolean(open);
-    $('localConfig').hidden = !visible;
-    $('selectLocalBtn').setAttribute('aria-expanded', visible ? 'true' : 'false');
+  function showError(message) {
+    $('fieldError').textContent = message || '';
+    $('fieldError').hidden = !message;
+    if (message) {
+      setModeConfig('online');
+      setJoinOpen(true);
+    }
   }
 
-  function selectPlayerCount(value) {
-    playerCount = window.FlightChessCore.normalizePlayerCount(value);
+  function setJoinOpen(open) {
+    const visible = Boolean(open) && !$('onlineConfig').hidden;
+    $('joinConfig').hidden = !visible;
+    $('openJoinBtn').setAttribute('aria-expanded', visible ? 'true' : 'false');
+  }
+
+  function setModeConfig(mode) {
+    const localOpen = mode === 'local';
+    const onlineOpen = mode === 'online';
+    $('localConfig').hidden = !localOpen;
+    $('onlineConfig').hidden = !onlineOpen;
+    $('selectLocalBtn').setAttribute('aria-expanded', localOpen ? 'true' : 'false');
+    $('selectOnlineBtn').setAttribute('aria-expanded', onlineOpen ? 'true' : 'false');
+    if (!onlineOpen) setJoinOpen(false);
+  }
+
+  function selectLocalPlayerCount(value) {
+    localPlayerCount = window.FlightChessCore.normalizePlayerCount(value);
     document.querySelectorAll('[data-player-count]').forEach(function (button) {
-      const active = Number(button.dataset.playerCount) === playerCount;
+      const active = Number(button.dataset.playerCount) === localPlayerCount;
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', active ? 'true' : 'false');
     });
-    $('playerHint').textContent = PLAYER_HINTS[playerCount];
-    $('startGameLabel').textContent = '开始 ' + playerCount + ' 人对战';
+    $('playerHint').textContent = PLAYER_HINTS[localPlayerCount];
+    $('startGameLabel').textContent = '开始 ' + localPlayerCount + ' 人对战';
+  }
+
+  function selectOnlinePlayerCount(value) {
+    onlinePlayerCount = window.FlightChessCore.normalizePlayerCount(value);
+    document.querySelectorAll('[data-online-count]').forEach(function (button) {
+      const active = Number(button.dataset.onlineCount) === onlinePlayerCount;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+  }
+
+  function saveNickname() {
+    const nick = String($('nickInput').value || '').trim().slice(0, 16) || '玩家';
+    safeSet(CONFIG.NICK_KEY, nick);
+    return nick;
   }
 
   function goToGame(params) {
@@ -45,29 +99,69 @@
   }
 
   function init() {
-    selectPlayerCount(4);
+    selectLocalPlayerCount(4);
+    selectOnlinePlayerCount(2);
+    $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
     const saved = readSavedGame();
     if (saved) {
       $('resumeCard').hidden = false;
       $('resumeMeta').textContent = saved.playerCount + ' 人 · 第 ' + saved.turnNumber + ' 轮 · ' + saved.players[saved.currentPlayer].name + '行动';
     }
 
+    const launchParams = new URLSearchParams(location.search);
+    const invitedRoom = normalizeRoom(launchParams.get('room'));
+    const launchError = String(launchParams.get('error') || '').slice(0, 80);
+    if (invitedRoom || launchError) {
+      $('roomInput').value = invitedRoom;
+      setModeConfig('online');
+      setJoinOpen(true);
+      if (launchError) showError(launchError);
+      window.setTimeout(function () { $('onlineConfig').scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+    }
+
     $('selectLocalBtn').addEventListener('click', function () {
-      setConfigOpen($('localConfig').hidden);
+      setModeConfig($('localConfig').hidden ? 'local' : '');
+    });
+    $('selectOnlineBtn').addEventListener('click', function () {
+      setModeConfig($('onlineConfig').hidden ? 'online' : '');
     });
     document.querySelectorAll('[data-player-count]').forEach(function (button) {
-      button.addEventListener('click', function () { selectPlayerCount(button.dataset.playerCount); });
+      button.addEventListener('click', function () { selectLocalPlayerCount(button.dataset.playerCount); });
     });
-    $('resumeBtn').addEventListener('click', function () { goToGame(); });
+    document.querySelectorAll('[data-online-count]').forEach(function (button) {
+      button.addEventListener('click', function () { selectOnlinePlayerCount(button.dataset.onlineCount); });
+    });
+    $('openJoinBtn').addEventListener('click', function () {
+      const opening = $('joinConfig').hidden;
+      setJoinOpen(opening);
+      if (opening) $('roomInput').focus();
+    });
+    $('roomInput').addEventListener('input', function () {
+      $('roomInput').value = normalizeRoom($('roomInput').value);
+      showError('');
+    });
+    $('resumeBtn').addEventListener('click', function () { goToGame({ mode: 'local' }); });
     $('startGameBtn').addEventListener('click', function () {
       if (saved && !window.confirm('开始新局会覆盖当前飞行棋进度，确定继续吗？')) return;
-      goToGame({ players: playerCount, new: 1 });
+      goToGame({ mode: 'local', players: localPlayerCount, new: 1 });
+    });
+    $('createRoomBtn').addEventListener('click', function () {
+      saveNickname();
+      goToGame({ mode: 'online', intent: 'create', room: randomRoom(), players: onlinePlayerCount });
+    });
+    $('joinRoomBtn').addEventListener('click', function () {
+      saveNickname();
+      const room = normalizeRoom($('roomInput').value);
+      if (!CONFIG.ROOM_RE.test(room)) { showError('请输入邀请中的 5 位房间码'); $('roomInput').focus(); return; }
+      goToGame({ mode: 'online', intent: 'join', room: room });
     });
   }
 
   window.__flightChessLobbyTest = {
+    normalizeRoom: normalizeRoom,
     readSavedGame: readSavedGame,
-    playerHints: PLAYER_HINTS
+    playerHints: PLAYER_HINTS,
+    randomRoom: randomRoom
   };
   window.addEventListener('DOMContentLoaded', init);
 })();
