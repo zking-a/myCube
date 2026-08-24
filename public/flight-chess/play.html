@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eef3ff">
+  <meta name="description" content="2 至 4 人本地飞行棋对战棋局。">
+  <title>飞行棋 · 本地对战</title>
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
+  <link rel="stylesheet" href="flight_chess.css?v=20260824a">
+  <script src="flight_chess_core.js?v=20260824a" defer></script>
+  <script src="game.js?v=20260824a" defer></script>
+</head>
+<body class="flight-game-page">
+  <main class="flight-game-shell">
+    <nav class="flight-game-nav">
+      <a class="ui-button ui-button--secondary" href="index.html" aria-label="返回飞行棋大厅">← 玩法大厅</a>
+      <div class="game-nav-title"><span>Aeroplane Chess</span><strong>本地对战</strong></div>
+      <span class="turn-badge" id="roundBadge">第 1 轮</span>
+    </nav>
+
+    <div class="flight-game-layout">
+      <section class="flight-board-panel ui-panel" aria-labelledby="boardTitle">
+        <div class="board-heading">
+          <div><span>当前棋局</span><h1 id="boardTitle">飞行棋</h1></div>
+          <span class="save-badge"><i aria-hidden="true"></i> 已自动保存</span>
+        </div>
+        <div class="flight-board-wrap">
+          <div class="flight-board" id="flightBoard" role="group" aria-label="飞行棋棋盘"></div>
+        </div>
+        <p class="move-summary" id="moveSummary" aria-live="polite">红方先行，请掷骰子。</p>
+      </section>
+
+      <aside class="flight-control-panel">
+        <section class="turn-card ui-panel" id="turnCard">
+          <span class="turn-kicker">轮到</span>
+          <div class="turn-player"><i id="turnColor" aria-hidden="true"></i><strong id="turnName">红方</strong></div>
+          <p id="turnInstruction">点击按钮掷骰子</p>
+        </section>
+
+        <section class="dice-card ui-panel" aria-label="掷骰区">
+          <div class="dice" id="dice" aria-label="尚未掷骰">
+            <span data-pip="1"></span><span data-pip="2"></span><span data-pip="3"></span>
+            <span data-pip="4"></span><span data-pip="5"></span><span data-pip="6"></span>
+            <span data-pip="7"></span><span data-pip="8"></span><span data-pip="9"></span>
+          </div>
+          <button type="button" class="roll-button ui-button ui-button--primary" id="rollButton">掷骰子</button>
+          <span class="dice-tip" id="diceTip">掷出 6 才能起飞</span>
+        </section>
+
+        <section class="players-card ui-panel" aria-labelledby="playersTitle">
+          <div class="players-heading"><h2 id="playersTitle">飞行编队</h2><span id="playersCount">4 人</span></div>
+          <div class="player-list" id="playerList"></div>
+        </section>
+
+        <details class="rules-card ui-panel">
+          <summary>本局规则 <span>展开</span></summary>
+          <ul>
+            <li>掷出 6 才能起飞，且再掷一次。</li>
+            <li>落到己方颜色格前进 4 格，带星航线跨越 12 格。</li>
+            <li>落在对手所在的非安全格会将其撞回停机坪。</li>
+            <li>终点航道必须用恰好点数抵达，四架先到者获胜。</li>
+          </ul>
+        </details>
+
+        <button type="button" class="new-game-button ui-button ui-button--secondary" id="newGameButton">重新开始本局</button>
+      </aside>
+    </div>
+  </main>
+
+  <div class="flight-modal-backdrop" id="winnerModal" hidden>
+    <section class="winner-dialog ui-modal" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
+      <span class="winner-mark" id="winnerMark" aria-hidden="true">✦</span>
+      <span class="winner-kicker">全部抵达</span>
+      <h2 id="winnerTitle">红方获胜</h2>
+      <p id="winnerText">四架飞机已经安全抵达中心。</p>
+      <button type="button" class="ui-button ui-button--primary" id="playAgainButton">再来一局</button>
+      <a class="ui-button ui-button--secondary" href="index.html">返回玩法大厅</a>
+    </section>
+  </div>
+
+  <div class="flight-toast ui-toast" id="flightToast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

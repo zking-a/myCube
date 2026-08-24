@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eef3ff">
+  <meta name="description" content="轻量游戏站飞行棋，支持 2 至 4 人在同一台设备上轮流对战。">
+  <title>飞行棋 · 选择玩法</title>
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
+  <link rel="stylesheet" href="flight_chess.css?v=20260824a">
+  <script src="flight_chess_core.js?v=20260824a" defer></script>
+  <script src="lobby.js?v=20260824a" defer></script>
+</head>
+<body class="flight-lobby-page">
+  <main class="flight-lobby-shell">
+    <nav class="flight-nav">
+      <a class="ui-button ui-button--secondary" href="../" aria-label="返回游戏平台">← 游戏大厅</a>
+      <span>轻量游戏站</span>
+      <span class="flight-nav-status">2–4 人对战</span>
+    </nav>
+
+    <section class="flight-hero" aria-labelledby="flightLobbyTitle">
+      <div class="flight-hero-board" aria-hidden="true">
+        <span class="mini-plane red">✈︎</span>
+        <span class="mini-plane yellow">✈︎</span>
+        <span class="mini-route"></span>
+        <span class="mini-goal">✦</span>
+        <span class="mini-plane blue">✈︎</span>
+        <span class="mini-plane green">✈︎</span>
+      </div>
+      <div class="flight-hero-copy">
+        <span class="flight-eyebrow">Aeroplane Chess</span>
+        <h1 id="flightLobbyTitle">飞行棋</h1>
+        <p>一台设备，轮流掷骰。起飞、连跳、撞机，谁先让四架飞机抵达中心谁获胜。</p>
+      </div>
+    </section>
+
+    <section class="flight-menu-section" aria-labelledby="flightModeTitle">
+      <div class="flight-section-heading">
+        <div><span>开始一局</span><h2 id="flightModeTitle">选择玩法</h2></div>
+        <span class="flight-section-badge">自动保存</span>
+      </div>
+
+      <article class="flight-resume ui-panel" id="resumeCard" hidden>
+        <span class="resume-symbol" aria-hidden="true">↻</span>
+        <span class="resume-copy">
+          <small>进度已自动保存</small>
+          <strong>继续上局</strong>
+          <span id="resumeMeta">4 人 · 第 1 轮</span>
+        </span>
+        <button type="button" class="ui-button ui-button--secondary" id="resumeBtn">继续 <b>→</b></button>
+      </article>
+
+      <div class="flight-mode-menu">
+        <button type="button" class="flight-mode-entry ui-button" id="selectLocalBtn" aria-expanded="false" aria-controls="localConfig">
+          <span class="flight-mode-icon" aria-hidden="true">✈︎</span>
+          <span class="flight-mode-copy">
+            <span class="flight-mode-kicker">TOGETHER</span>
+            <span class="flight-mode-title">本地对战</span>
+            <span class="flight-mode-desc">2–4 人轮流操作，不用等待联机</span>
+          </span>
+          <span class="flight-mode-arrow" aria-hidden="true">→</span>
+        </button>
+
+        <section class="flight-mode-config" id="localConfig" hidden aria-label="本地对战设置">
+          <span class="flight-config-label">选择玩家人数</span>
+          <div class="flight-player-picker" role="radiogroup" aria-label="选择玩家人数">
+            <button type="button" data-player-count="2" role="radio" aria-checked="false">2 人</button>
+            <button type="button" data-player-count="3" role="radio" aria-checked="false">3 人</button>
+            <button type="button" class="active" data-player-count="4" role="radio" aria-checked="true">4 人</button>
+          </div>
+          <p class="flight-config-note" id="playerHint">四个阵营全部入场，最热闹的经典玩法。</p>
+          <button type="button" class="flight-start ui-button ui-button--primary" id="startGameBtn"><span id="startGameLabel">开始 4 人对战</span> <span aria-hidden="true">→</span></button>
+        </section>
+      </div>
+    </section>
+
+    <div class="flight-feature-strip" aria-label="飞行棋功能">
+      <span><b>6</b> 掷六起飞</span>
+      <span><b>↟</b> 同色连跳</span>
+      <span><b>✦</b> 跨越飞行</span>
+      <span><b>◎</b> 自动存档</span>
+    </div>
+    <p class="flight-lobby-tip">基础规则：掷出 6 才能从停机坪起飞，并获得一次额外掷骰；落在对方飞机所在的非安全格会把它撞回停机坪，进入终点航道后必须以恰好点数抵达中心。</p>
+  </main>
+</body>
+</html>

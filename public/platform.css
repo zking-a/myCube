@@ -81,6 +81,8 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 .sudoku .game-card-icon { background: linear-gradient(145deg,#ffa667,#f47a42); }
 .game-card.checkers::after { background: #ff8a4c; }
 .checkers .game-card-icon { background: linear-gradient(145deg,#6f7dff,#ff7a3c); }
+.game-card.flight::after { background: #18ad78; }
+.flight .game-card-icon { background: linear-gradient(145deg,#32c792,#4f68e8); }
 .game-card h2 { margin: 15px 0 6px; font-size: 22px; }
 .game-card p { min-height: 42px; margin: 0 0 15px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .game-tags { display: flex; flex-wrap: wrap; gap: 5px; }

@@ -8,6 +8,7 @@
 | 24点（单机 / 联机） | `/24/`；邀请链接使用 `/24/#r=房间码` |
 | 数独挑战 | `/sudoku/` |
 | 中国跳棋（人机 / 本地 / 联机） | 大厅 `/checkers/`；棋局 `/checkers/play.html` |
+| 飞行棋（2–4 人本地对战） | 大厅 `/flight-chess/`；棋局 `/flight-chess/play.html` |
 | 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws` |
 | 健康检查 | `/health` |
 
@@ -77,6 +78,8 @@ npm test
 npm run test:sudoku
 npm run test:checkers
 npm run test:checkers:e2e
+npm run test:flight-chess
+npm run test:all
 npm run test:security
 ```
 
@@ -215,12 +218,22 @@ server/
 │   │   ├── data.js
 │   │   ├── net.js
 │   │   └── game.js
-│   └── sudoku/        # 数独独立页面、样式与玩法逻辑
+│   ├── sudoku/        # 数独独立页面、样式与玩法逻辑
+│   │   ├── index.html
+│   │   ├── sudoku.css
+│   │   └── sudoku.js
+│   ├── checkers/      # 中国跳棋大厅、棋局、规则核心与训练实验室
+│   └── flight-chess/  # 2–4 人飞行棋大厅、棋局与可复用规则核心
 │       ├── index.html
-│       ├── sudoku.css
-│       └── sudoku.js
+│       ├── play.html
+│       ├── flight_chess_core.js
+│       ├── lobby.js
+│       ├── game.js
+│       └── flight_chess.css
 ├── test_local.js      # 24点联机协议单元测试
-├── test_e2e.js        # 24点双人联机端到端测试
 ├── test_sudoku.js     # 数独核心规则回归测试
+├── test_checkers.js   # 中国跳棋规则、AI 与页面契约测试
+├── test_ai_engine.js  # 可复用 AI 引擎与训练管线测试
+├── test_flight_chess.js # 飞行棋规则与页面契约测试
 └── test_security.js   # 代理 IP、Origin、连接余量与静态缓存回归
 ```

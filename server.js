@@ -692,7 +692,8 @@ const server = http.createServer(function (req, res) {
     '/24': '/24/',
     '/sudoku': '/sudoku/',
     '/sudoku.html': '/sudoku/',
-    '/checkers': '/checkers/'
+    '/checkers': '/checkers/',
+    '/flight-chess': '/flight-chess/'
   };
   if (routeRedirects[urlPath]) {
     const query = (req.url || '').slice(urlPath.length);

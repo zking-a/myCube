@@ -1,0 +1,140 @@
+'use strict';
+
+const fs = require('fs');
+const Core = require('./public/flight-chess/flight_chess_core');
+
+const lobbyHtml = fs.readFileSync('public/flight-chess/index.html', 'utf8');
+const playHtml = fs.readFileSync('public/flight-chess/play.html', 'utf8');
+const lobbySource = fs.readFileSync('public/flight-chess/lobby.js', 'utf8');
+const gameSource = fs.readFileSync('public/flight-chess/game.js', 'utf8');
+const css = fs.readFileSync('public/flight-chess/flight_chess.css', 'utf8');
+const platformHtml = fs.readFileSync('public/index.html', 'utf8');
+const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const serverSource = fs.readFileSync('server.js', 'utf8');
+
+let passed = 0;
+function ok(name, condition) {
+  if (!condition) throw new Error('FAIL: ' + name);
+  passed++;
+  console.log('  PASS  ' + name);
+}
+
+function setPlane(game, playerIndex, planeIndex, progress) {
+  const next = Core.cloneGame(game);
+  next.players[playerIndex].planes[planeIndex] = progress;
+  return next;
+}
+
+ok('公共航道包含 52 个唯一坐标',
+  Core.TRACK_COORDINATES.length === 52 &&
+  new Set(Core.TRACK_COORDINATES.map(Core.coordinateKey)).size === 52);
+
+const game2 = Core.createGame(2);
+const game3 = Core.createGame(3);
+const game4 = Core.createGame(4);
+ok('支持 2、3、4 人且越界人数安全回落为 4 人',
+  game2.players.length === 2 && game3.players.length === 3 && game4.players.length === 4 &&
+  Core.createGame(1).players.length === 4 && Core.createGame(5).players.length === 4);
+ok('双人使用对角的红蓝阵营，四人使用完整四色',
+  game2.players.map(player => player.colorId).join(',') === 'red,blue' &&
+  game4.players.map(player => player.colorId).join(',') === 'red,yellow,blue,green');
+ok('每位玩家开局均有四架飞机停在各自停机坪',
+  game4.players.every(player => player.planes.length === 4 && player.planes.every(progress => progress === Core.HANGAR)));
+
+const ordinaryPass = Core.rollDice(game2, 3);
+ok('未起飞时掷非 6 点会自动跳过并轮到下一位',
+  ordinaryPass.phase === 'roll' && ordinaryPass.currentPlayer === 1 &&
+  ordinaryPass.lastMove.type === 'pass' && game2.currentPlayer === 0);
+
+const takeoffRoll = Core.rollDice(game2, 6);
+ok('掷出 6 时四架停机坪飞机均可选择起飞',
+  takeoffRoll.phase === 'move' && Core.getMovablePlanes(takeoffRoll, 0, 6).join(',') === '0,1,2,3');
+const tookOff = Core.movePlane(takeoffRoll, 2);
+ok('起飞落到本方安全起点且掷 6 后保留当前玩家额外回合',
+  tookOff.players[0].planes[2] === 0 && tookOff.currentPlayer === 0 && tookOff.phase === 'roll' && tookOff.lastMove.extraTurn);
+
+let moving = Core.createGame(2);
+moving = setPlane(moving, 0, 0, 0);
+moving = Core.rollDice(moving, 3);
+moving = Core.movePlane(moving, 0);
+ok('普通移动按骰点前进且结束后切换玩家',
+  moving.players[0].planes[0] === 3 && moving.currentPlayer === 1 && moving.turnNumber === 2);
+
+let colorHop = Core.createGame(2);
+colorHop = setPlane(colorHop, 0, 0, 4);
+colorHop = Core.rollDice(colorHop, 4);
+colorHop = Core.movePlane(colorHop, 0);
+ok('落到本方颜色格会额外连跳 4 格',
+  colorHop.players[0].planes[0] === 12 && colorHop.lastMove.rawTo === 8 && colorHop.lastMove.bonus === 'color-hop');
+
+let shortcut = Core.createGame(2);
+shortcut = setPlane(shortcut, 0, 0, 12);
+shortcut = Core.rollDice(shortcut, 6);
+shortcut = Core.movePlane(shortcut, 0);
+ok('落到星标航线会跨越 12 格且不会叠加同色连跳',
+  shortcut.players[0].planes[0] === 30 && shortcut.lastMove.bonus === 'shortcut' && shortcut.lastMove.bonusDistance === 12);
+
+let capture = Core.createGame(2);
+capture = setPlane(capture, 0, 0, 0);
+capture = setPlane(capture, 1, 1, 27);
+capture = Core.rollDice(capture, 1);
+capture = Core.movePlane(capture, 0);
+ok('落到非安全格会把同格的对方飞机撞回停机坪',
+  capture.players[1].planes[1] === Core.HANGAR && capture.lastMove.captured.length === 1);
+
+let safeStart = Core.createGame(2);
+safeStart = setPlane(safeStart, 1, 0, 26);
+safeStart = Core.rollDice(safeStart, 6);
+safeStart = Core.movePlane(safeStart, 0);
+ok('四个阵营起点为安全格，起飞不会撞回停在该格的对手',
+  safeStart.players[1].planes[0] === 26 && safeStart.lastMove.captured.length === 0);
+
+let exactFinish = Core.createGame(2);
+exactFinish = setPlane(exactFinish, 0, 0, 57);
+exactFinish = Core.rollDice(exactFinish, 1);
+exactFinish = Core.movePlane(exactFinish, 0);
+ok('终点航道使用恰好点数抵达中心', exactFinish.players[0].planes[0] === Core.FINISHED);
+
+let overshoot = Core.createGame(2);
+overshoot = setPlane(overshoot, 0, 0, 57);
+overshoot = Core.rollDice(overshoot, 2);
+ok('超过终点的骰点不能移动并自动跳过',
+  overshoot.players[0].planes[0] === 57 && overshoot.phase === 'roll' && overshoot.currentPlayer === 1);
+
+let win = Core.createGame(2);
+win.players[0].planes = [58, 58, 58, 57];
+win = Core.rollDice(win, 1);
+win = Core.movePlane(win, 3);
+ok('四架飞机全部抵达后立即判定胜者并锁定棋局',
+  win.phase === 'gameover' && win.winner === 0 && win.players[0].planes.every(progress => progress === 58));
+
+const restored = Core.hydrateGame(JSON.parse(JSON.stringify(capture)));
+ok('合法存档可恢复且保留撞机后的局面',
+  restored && restored.players[1].planes[1] === Core.HANGAR && restored.currentPlayer === capture.currentPlayer);
+ok('存档恢复拒绝未知版本、错误阵营和越界进度',
+  Core.hydrateGame({ version: 9 }) === null &&
+  Core.hydrateGame(Object.assign({}, game2, { players: [{ colorId: 'green', planes: [-1, -1, -1, -1] }, game2.players[1]] })) === null &&
+  Core.hydrateGame(Object.assign({}, game2, { players: [{ colorId: 'red', planes: [99, -1, -1, -1] }, game2.players[1]] })) === null);
+
+ok('大厅按统一交互先选择本地对战，再展开 2/3/4 人配置',
+  /id="selectLocalBtn"[^>]*aria-expanded="false"[^>]*aria-controls="localConfig"/.test(lobbyHtml) &&
+  /id="localConfig" hidden/.test(lobbyHtml) &&
+  (lobbyHtml.match(/data-player-count="[234]"/g) || []).length === 3);
+ok('大厅将继续存档和开始新局分开，并在覆盖前确认',
+  /id="resumeCard" hidden/.test(lobbyHtml) && /id="resumeBtn"/.test(lobbyHtml) &&
+  /开始新局会覆盖当前飞行棋进度/.test(lobbySource));
+ok('棋局页不重复人数配置，并按规则核心、交互脚本顺序加载',
+  !/data-player-count/.test(playHtml) && playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('game.js'));
+ok('棋盘飞机只通过规则核心给出的合法列表启用',
+  /Core\.getMovablePlanes/.test(gameSource) && /Core\.movePlane/.test(gameSource) && /token\.disabled = !canMove/.test(gameSource));
+ok('棋局提供自动存档、规则说明、响应式单列和减少动效支持',
+  /saveGame\(\)/.test(gameSource) && /本局规则/.test(playHtml) &&
+  /@media \(max-width: 900px\)/.test(css) && /prefers-reduced-motion/.test(css));
+ok('游戏平台首页已新增飞行棋入口并更新为四款游戏',
+  /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /四款游戏/.test(platformHtml));
+ok('服务端为无尾斜杠飞行棋地址提供稳定重定向',
+  /'\/flight-chess': '\/flight-chess\/'/.test(serverSource));
+ok('package scripts 提供飞行棋测试及整站统一回归入口',
+  packageJson.scripts['test:flight-chess'] === 'node test_flight_chess.js' && /test_flight_chess\.js/.test(packageJson.scripts['test:all']));
+
+console.log('\n✅ 飞行棋规则与页面契约测试全部通过（' + passed + ' 项）');
