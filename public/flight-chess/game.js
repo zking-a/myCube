@@ -4,11 +4,22 @@
   const Core = window.FlightChessCore;
   const Net = window.FlightChessNet;
   const SAVE_KEY = 'light_games_flight_chess_save_v1';
+  const SKIN_KEY = 'light_games_flight_chess_skin_v1';
   const COLOR_STYLE = {
     red: { solid: '#e85d64', soft: '#fff0f1' },
     yellow: { solid: '#e5ad20', soft: '#fff8df' },
     blue: { solid: '#4f68e8', soft: '#edf0ff' },
     green: { solid: '#18a874', soft: '#eaf9f3' }
+  };
+  // 经典纸质棋盘把 15×15 主航道放在四个独立机场之间；这里只改变显示坐标，
+  // 规则核心、存档坐标和联机协议仍使用原来的逻辑坐标。
+  const BOARD_OFFSET = 2;
+  const BOARD_DIRECTIONS = { red: '↓', yellow: '←', blue: '↑', green: '→' };
+  const CLASSIC_BASE_COORDINATES = {
+    red: [[1, 15], [1, 17], [3, 15], [3, 17]],
+    yellow: [[15, 15], [15, 17], [17, 15], [17, 17]],
+    blue: [[15, 1], [15, 3], [17, 1], [17, 3]],
+    green: [[1, 1], [1, 3], [3, 1], [3, 3]]
   };
   const DICE_PIPS = {
     1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9],
@@ -47,6 +58,15 @@
   function $(id) { return document.getElementById(id); }
   function safeGet(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
   function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (error) {} }
+  // 皮肤只作用于显示层。规则坐标、存档与联机状态不包含该字段，避免视觉偏好污染棋局数据。
+  function normalizeBoardSkin(value) { return value === 'soft' ? 'soft' : 'classic'; }
+  function applyBoardSkin(value, persist) {
+    const skin = normalizeBoardSkin(value);
+    $('flightBoard').dataset.boardSkin = skin;
+    $('flightBoard').setAttribute('aria-label', (skin === 'classic' ? '经典印刷' : '柔和现代') + '十字飞行棋棋盘');
+    $('boardSkinSelect').value = skin;
+    if (persist) safeSet(SKIN_KEY, skin);
+  }
   function readSavedGame() {
     try { return Core.hydrateGame(JSON.parse(safeGet(SAVE_KEY) || 'null')); }
     catch (error) { return null; }
@@ -65,6 +85,10 @@
     node.style.gridRow = String(coordinate[0] + 1);
     node.style.gridColumn = String(coordinate[1] + 1);
   }
+  function classicCoordinate(coordinate) {
+    // 顺时针旋转显示层，使颜色方位与传统棋盘（左上绿、右上红）一致。
+    return [coordinate[1] + BOARD_OFFSET, 14 - coordinate[0] + BOARD_OFFSET];
+  }
   function createSlot(className, coordinate, key) {
     const slot = document.createElement('div');
     slot.className = 'board-slot ' + className;
@@ -82,16 +106,26 @@
     Core.COLOR_DEFS.forEach(function (color) {
       const zone = document.createElement('div');
       zone.className = 'hangar-zone ' + color.id + (activeColors.has(color.id) ? '' : ' inactive');
-      zone.dataset.label = activeColors.has(color.id) ? color.name + '停机坪' : '本局未入场';
+      zone.dataset.label = activeColors.has(color.id) ? color.name + '机场' : '本局未入场';
       board.appendChild(zone);
+
+      const airspace = document.createElement('div');
+      airspace.className = 'airspace-zone ' + color.id;
+      airspace.setAttribute('aria-hidden', 'true');
+      const shortcutGuide = document.createElement('span');
+      shortcutGuide.className = 'shortcut-guide';
+      shortcutGuide.textContent = BOARD_DIRECTIONS[color.id];
+      airspace.appendChild(shortcutGuide);
+      board.appendChild(airspace);
     });
     Core.TRACK_COORDINATES.forEach(function (coordinate, trackIndex) {
       const colorId = Core.trackColor(trackIndex);
-      const slot = createSlot('track-cell ' + colorId, coordinate);
+      const slot = createSlot('track-cell ' + colorId, classicCoordinate(coordinate), Core.coordinateKey(coordinate));
       slot.dataset.trackIndex = String(trackIndex);
       if (Core.SAFE_TRACK_INDEXES.includes(trackIndex)) {
         slot.classList.add('start-cell');
-        slot.setAttribute('aria-label', '安全起点');
+        slot.dataset.arrow = BOARD_DIRECTIONS[colorId];
+        slot.setAttribute('aria-label', '安全起点，沿' + BOARD_DIRECTIONS[colorId] + '方向飞行');
       }
       const shortcutColor = Core.COLOR_DEFS.find(function (color) {
         return Core.shortcutTrackIndex(color.id) === trackIndex;
@@ -103,11 +137,14 @@
     });
     Core.COLOR_DEFS.forEach(function (color) {
       color.homeLane.forEach(function (coordinate, laneIndex) {
-        const slot = createSlot('home-cell ' + color.id, coordinate);
+        const slot = createSlot('home-cell ' + color.id, classicCoordinate(coordinate), Core.coordinateKey(coordinate));
         slot.dataset.homeLane = color.id + ':' + laneIndex;
+        slot.dataset.step = String(laneIndex + 1);
+        slot.dataset.arrow = BOARD_DIRECTIONS[color.id];
+        slot.setAttribute('aria-label', color.name + '终点跑道第 ' + (laneIndex + 1) + ' 格');
       });
       color.bases.forEach(function (coordinate, planeIndex) {
-        const slot = createSlot('base-cell ' + color.id, coordinate);
+        const slot = createSlot('base-cell ' + color.id, CLASSIC_BASE_COORDINATES[color.id][planeIndex], Core.coordinateKey(coordinate));
         slot.dataset.base = color.id + ':' + planeIndex;
       });
     });
@@ -115,6 +152,12 @@
     goal.className = 'board-slot goal-cell';
     goal.dataset.key = '7:7';
     goal.setAttribute('aria-label', '中心终点');
+    ['red', 'yellow', 'blue', 'green'].forEach(function (colorId) {
+      const arrow = document.createElement('span');
+      arrow.className = 'goal-arrow ' + colorId;
+      arrow.setAttribute('aria-hidden', 'true');
+      goal.appendChild(arrow);
+    });
     board.appendChild(goal);
     cellMap.set('7:7', goal);
   }
@@ -425,6 +468,11 @@
   }
   function initGame() {
     if (!Core) return;
+    applyBoardSkin(safeGet(SKIN_KEY), false);
+    $('boardSkinSelect').addEventListener('change', function (event) {
+      applyBoardSkin(event.currentTarget.value, true);
+      showToast(event.currentTarget.value === 'soft' ? '已切换为柔和皮肤' : '已切换为经典皮肤');
+    });
     $('rollButton').addEventListener('click', roll);
     $('newGameButton').addEventListener('click', function () { startNewGame(true); });
     $('playAgainButton').addEventListener('click', function () { startNewGame(false); });
@@ -439,7 +487,8 @@
     dicePips: DICE_PIPS,
     tokenOffsets: tokenOffsets,
     playerPlaneCounts: playerPlaneCounts,
-    placeholderGame: placeholderGame
+    placeholderGame: placeholderGame,
+    normalizeBoardSkin: normalizeBoardSkin
   };
   window.addEventListener('beforeunload', function () { if (netClient) netClient.dispose(); });
   window.addEventListener('DOMContentLoaded', initGame);

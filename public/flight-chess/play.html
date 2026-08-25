@@ -7,10 +7,10 @@
   <meta name="description" content="2 至 4 人同屏或好友联机飞行棋对战棋局。">
   <title>飞行棋 · 对战棋局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="flight_chess.css?v=20260824b">
-  <script src="flight_chess_core.js?v=20260824b" defer></script>
-  <script src="flight_chess_net.js?v=20260824b" defer></script>
-  <script src="game.js?v=20260824b" defer></script>
+  <link rel="stylesheet" href="flight_chess.css?v=20260825d">
+  <script src="flight_chess_core.js?v=20260825d" defer></script>
+  <script src="flight_chess_net.js?v=20260825d" defer></script>
+  <script src="game.js?v=20260825d" defer></script>
 </head>
 <body class="flight-game-page">
   <main class="flight-game-shell">
@@ -23,11 +23,19 @@
     <div class="flight-game-layout">
       <section class="flight-board-panel ui-panel" aria-labelledby="boardTitle">
         <div class="board-heading">
-          <div><span>当前棋局</span><h1 id="boardTitle">飞行棋</h1></div>
-          <span class="save-badge" id="syncBadge"><i aria-hidden="true"></i> 已自动保存</span>
+          <div class="board-title-copy"><span>当前棋局</span><h1 id="boardTitle">飞行棋</h1></div>
+          <div class="board-heading-actions">
+            <label class="board-skin-picker" for="boardSkinSelect"><span>棋盘皮肤</span>
+              <select id="boardSkinSelect" aria-label="选择棋盘皮肤">
+                <option value="classic">经典</option>
+                <option value="soft">柔和</option>
+              </select>
+            </label>
+            <span class="save-badge" id="syncBadge"><i aria-hidden="true"></i> 已自动保存</span>
+          </div>
         </div>
         <div class="flight-board-wrap">
-          <div class="flight-board" id="flightBoard" role="group" aria-label="飞行棋棋盘"></div>
+          <div class="flight-board" id="flightBoard" role="group" aria-label="经典印刷十字飞行棋棋盘" data-board-style="classic" data-board-skin="classic"></div>
         </div>
         <p class="move-summary" id="moveSummary" aria-live="polite">红方先行，请掷骰子。</p>
       </section>
