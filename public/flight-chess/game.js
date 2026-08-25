@@ -11,16 +11,40 @@
     blue: { solid: '#4f68e8', soft: '#edf0ff' },
     green: { solid: '#18a874', soft: '#eaf9f3' }
   };
-  // 经典纸质棋盘把 15×15 主航道放在四个独立机场之间；这里只改变显示坐标，
-  // 规则核心、存档坐标和联机协议仍使用原来的逻辑坐标。
-  const BOARD_OFFSET = 2;
+  // 经典皮肤的显示坐标取自用户给出的 1024×994 参考棋盘。显示层使用独立的像素坐标映射，
+  // 规则核心、存档坐标和联机协议仍使用原来的 15×15 逻辑坐标，避免视觉复刻影响对局兼容性。
+  const REFERENCE_BOARD_SIZE = [1024, 994];
   const BOARD_DIRECTIONS = { red: '↓', yellow: '←', blue: '↑', green: '→' };
-  const CLASSIC_BASE_COORDINATES = {
-    red: [[1, 15], [1, 17], [3, 15], [3, 17]],
-    yellow: [[15, 15], [15, 17], [17, 15], [17, 17]],
-    blue: [[15, 1], [15, 3], [17, 1], [17, 3]],
-    green: [[1, 1], [1, 3], [3, 1], [3, 3]]
+  // 52 个公共航道中心，按参考图顺时针记录；trackIndex 会在 referenceTrackCenter 中反向映射，
+  // 从而保持现有规则中“索引递减即前进”的方向与画面上的连续路线一致。
+  const REFERENCE_OUTER_TRACK = [
+    [108.7, 487.1], [108.7, 430.7], [108.6, 373.7], [128.1, 309.6],
+    [195.1, 287.6], [251.6, 287.5], [312.0, 314.7], [359.8, 268.1],
+    [338.0, 201.9], [338.0, 145.7], [360.0, 83.0], [424.0, 59.7],
+    [481.1, 59.6], [537.5, 59.6], [593.8, 59.7], [650.0, 59.5],
+    [711.4, 86.9], [736.6, 147.4], [736.7, 203.9], [711.2, 272.6],
+    [753.3, 314.7], [822.8, 290.5], [878.8, 290.3], [942.2, 314.7],
+    [963.6, 375.5], [963.8, 431.2], [961.0, 492.0], [963.8, 544.9],
+    [963.7, 601.3], [942.3, 667.6], [878.0, 686.7], [821.6, 686.8],
+    [758.3, 664.1], [712.1, 708.8], [736.4, 772.5], [736.4, 829.5],
+    [715.4, 893.7], [649.1, 914.9], [593.0, 915.0], [535.6, 915.0],
+    [481.1, 915.3], [423.9, 915.2], [359.9, 896.3], [337.8, 828.9],
+    [338.0, 772.4], [359.9, 709.8], [312.0, 666.8], [252.2, 685.9],
+    [195.3, 685.9], [133.4, 667.0], [108.6, 600.8], [108.7, 544.8]
+  ];
+  const REFERENCE_HOME_CENTERS = {
+    red: [[537.1, 155.3], [537.1, 211.4], [537.0, 267.2], [537.1, 323.2], [537.1, 379.2], [537.0, 435.2]],
+    yellow: [[873.7, 492.0], [817.9, 491.9], [761.8, 491.9], [705.9, 492.0], [649.9, 492.0], [593.9, 491.9]],
+    blue: [[537.0, 831.1], [537.1, 775.0], [537.0, 719.1], [537.1, 663.0], [537.1, 607.0], [537.0, 551.0]],
+    green: [[198.8, 487.1], [254.9, 487.1], [310.8, 487.0], [366.9, 487.1], [422.7, 487.2], [478.8, 487.0]]
   };
+  const REFERENCE_BASE_CENTERS = {
+    red: [[868, 65], [970, 65], [868, 166], [970, 166]],
+    yellow: [[868, 806], [970, 806], [868, 906], [970, 906]],
+    blue: [[118, 806], [220, 806], [118, 906], [220, 906]],
+    green: [[118, 65], [220, 65], [118, 166], [220, 166]]
+  };
+  const REFERENCE_GOAL_CENTER = [537, 491];
   const DICE_PIPS = {
     1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9],
     5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9]
@@ -82,12 +106,11 @@
   }
 
   function placeAt(node, coordinate) {
-    node.style.gridRow = String(coordinate[0] + 1);
-    node.style.gridColumn = String(coordinate[1] + 1);
+    node.style.left = (coordinate[0] / REFERENCE_BOARD_SIZE[0] * 100).toFixed(4) + '%';
+    node.style.top = (coordinate[1] / REFERENCE_BOARD_SIZE[1] * 100).toFixed(4) + '%';
   }
-  function classicCoordinate(coordinate) {
-    // 顺时针旋转显示层，使颜色方位与传统棋盘（左上绿、右上红）一致。
-    return [coordinate[1] + BOARD_OFFSET, 14 - coordinate[0] + BOARD_OFFSET];
+  function referenceTrackCenter(trackIndex) {
+    return REFERENCE_OUTER_TRACK[(43 - trackIndex + REFERENCE_OUTER_TRACK.length) % REFERENCE_OUTER_TRACK.length];
   }
   function createSlot(className, coordinate, key) {
     const slot = document.createElement('div');
@@ -108,19 +131,10 @@
       zone.className = 'hangar-zone ' + color.id + (activeColors.has(color.id) ? '' : ' inactive');
       zone.dataset.label = activeColors.has(color.id) ? color.name + '机场' : '本局未入场';
       board.appendChild(zone);
-
-      const airspace = document.createElement('div');
-      airspace.className = 'airspace-zone ' + color.id;
-      airspace.setAttribute('aria-hidden', 'true');
-      const shortcutGuide = document.createElement('span');
-      shortcutGuide.className = 'shortcut-guide';
-      shortcutGuide.textContent = BOARD_DIRECTIONS[color.id];
-      airspace.appendChild(shortcutGuide);
-      board.appendChild(airspace);
     });
     Core.TRACK_COORDINATES.forEach(function (coordinate, trackIndex) {
       const colorId = Core.trackColor(trackIndex);
-      const slot = createSlot('track-cell ' + colorId, classicCoordinate(coordinate), Core.coordinateKey(coordinate));
+      const slot = createSlot('track-cell ' + colorId, referenceTrackCenter(trackIndex), Core.coordinateKey(coordinate));
       slot.dataset.trackIndex = String(trackIndex);
       if (Core.SAFE_TRACK_INDEXES.includes(trackIndex)) {
         slot.classList.add('start-cell');
@@ -137,14 +151,14 @@
     });
     Core.COLOR_DEFS.forEach(function (color) {
       color.homeLane.forEach(function (coordinate, laneIndex) {
-        const slot = createSlot('home-cell ' + color.id, classicCoordinate(coordinate), Core.coordinateKey(coordinate));
+        const slot = createSlot('home-cell ' + color.id, REFERENCE_HOME_CENTERS[color.id][laneIndex], Core.coordinateKey(coordinate));
         slot.dataset.homeLane = color.id + ':' + laneIndex;
         slot.dataset.step = String(laneIndex + 1);
         slot.dataset.arrow = BOARD_DIRECTIONS[color.id];
         slot.setAttribute('aria-label', color.name + '终点跑道第 ' + (laneIndex + 1) + ' 格');
       });
       color.bases.forEach(function (coordinate, planeIndex) {
-        const slot = createSlot('base-cell ' + color.id, CLASSIC_BASE_COORDINATES[color.id][planeIndex], Core.coordinateKey(coordinate));
+        const slot = createSlot('base-cell ' + color.id, REFERENCE_BASE_CENTERS[color.id][planeIndex], Core.coordinateKey(coordinate));
         slot.dataset.base = color.id + ':' + planeIndex;
       });
     });
@@ -152,6 +166,7 @@
     goal.className = 'board-slot goal-cell';
     goal.dataset.key = '7:7';
     goal.setAttribute('aria-label', '中心终点');
+    placeAt(goal, REFERENCE_GOAL_CENTER);
     ['red', 'yellow', 'blue', 'green'].forEach(function (colorId) {
       const arrow = document.createElement('span');
       arrow.className = 'goal-arrow ' + colorId;

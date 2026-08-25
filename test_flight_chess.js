@@ -135,16 +135,17 @@ ok('棋局页不重复人数配置，并按规则核心、联机层、交互脚�
   playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('flight_chess_net.js') &&
   playHtml.indexOf('flight_chess_net.js') < playHtml.indexOf('game.js'));
 ok('飞行棋资源升级缓存版本且返回大厅会显式离开联机房间',
-  /flight_chess_net\.js\?v=20260825d/.test(playHtml) && /game\.js\?v=20260825d/.test(playHtml) &&
+  /flight_chess_net\.js\?v=20260826a/.test(playHtml) && /game\.js\?v=20260826a/.test(playHtml) &&
   /data-leave-room/.test(playHtml) && /leaveOnlineRoom/.test(gameSource));
-ok('棋局使用经典十字棋盘、四个独立机场和中央四向箭头',
-  /data-board-style="classic"/.test(playHtml) && /BOARD_OFFSET = 2/.test(gameSource) &&
-  /CLASSIC_BASE_COORDINATES/.test(gameSource) && /airspace-zone/.test(gameSource) &&
-  (gameSource.match(/goal-arrow/g) || []).length >= 1 && /grid-template-columns: repeat\(19/.test(css));
-ok('经典棋盘只重映射显示坐标，不改变规则坐标与联机棋局状态',
-  /classicCoordinate\(coordinate\), Core\.coordinateKey\(coordinate\)/.test(gameSource) &&
-  /CLASSIC_BASE_COORDINATES\[color\.id\]\[planeIndex\], Core\.coordinateKey\(coordinate\)/.test(gameSource) &&
-  /coordinate\[1\] \+ BOARD_OFFSET, 14 - coordinate\[0\] \+ BOARD_OFFSET/.test(gameSource));
+ok('棋局使用参考图纹理、四个独立机场和精确落点映射',
+  /data-board-style="classic"/.test(playHtml) && /REFERENCE_BOARD_SIZE = \[1024, 994\]/.test(gameSource) &&
+  /REFERENCE_OUTER_TRACK/.test(gameSource) && /REFERENCE_BASE_CENTERS/.test(gameSource) &&
+  /classic-board-reference\.png/.test(css) && /aspect-ratio: 1024 \/ 994/.test(css));
+ok('参考棋盘只重映射显示坐标，不改变规则坐标与联机棋局状态',
+  /referenceTrackCenter\(trackIndex\), Core\.coordinateKey\(coordinate\)/.test(gameSource) &&
+  /REFERENCE_BASE_CENTERS\[color\.id\]\[planeIndex\], Core\.coordinateKey\(coordinate\)/.test(gameSource) &&
+  /coordinate\[0\] \/ REFERENCE_BOARD_SIZE\[0\]/.test(gameSource) &&
+  /coordinate\[1\] \/ REFERENCE_BOARD_SIZE\[1\]/.test(gameSource));
 ok('棋盘提供经典与柔和皮肤切换，且偏好独立持久化而不进入棋局状态',
   /id="boardSkinSelect"/.test(playHtml) && /value="classic"/.test(playHtml) && /value="soft"/.test(playHtml) &&
   /data-board-skin="classic"/.test(playHtml) && /SKIN_KEY/.test(gameSource) && /applyBoardSkin/.test(gameSource) &&

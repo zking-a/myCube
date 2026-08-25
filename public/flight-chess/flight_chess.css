@@ -341,15 +341,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .board-skin-picker select:focus-visible { outline: 3px solid rgba(86,104,245,.2); outline-offset: 1px; }
 .save-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--ui-success); font-size: 10px; font-weight: 800; }
 .save-badge i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px rgba(24,173,120,.1); }
-.flight-board-wrap { width: min(100%, 690px); margin: 0 auto; }
+.flight-board-wrap { width: min(100%, 710px); margin: 0 auto; }
 .flight-board {
   position: relative;
-  display: grid;
+  display: block;
   width: 100%;
-  aspect-ratio: 1;
-  grid-template-columns: repeat(19, 1fr);
-  grid-template-rows: repeat(19, 1fr);
-  gap: 1px;
+  aspect-ratio: 1024 / 994;
   padding: 8px;
   overflow: hidden;
   border: 1px solid #d8cdbb;
@@ -362,7 +359,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .hangar-zone {
   z-index: 1;
-  position: relative;
+  position: absolute;
   margin: 1px;
   border: 2px solid rgba(255,255,255,.9);
   border-radius: 12px;
@@ -386,91 +383,23 @@ button, a { -webkit-tap-highlight-color: transparent; }
   content: attr(data-label);
   transform: translateX(-50%);
 }
-.hangar-zone.green { --airport-color: #238e68; --airport-soft: #d9eee5; --airport-soft-deep: #c9e6da; --airport-edge: rgba(35,142,104,.24); grid-area: 1 / 1 / 6 / 6; }
-.hangar-zone.red { --airport-color: #cc525b; --airport-soft: #f6dcde; --airport-soft-deep: #f1cdd1; --airport-edge: rgba(204,82,91,.24); grid-area: 1 / 15 / 6 / 20; }
-.hangar-zone.yellow { --airport-color: #b68b25; --airport-soft: #f7e8bd; --airport-soft-deep: #f1dc9d; --airport-edge: rgba(182,139,37,.25); grid-area: 15 / 15 / 20 / 20; }
-.hangar-zone.blue { --airport-color: #4f69b3; --airport-soft: #dce3f6; --airport-soft-deep: #cbd6f0; --airport-edge: rgba(79,105,179,.24); grid-area: 15 / 1 / 20 / 6; }
+.hangar-zone.green { --airport-color: #238e68; --airport-soft: #d9eee5; --airport-soft-deep: #c9e6da; --airport-edge: rgba(35,142,104,.24); left: 4.9%; top: .4%; width: 22.3%; height: 22.6%; }
+.hangar-zone.red { --airport-color: #cc525b; --airport-soft: #f6dcde; --airport-soft-deep: #f1cdd1; --airport-edge: rgba(204,82,91,.24); right: .1%; top: .4%; width: 21.9%; height: 22.8%; }
+.hangar-zone.yellow { --airport-color: #b68b25; --airport-soft: #f7e8bd; --airport-soft-deep: #f1dc9d; --airport-edge: rgba(182,139,37,.25); right: .1%; bottom: 2.1%; width: 21.9%; height: 22.7%; }
+.hangar-zone.blue { --airport-color: #4f69b3; --airport-soft: #dce3f6; --airport-soft-deep: #cbd6f0; --airport-edge: rgba(79,105,179,.24); left: 4.9%; bottom: 2.1%; width: 22.3%; height: 22.7%; }
 .hangar-zone.inactive { filter: saturate(.18); opacity: .72; }
 .hangar-zone.green::after, .hangar-zone.red::after { bottom: 5px; }
 .hangar-zone.blue::after, .hangar-zone.yellow::after { top: 5px; }
 
-.airspace-zone {
-  z-index: 0;
-  position: relative;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-.airspace-zone.green { --guide-color: #169660; grid-area: 3 / 3 / 9 / 9; }
-.airspace-zone.red { --guide-color: #d94852; grid-area: 3 / 12 / 9 / 18; }
-.airspace-zone.yellow { --guide-color: #d6a307; grid-area: 12 / 12 / 18 / 18; }
-.airspace-zone.blue { --guide-color: #2d70bd; grid-area: 12 / 3 / 18 / 9; }
-.airspace-zone::after {
-  position: absolute;
-  z-index: 0;
-  width: 27%;
-  aspect-ratio: 1;
-  overflow: hidden;
-  border: 2px solid rgba(255,253,246,.95);
-  border-radius: 5px;
-  background: conic-gradient(from 45deg, #dc6268 0 25%, #e7b94b 0 50%, #5572bd 0 75%, #3ba278 0 100%);
-  box-shadow: none;
-  content: "";
-}
-.airspace-zone::before {
-  position: absolute;
-  z-index: 1;
-  width: 9%;
-  aspect-ratio: 1;
-  border: 0;
-  border-radius: 50%;
-  background: #fff9e8;
-  box-shadow: inset 0 0 0 1px rgba(70,66,57,.12);
-  content: "";
-}
-.airspace-zone.green::after { right: 0; bottom: 0; }
-.airspace-zone.green::before { right: 9%; bottom: 9%; }
-.airspace-zone.red::after { left: 0; bottom: 0; }
-.airspace-zone.red::before { left: 9%; bottom: 9%; }
-.airspace-zone.yellow::after { top: 0; left: 0; }
-.airspace-zone.yellow::before { top: 9%; left: 9%; }
-.airspace-zone.blue::after { top: 0; right: 0; }
-.airspace-zone.blue::before { top: 9%; right: 9%; }
-.shortcut-guide {
-  position: absolute;
-  top: 50%;
-  left: 26%;
-  width: 48%;
-  height: 0;
-  border-top: 2px dashed var(--guide-color);
-  color: transparent;
-  font-size: 0;
-  opacity: .52;
-  transform-origin: 50% 50%;
-}
-.shortcut-guide::after {
-  position: absolute;
-  top: -6px;
-  right: -1px;
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 8px solid var(--guide-color);
-  content: "";
-}
-.airspace-zone.red .shortcut-guide { transform: rotate(90deg); }
-.airspace-zone.yellow .shortcut-guide { transform: rotate(180deg); }
-.airspace-zone.blue .shortcut-guide { transform: rotate(-90deg); }
-
+/* 所有落点都使用参考图的独立百分比坐标；这里只负责交互槽位，不再让 CSS Grid 近似几何形状。 */
 .board-slot {
-  position: relative;
+  position: absolute;
   z-index: 2;
   display: grid;
-  min-width: 0;
-  min-height: 0;
+  width: 5.55%;
+  aspect-ratio: 1;
   place-items: center;
+  transform: translate(-50%, -50%);
 }
 .track-cell,
 .home-cell,
@@ -530,7 +459,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .goal-cell {
   z-index: 1;
-  grid-area: 9 / 9 / 12 / 12;
+  width: 17.4%;
   overflow: hidden;
   border: 2px solid rgba(255,253,246,.96);
   border-radius: 6px;
@@ -567,28 +496,37 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .goal-cell .plane-token { width: 28%; }
 
-/* 经典皮肤复刻传统纸质飞行棋：高饱和四色、黑色印刷线和奶白落子孔。
-   选择器仅覆盖材质变量，不触碰逻辑坐标、棋子节点或交互状态。 */
+/* 经典皮肤直接承载用户提供的参考棋盘纹理；透明交互槽位仍由 DOM 负责落子、叠子和键盘操作。
+   两个底部遮片只去除原参考图角落的站点水印，并补回机场底边，不改变棋盘有效区域。 */
 .flight-board[data-board-skin="classic"] {
   --classic-ink: #24231f;
   --classic-paper: #fff;
   --classic-hole: #fffde5;
-  gap: 0;
-  padding: 6px;
-  border: 2px solid var(--classic-ink);
-  border-radius: 2px;
-  background: var(--classic-paper);
-  box-shadow: 0 10px 24px rgba(30,35,45,.12);
-}
-.flight-board[data-board-skin="classic"] .hangar-zone {
-  margin: 0;
-  border: 2px solid var(--classic-ink);
+  padding: 0;
+  border: 0;
   border-radius: 0;
-  background: var(--classic-paper);
-  box-shadow: none;
+  background: var(--classic-paper) url("assets/classic-board-reference.png") center / 100% 100% no-repeat;
+  box-shadow: 0 12px 26px rgba(30,35,45,.14);
 }
-.flight-board[data-board-skin="classic"] .hangar-zone::after { display: none; }
-.flight-board[data-board-skin="classic"] .hangar-zone.inactive { opacity: .64; }
+.flight-board[data-board-skin="classic"]::before,
+.flight-board[data-board-skin="classic"]::after {
+  position: absolute;
+  z-index: 1;
+  bottom: 0;
+  width: 27.25%;
+  height: 3.1%;
+  background: linear-gradient(to bottom,
+    var(--classic-paper) 0 29%,
+    var(--classic-ink) 29% calc(29% + 2px),
+    var(--classic-paper) calc(29% + 2px));
+  content: "";
+  pointer-events: none;
+}
+.flight-board[data-board-skin="classic"]::before { left: 0; }
+.flight-board[data-board-skin="classic"]::after { right: 0; }
+.flight-board[data-board-skin="classic"] .hangar-zone {
+  display: none;
+}
 .flight-board[data-board-skin="classic"] .track-cell.red,
 .flight-board[data-board-skin="classic"] .home-cell.red,
 .flight-board[data-board-skin="classic"] .base-cell.red { --cell-color: #e42620; --cell-deep: #e42620; }
@@ -603,54 +541,33 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .flight-board[data-board-skin="classic"] .base-cell.green { --cell-color: #078d43; --cell-deep: #078d43; }
 .flight-board[data-board-skin="classic"] .track-cell,
 .flight-board[data-board-skin="classic"] .home-cell {
-  border: 1px solid var(--classic-ink);
-  border-radius: 0;
-  background: var(--cell-color);
+  width: 5.55%;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   box-shadow: none;
 }
 .flight-board[data-board-skin="classic"] .track-cell::before,
 .flight-board[data-board-skin="classic"] .home-cell::before {
-  width: 56%;
-  background: var(--classic-hole);
-  box-shadow: inset 0 0 0 1.3px var(--classic-ink);
+  display: none;
 }
-.flight-board[data-board-skin="classic"] .home-cell[data-step="6"] { border-color: transparent; background: transparent; }
 .flight-board[data-board-skin="classic"] .base-cell {
-  border: 1.5px solid var(--classic-ink);
-  background: var(--cell-color);
+  width: 8.2%;
+  border: 0;
+  background: transparent;
   box-shadow: none;
 }
 .flight-board[data-board-skin="classic"] .start-cell::after,
-.flight-board[data-board-skin="classic"] .shortcut-cell::after { color: var(--classic-ink); }
-.flight-board[data-board-skin="classic"] .airspace-zone.green { --guide-color: #078d43; }
-.flight-board[data-board-skin="classic"] .airspace-zone.red { --guide-color: #e42620; }
-.flight-board[data-board-skin="classic"] .airspace-zone.yellow { --guide-color: #e0c800; }
-.flight-board[data-board-skin="classic"] .airspace-zone.blue { --guide-color: #087fba; }
-.flight-board[data-board-skin="classic"] .airspace-zone::after {
-  border: 1px solid var(--classic-ink);
-  border-radius: 0;
-  background: conic-gradient(from 45deg, #e42620 0 25%, #ffed12 0 50%, #087fba 0 75%, #078d43 0 100%);
-}
-.flight-board[data-board-skin="classic"] .airspace-zone::before {
-  background: var(--classic-hole);
-  box-shadow: inset 0 0 0 1.2px var(--classic-ink);
-}
-.flight-board[data-board-skin="classic"] .shortcut-guide { border-top-width: 2px; opacity: .72; }
+.flight-board[data-board-skin="classic"] .shortcut-cell::after { display: none; }
 .flight-board[data-board-skin="classic"] .goal-cell {
-  border: 2px solid var(--classic-ink);
+  width: 12%;
+  border: 0;
   border-radius: 0;
-  background: var(--classic-paper);
+  background: transparent;
   box-shadow: none;
 }
-.flight-board[data-board-skin="classic"] .goal-arrow.red { background: #e42620; }
-.flight-board[data-board-skin="classic"] .goal-arrow.yellow { background: #ffed12; }
-.flight-board[data-board-skin="classic"] .goal-arrow.blue { background: #087fba; }
-.flight-board[data-board-skin="classic"] .goal-arrow.green { background: #078d43; }
-.flight-board[data-board-skin="classic"] .goal-cell::after {
-  border-color: var(--classic-ink);
-  background: var(--classic-hole);
-  box-shadow: none;
-}
+.flight-board[data-board-skin="classic"] .goal-arrow,
+.flight-board[data-board-skin="classic"] .goal-cell::after { display: none; }
 
 .plane-token {
   --plane-x: 0px;
@@ -860,12 +777,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .flight-board { gap: 1px; padding: 4px; border-radius: 12px; box-shadow: 0 8px 19px rgba(45,61,112,.12), inset 0 0 0 2px rgba(255,255,255,.7); }
   .hangar-zone { margin: 1px; border-width: 1px; border-radius: 8px; box-shadow: inset 0 0 0 2px rgba(255,255,255,.45); }
   .hangar-zone::after { display: none; }
-  .airspace-zone { border-radius: 0; }
   .track-cell, .home-cell { border-width: 1px; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
   .track-cell::before, .home-cell::before { border-width: 1px; }
   .base-cell { border-width: 1px; box-shadow: 0 0 0 1px var(--cell-deep), 0 2px 4px rgba(45,61,112,.14); }
-  .shortcut-guide { border-top-width: 1px; }
-  .shortcut-guide::after { top: -4px; border-top-width: 3px; border-bottom-width: 3px; border-left-width: 5px; }
   .plane-token { border-width: 1px; font-size: clamp(7px, 2.6vw, 11px); }
   .move-summary { margin-top: 8px; font-size: 10px; }
   .flight-control-panel { grid-template-columns: 1fr; }
