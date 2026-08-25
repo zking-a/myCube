@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="数独"/>
 <title>数独挑战 · 轻量游戏站</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <link rel="stylesheet" href="sudoku.css?v=20260822e"/>
 </head>
 <body>
@@ -96,7 +97,7 @@
   </div>
 
   <div class="feature-strip" aria-label="数独功能">
-    <span><b>✎</b> 候选笔记</span><span><b>💡</b> 智能提示</span><span><b>↩</b> 随时撤销</span><span><b>▣</b> 自动存档</span>
+    <span><b>✎</b> 候选笔记</span><span><b><i class="fa-solid fa-lightbulb" aria-hidden="true"></i></b> 智能提示</span><span><b>↩</b> 随时撤销</span><span><b>▣</b> 自动存档</span>
   </div>
   <p class="home-tip">玩法：每一行、每一列和每个 3×3 宫内，数字 1–9 都不能重复。</p>
 </section>
@@ -110,11 +111,11 @@
       <div class="title">数独挑战</div>
     </div>
     <div class="top-actions">
-      <div class="timer" id="timerText">⏱ 00:00</div>
+      <div class="timer" id="timerText"><i class="fa-solid fa-stopwatch" aria-hidden="true"></i> 00:00</div>
       <div class="right-btns">
         <button type="button" class="icon-btn" id="fullscreenBtn" title="进入沉浸全屏" aria-label="进入沉浸全屏">⛶</button>
-        <button type="button" class="icon-btn" id="soundBtn" title="切换音效" aria-label="切换音效">🔊</button>
-        <button type="button" class="icon-btn" id="darkBtn" title="切换深色模式" aria-label="切换深色模式">🌙</button>
+        <button type="button" class="icon-btn" id="soundBtn" title="切换音效" aria-label="切换音效"><i class="fa-solid fa-volume-high" aria-hidden="true"></i></button>
+        <button type="button" class="icon-btn" id="darkBtn" title="切换深色模式" aria-label="切换深色模式"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
       </div>
     </div>
   </header>
@@ -138,17 +139,17 @@
     <aside class="control-panel" aria-label="数独工具">
       <div class="tool-label">常用工具</div>
       <div class="bottom-bar tool-grid primary-tools">
-        <button type="button" id="noteBtn" aria-pressed="false">✎ 笔记：关</button>
-        <button type="button" id="candBtn" aria-pressed="false" title="显示或隐藏自动计算的候选数">▦ 候选辅助：关</button>
+        <button type="button" id="noteBtn" aria-pressed="false"><i class="fa-solid fa-pencil" aria-hidden="true"></i> 笔记：关</button>
+        <button type="button" id="candBtn" aria-pressed="false" title="显示或隐藏自动计算的候选数"><i class="fa-solid fa-table" aria-hidden="true"></i> 候选辅助：关</button>
         <button type="button" id="undoBtn">↩ 撤销</button>
-        <button type="button" id="hintBtn">💡 提示</button>
+        <button type="button" id="hintBtn"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 提示</button>
       </div>
       <details class="advanced-tools">
         <summary>更多辅助 <span>⌄</span></summary>
         <div class="bottom-bar tool-grid secondary-tools">
-          <button type="button" id="techHintBtn" title="技巧提示">🧠 技巧</button>
+          <button type="button" id="techHintBtn" title="技巧提示"><i class="fa-solid fa-brain" aria-hidden="true"></i> 技巧</button>
           <button type="button" id="statsBtn">▥ 统计</button>
-          <button type="button" id="autoFillBtn" aria-pressed="false" title="自动填入唯一候选">⚡ 自动填入：关</button>
+          <button type="button" id="autoFillBtn" aria-pressed="false" title="自动填入唯一候选"><i class="fa-solid fa-bolt" aria-hidden="true"></i> 自动填入：关</button>
           <button type="button" id="clearBoardBtn" class="danger-tool">⌫ 清空填写</button>
         </div>
       </details>
@@ -160,8 +161,8 @@
 <!-- 2.4 统计弹窗 -->
 <div class="modal-overlay" id="statsOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="statsTitle">
   <div class="modal-box ui-modal" tabindex="-1">
-    <button type="button" class="modal-close" id="statsCloseBtn" aria-label="关闭统计">✕</button>
-    <h2 id="statsTitle">📊 我的战绩</h2>
+    <button type="button" class="modal-close" id="statsCloseBtn" aria-label="关闭统计"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <h2 id="statsTitle"><i class="fa-solid fa-chart-column" aria-hidden="true"></i> 我的战绩</h2>
     <table class="stats-table" id="statsTable">
       <thead><tr><th>难度</th><th>完成次数</th><th>最佳用时</th><th>平均用时</th></tr></thead>
       <tbody id="statsBody"></tbody>
@@ -176,8 +177,8 @@
 <!-- 2.5 技巧提示弹窗 -->
 <div class="modal-overlay" id="techHintOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="techHintTitle">
   <div class="modal-box ui-modal" tabindex="-1">
-    <button type="button" class="modal-close" id="techHintCloseBtn" aria-label="关闭技巧提示">✕</button>
-    <h2 id="techHintTitle">💡 技巧提示</h2>
+    <button type="button" class="modal-close" id="techHintCloseBtn" aria-label="关闭技巧提示"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <h2 id="techHintTitle"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 技巧提示</h2>
     <div id="techHintBody" class="tech-hint-body"></div>
     <div class="stats-btns">
       <button type="button" id="techHintDoneBtn">关闭</button>
@@ -188,8 +189,8 @@
 <!-- 2.6 分享弹窗 -->
 <div class="modal-overlay" id="shareOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="shareTitle">
   <div class="modal-box ui-modal" tabindex="-1">
-    <button type="button" class="modal-close" id="shareCloseBtn" aria-label="关闭分享">✕</button>
-    <h2 id="shareTitle">📤 分享成绩</h2>
+    <button type="button" class="modal-close" id="shareCloseBtn" aria-label="关闭分享"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    <h2 id="shareTitle"><i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i> 分享成绩</h2>
     <canvas id="shareCanvas" width="360" height="480" class="share-canvas"></canvas>
     <div class="stats-btns">
       <button type="button" id="shareDownloadBtn">保存图片</button>

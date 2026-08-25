@@ -185,7 +185,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   border-color: rgba(207,217,238,.9);
   color: #fff;
   text-align: left;
-  background: linear-gradient(135deg, #6678ff, #4459e6);
+  background: var(--ui-grad-primary);
   box-shadow: 0 12px 26px rgba(68,89,230,.22);
   cursor: pointer;
   overflow: hidden;
@@ -208,7 +208,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .flight-mode-arrow { font-size: 22px; transition: transform var(--ui-duration-fast) var(--ui-ease-standard); }
 .flight-mode-entry:hover .flight-mode-arrow { transform: translateX(3px); }
 .flight-online-entry {
-  background: linear-gradient(135deg, #28c98c, #139b6a);
+  background: var(--ui-grad-success);
   box-shadow: 0 12px 26px rgba(19,155,106,.2);
 }
 

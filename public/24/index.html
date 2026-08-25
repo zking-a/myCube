@@ -10,6 +10,7 @@
 <meta http-equiv="Expires" content="0" />
 <title>24点大挑战 · 好友实时对战</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <style>
   /* 注：本文件样式分两块——上方为联机对战/结算等专用类的原定义（.compare-*、.attr-*、.duel-*、.rpt-*、.overlay、.result-*、.act-* 等仅在此处定义，勿删），
      下方“视觉升级”块（:root 平台蓝橘变量 + 首页/对局核心类）覆盖显示。两套共存，已视觉统一，请勿整体删除旧块。 */
@@ -36,9 +37,9 @@
     margin-bottom: 14px; transition: transform .08s ease, box-shadow .15s;
   }
   .big-btn:active { transform: scale(.97); }
-  .btn-blue { background: linear-gradient(135deg,#3b8bff,#2f80ed); box-shadow: 0 6px 16px rgba(47,128,237,.35); }
-  .btn-orange { background: linear-gradient(135deg,#f6a85a,#f2994a); box-shadow: 0 6px 16px rgba(242,153,74,.35); }
-  .btn-green { background: linear-gradient(135deg,#39c46e,#27ae60); box-shadow: 0 6px 16px rgba(39,174,96,.35); }
+  .btn-blue { background: var(--ui-grad-primary); box-shadow: 0 6px 16px rgba(47,128,237,.35); }
+  .btn-orange { background: var(--ui-grad-accent); box-shadow: 0 6px 16px rgba(242,153,74,.35); }
+  .btn-green { background: var(--ui-grad-success); box-shadow: 0 6px 16px rgba(39,174,96,.35); }
   .btn-ghost { background: #eef3fb; color: var(--blue); box-shadow: none; }
   .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
   .back { background: #eef3fb; border: none; color: var(--blue); border-radius: 12px; padding: 8px 14px; font-size: 14px; cursor: pointer; font-weight: 600; flex: 0 0 auto; }
@@ -72,15 +73,15 @@
   .act-btn {
     flex: 1; border: none; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 800; cursor: pointer; color: #fff;
   }
-  .act-undo { background: linear-gradient(135deg,#f6a85a,#f2994a); }
+  .act-undo { background: var(--ui-grad-accent); }
   .act-restart { background: #eef3fb; color: var(--blue); }
   .act-skip { background: #eef3fb; color: var(--orange); }
-  .act-submit { background: linear-gradient(135deg,#39c46e,#27ae60); }
+  .act-submit { background: var(--ui-grad-success); }
 
   .feedback { min-height: 24px; text-align: center; font-size: 16px; font-weight: 700; margin: 12px 0; }
   .feedback.error { color: #eb5757; }
   .feedback.success { color: var(--green); }
-  .feedback.bad { color: #9aa6b5; }
+  .feedback.bad { color: #5b6b86; }
 
   .timer { text-align: center; font-size: 24px; font-weight: 800; color: var(--blue); margin: 4px 0 8px; }
   .timer.over { color: #eb5757; }
@@ -328,7 +329,7 @@
   .mode-copy small { font-size: 12px; font-weight: 600; opacity: .82; }
   .mode-arrow { font-size: 22px; opacity: .8; transform: translateX(0); transition: transform .15s ease; }
   .home-mode:hover .mode-arrow { transform: translateX(3px); }
-  .btn-blue { background: linear-gradient(135deg,#6678ff,#4459e6); box-shadow: 0 10px 22px rgba(68,89,230,.25); }
+  .btn-blue { background: var(--ui-grad-primary); box-shadow: 0 10px 22px rgba(68,89,230,.25); }
   .btn-orange { background: linear-gradient(135deg,#ffa667,#f47a42); box-shadow: 0 10px 22px rgba(244,122,66,.23); }
   .btn-green { background: linear-gradient(135deg,#28c98c,#139b6a); box-shadow: 0 10px 22px rgba(19,155,106,.23); }
   .btn-ghost { background: #eef1fb; color: var(--blue-deep); border: 1px solid #e2e7f5; }
@@ -414,7 +415,7 @@
   .prow.me { background: #f1f3ff; border: 1px solid #e2e6ff; padding-left: 9px; padding-right: 9px; }
   .prow .pbar { height: 11px; background: #e9edf5; }
   .prow .pbar i { background: linear-gradient(90deg,#7d8cff,#4b5fe8); }
-  .copybox button { background: linear-gradient(135deg,#6577fa,#4559df); border-radius: 11px; }
+  .copybox button { background: var(--ui-grad-primary); border-radius: 11px; }
   .room-error { border: 1px solid #ffd8d5; }
 
   .win-banner { padding: 12px; border-radius: 14px; background: #f5f7fc; color: var(--ink); }
@@ -447,7 +448,31 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   }
-</style>
+
+  /* P0-2: 内联样式收敛（消除静态 inline style，便于主题/响应式统一） */
+  .u-mb6 { margin-bottom: 6px; }
+  .u-mt8 { margin-top: 8px; }
+  .u-flex140 { flex: 1 1 140px; }
+  .u-tac { text-align: center; }
+  .u-flex-center-wrap { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .u-section-label { font-weight: 700; margin-bottom: 6px; }
+  #stages-reshuffle { margin-top: 14px; }
+  #ch-diff { color: var(--orange); font-weight: 700; font-size: 13px; }
+  #ch-result-title { font-size: 18px; font-weight: 800; }
+  #sr-final, #vres-final { color: var(--orange); }
+  #vs-server { font-size: 14px; }
+  #vs-server-save { flex: 1; }
+  #vs-server-test { flex: 1; background: var(--orange); }
+  #vs-server-msg, #vr-share-tip, #vr-role, #vres-waiting { margin-top: 8px; }
+  #vp-oppwrap { padding: 12px 14px; }
+  #vres-theircode { color: var(--ink); }
+  #vres-compare { background: var(--green); }
+  #vres-compare-out { margin-top: 10px; }
+  .duel-legend i.lg-green { background: var(--green); }
+  .duel-legend i.lg-red   { background: var(--ui-danger); }
+  .duel-legend i.lg-blue  { background: var(--blue); }
+  .duel-legend i.lg-gray  { background: #c5ccd8; }
+  </style>
 </head>
 <body>
 <div id="app">
@@ -465,13 +490,13 @@
     </div>
     <div class="home-modes">
       <button id="btn-challenge" class="big-btn btn-blue home-mode ui-button ui-button--primary">
-        <span class="mode-icon">🎯</span><span class="mode-copy"><strong>闯关挑战</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span><span class="mode-copy"><strong>闯关挑战</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-speed" class="big-btn btn-orange home-mode ui-button ui-button--accent">
-        <span class="mode-icon">⚡</span><span class="mode-copy"><strong>竞速挑战</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></span><span class="mode-copy"><strong>竞速挑战</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-vs" class="big-btn btn-green home-mode ui-button ui-button--success">
-        <span class="mode-icon">👥</span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
       </button>
     </div>
     <div class="panel rules home-rules">
@@ -496,8 +521,8 @@
     <div class="topbar"><button id="stages-back" class="back">← 返回</button><div id="stages-title" class="title">第 1 级</div></div>
     <div class="panel">
       <div id="stages-note" class="math-note"></div>
-      <div id="stages-grid" class="grid"></div>
-      <button id="stages-reshuffle" class="big-btn btn-ghost" style="margin-top:14px;">🔀 换一批题（随机）</button>
+      <div id="stages-grid" class="grid" role="list" aria-label="题目列表"></div>
+      <button id="stages-reshuffle" class="big-btn btn-ghost"><i class="fa-solid fa-shuffle" aria-hidden="true"></i> 换一批题（随机）</button>
     </div>
   </section>
 
@@ -506,35 +531,35 @@
     <div class="topbar">
       <button id="ch-back" class="back">← 退出</button>
       <div id="ch-level" class="title">第 1 级</div>
-      <span id="ch-diff" style="color:var(--orange);font-weight:700;font-size:13px;"></span>
+      <span id="ch-diff"></span>
     </div>
     <div class="panel">
-      <div class="timer" id="ch-timer">00:00</div>
-      <div class="board" id="ch-board"></div>
-      <div class="status" id="ch-status">① 点一张数字牌开始</div>
+      <div class="timer" id="ch-timer" role="timer" aria-label="用时计时">00:00</div>
+      <div class="board" id="ch-board" role="group" aria-label="题目与算式面板"></div>
+      <div class="status" id="ch-status" aria-live="polite" aria-atomic="true">① 点一张数字牌开始</div>
       <div class="op-row">
-        <button class="op-btn" id="ch-op-add">+</button>
-        <button class="op-btn" id="ch-op-sub">−</button>
-        <button class="op-btn" id="ch-op-mul">×</button>
-        <button class="op-btn" id="ch-op-div">÷</button>
+        <button class="op-btn" id="ch-op-add" aria-label="加">+</button>
+        <button class="op-btn" id="ch-op-sub" aria-label="减">−</button>
+        <button class="op-btn" id="ch-op-mul" aria-label="乘">×</button>
+        <button class="op-btn" id="ch-op-div" aria-label="除">÷</button>
       </div>
-      <div class="act-row" style="margin-bottom:6px;">
+      <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="ch-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="ch-restart">🔄 重来</button>
+        <button class="act-btn act-restart" id="ch-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
-      <div class="feedback" id="ch-feedback"></div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-        <button class="big-btn btn-ghost" id="ch-hint" style="flex:1 1 140px;">💡 提示</button>
-        <button class="big-btn btn-orange" id="ch-reveal" style="flex:1 1 140px;">📖 直接看答案</button>
+      <div class="feedback" id="ch-feedback" aria-live="polite" aria-atomic="true"></div>
+      <div class="u-flex-center-wrap">
+        <button class="big-btn btn-ghost u-flex140" id="ch-hint"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 提示</button>
+        <button class="big-btn btn-orange u-flex140" id="ch-reveal"><i class="fa-solid fa-book" aria-hidden="true"></i> 直接看答案</button>
       </div>
       <div class="hints" id="ch-hints"></div>
     </div>
 
-    <div class="overlay" id="ch-result" style="display:none;">
+    <div class="overlay" id="ch-result" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="ch-result-title">
       <div class="result-card">
-        <div id="ch-result-title" style="font-size:18px;font-weight:800;">本关完成！</div>
+        <div id="ch-result-title">本关完成！</div>
         <div class="result-stars" id="ch-result-stars">★★★</div>
-        <div class="result-info" id="ch-result-info"></div>
+        <div class="result-info" id="ch-result-info" aria-live="polite" aria-atomic="true"></div>
         <button class="big-btn btn-blue" id="ch-next">下一关 →</button>
         <button class="big-btn btn-green" id="ch-next-level" style="display:none;">进入下一大关 →</button>
         <button class="big-btn btn-ghost" id="ch-replay">重玩本关</button>
@@ -562,20 +587,20 @@
       <div class="title">第 <span id="sp-index">1</span>/<span id="sp-total">10</span> 题</div>
     </div>
     <div class="panel">
-      <div class="timer" id="sp-timer">00:00</div>
-      <div class="board" id="sp-board"></div>
-      <div class="status" id="sp-status">① 点一张数字牌开始</div>
+      <div class="timer" id="sp-timer" role="timer" aria-label="用时计时">00:00</div>
+      <div class="board" id="sp-board" role="group" aria-label="题目与算式面板"></div>
+      <div class="status" id="sp-status" aria-live="polite" aria-atomic="true">① 点一张数字牌开始</div>
       <div class="op-row">
-        <button class="op-btn" id="sp-op-add">+</button>
-        <button class="op-btn" id="sp-op-sub">−</button>
-        <button class="op-btn" id="sp-op-mul">×</button>
-        <button class="op-btn" id="sp-op-div">÷</button>
+        <button class="op-btn" id="sp-op-add" aria-label="加">+</button>
+        <button class="op-btn" id="sp-op-sub" aria-label="减">−</button>
+        <button class="op-btn" id="sp-op-mul" aria-label="乘">×</button>
+        <button class="op-btn" id="sp-op-div" aria-label="除">÷</button>
       </div>
-      <div class="act-row" style="margin-bottom:6px;">
+      <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="sp-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="sp-restart">🔄 重来</button>
+        <button class="act-btn act-restart" id="sp-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
-      <div class="feedback" id="sp-feedback"></div>
+      <div class="feedback" id="sp-feedback" aria-live="polite" aria-atomic="true"></div>
       <button class="big-btn btn-orange" id="sp-skip">跳过此题 +15 秒</button>
     </div>
   </section>
@@ -587,14 +612,14 @@
       <div class="record" id="sr-record"></div>
       <div class="stat-row"><span class="k">实际用时</span><span class="v" id="sr-actual">00:00</span></div>
       <div class="stat-row"><span class="k">罚时</span><span class="v" id="sr-penalty">+00:00</span></div>
-      <div class="stat-row"><span class="k">最终成绩</span><span class="v" id="sr-final" style="color:var(--orange);">00:00</span></div>
+      <div class="stat-row"><span class="k">最终成绩</span><span class="v" id="sr-final">00:00</span></div>
       <div class="stat-row"><span class="k">正确率</span><span class="v" id="sr-acc">0%</span></div>
       <div class="stat-row"><span class="k">答对 / 总</span><span class="v" id="sr-correct">0/10</span></div>
       <div class="stat-row"><span class="k">答错次数</span><span class="v" id="sr-wrong">0</span></div>
       <div class="stat-row"><span class="k">跳题次数</span><span class="v" id="sr-skip">0</span></div>
     </div>
     <div class="panel">
-      <div style="font-weight:700;margin-bottom:6px;">答案回顾</div>
+      <div class="u-section-label">答案回顾</div>
       <div class="review" id="sr-review"></div>
     </div>
     <button id="sr-again" class="big-btn btn-orange">再来一局</button>
@@ -635,16 +660,16 @@
         · 网络短暂中断会自动重连，并恢复当前题目与计时。
       </div>
       <details class="setting">
-        <summary>⚙️ 高级：自定义联机服务器</summary>
-        <div class="field" style="margin-top:8px;">
+        <summary><i class="fa-solid fa-gear" aria-hidden="true"></i> 高级：自定义联机服务器</summary>
+        <div class="field u-mt8">
           <label>WebSocket 地址（部署后填入，如 wss://xxx.onrender.com）</label>
-          <input id="vs-server" placeholder="留空 = 自动使用当前站点（推荐）" style="font-size:14px;" />
+          <input id="vs-server" placeholder="留空 = 自动使用当前站点（推荐）" />
         </div>
         <div class="copybox">
-          <button id="vs-server-save" style="flex:1;">保存</button>
-          <button id="vs-server-test" style="flex:1;background:var(--orange);">测试连接</button>
+          <button id="vs-server-save">保存</button>
+          <button id="vs-server-test">测试连接</button>
         </div>
-        <div id="vs-server-msg" class="hintline" style="margin-top:8px;"></div>
+        <div id="vs-server-msg" class="hintline"></div>
       </details>
     </div>
   </section>
@@ -658,20 +683,20 @@
     </div>
 
     <div class="panel">
-      <div class="hintline" style="text-align:center;">好友房间码</div>
+      <div class="hintline u-tac">好友房间码</div>
       <div class="room-code" id="vr-code">—</div>
       <div class="copybox">
         <input id="vr-link" readonly />
         <button id="vr-copy">分享邀请</button>
       </div>
-      <div class="hintline" style="margin-top:8px;" id="vr-share-tip"></div>
+      <div class="hintline" id="vr-share-tip"></div>
       <div class="room-error" id="vr-error" role="alert"></div>
     </div>
 
     <div class="panel">
       <div class="sect-title">玩家（<span id="vr-count">1</span>）· 第 <span id="vr-round">1</span> 局</div>
       <div class="plist" id="vr-players"></div>
-      <div class="hintline" id="vr-role" style="margin-top:8px;"></div>
+      <div class="hintline" id="vr-role"></div>
     </div>
 
     <button id="vr-start" class="big-btn btn-green">▶ 开始对战</button>
@@ -685,25 +710,25 @@
       <span class="vs-mini" id="vp-room">—</span>
     </div>
 
-    <div class="panel" id="vp-oppwrap" style="padding:12px 14px;">
+    <div class="panel" id="vp-oppwrap">
       <div class="plist" id="vp-players"></div>
     </div>
 
     <div class="panel">
-      <div class="timer" id="vp-timer">00:00</div>
-      <div class="board" id="vp-board"></div>
-      <div class="status" id="vp-status">① 点一张数字牌开始</div>
+      <div class="timer" id="vp-timer" role="timer" aria-label="用时计时">00:00</div>
+      <div class="board" id="vp-board" role="group" aria-label="题目与算式面板"></div>
+      <div class="status" id="vp-status" aria-live="polite" aria-atomic="true">① 点一张数字牌开始</div>
       <div class="op-row">
-        <button class="op-btn" id="vp-op-add">+</button>
-        <button class="op-btn" id="vp-op-sub">−</button>
-        <button class="op-btn" id="vp-op-mul">×</button>
-        <button class="op-btn" id="vp-op-div">÷</button>
+        <button class="op-btn" id="vp-op-add" aria-label="加">+</button>
+        <button class="op-btn" id="vp-op-sub" aria-label="减">−</button>
+        <button class="op-btn" id="vp-op-mul" aria-label="乘">×</button>
+        <button class="op-btn" id="vp-op-div" aria-label="除">÷</button>
       </div>
-      <div class="act-row" style="margin-bottom:6px;">
+      <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="vp-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="vp-restart">🔄 重来</button>
+        <button class="act-btn act-restart" id="vp-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
-      <div class="feedback" id="vp-feedback"></div>
+      <div class="feedback" id="vp-feedback" aria-live="polite" aria-atomic="true"></div>
       <button class="big-btn btn-orange" id="vp-skip">跳过此题 +15 秒</button>
     </div>
   </section>
@@ -716,16 +741,16 @@
     </div>
 
     <div class="panel">
-      <div class="win-banner" id="vres-banner">—</div>
+      <div class="win-banner" id="vres-banner" aria-live="polite" aria-atomic="true">—</div>
       <div class="plist" id="vres-rank"></div>
-      <div class="hintline" id="vres-waiting" style="margin-top:8px;"></div>
+      <div class="hintline" id="vres-waiting"></div>
     </div>
 
     <div class="panel">
       <div class="sect-title">我的成绩</div>
       <div class="stat-row"><span class="k">实际用时</span><span class="v" id="vres-actual">00:00</span></div>
       <div class="stat-row"><span class="k">罚时</span><span class="v" id="vres-penalty">+00:00</span></div>
-      <div class="stat-row"><span class="k">最终成绩</span><span class="v" id="vres-final" style="color:var(--orange);">00:00</span></div>
+      <div class="stat-row"><span class="k">最终成绩</span><span class="v" id="vres-final">00:00</span></div>
       <div class="stat-row"><span class="k">答对 / 总</span><span class="v" id="vres-correct">0/10</span></div>
     </div>
 
@@ -744,10 +769,10 @@
     <div class="panel" id="vres-duelpanel" style="display:none;">
       <div class="sect-title">关键题轨迹</div>
       <div class="duel-legend">
-        <span><i style="background:var(--green);"></i>仅你答对</span>
-        <span><i style="background:#e25550;"></i>仅对手答对</span>
-        <span><i style="background:var(--blue);"></i>双方答对</span>
-        <span><i style="background:#c5ccd8;"></i>双方未答对</span>
+        <span><i class="lg-green"></i>仅你答对</span>
+        <span><i class="lg-red"></i>仅对手答对</span>
+        <span><i class="lg-blue"></i>双方答对</span>
+        <span><i class="lg-gray"></i>双方未答对</span>
       </div>
       <div class="duel-track" id="vres-duel"></div>
     </div>
@@ -765,10 +790,10 @@
         <button id="vres-copycode">复制</button>
       </div>
       <div class="copybox">
-        <input id="vres-theircode" placeholder="粘贴对方的成绩码" style="color:var(--ink);" />
-        <button id="vres-compare" style="background:var(--green);">对比</button>
+        <input id="vres-theircode" placeholder="粘贴对方的成绩码" />
+        <button id="vres-compare">对比</button>
       </div>
-      <div id="vres-compare-out" class="hintline" style="margin-top:10px;"></div>
+      <div id="vres-compare-out" class="hintline"></div>
     </div>
 
     <div class="panel">
@@ -776,7 +801,7 @@
       <div class="review" id="vres-review"></div>
     </div>
 
-    <button id="vres-again" class="big-btn btn-green">🔁 再来一局（换新题）</button>
+    <button id="vres-again" class="big-btn btn-green"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 再来一局（换新题）</button>
     <button id="vres-home" class="big-btn btn-ghost">返回首页</button>
   </section>
 

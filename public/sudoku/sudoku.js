@@ -843,7 +843,7 @@ function updateProgress() {
 }
 
 function updateTimer() {
-  $("timerText").textContent = "⏱ " + formatDuration(seconds);
+  $("timerText").innerHTML = '<i class="fa-solid fa-stopwatch" aria-hidden="true"></i> ' + formatDuration(seconds);
 }
 
 /* ========== SECTION 8: 格子选择与拖选 ========== */
@@ -1030,17 +1030,17 @@ function syncAssistButtons() {
   const autoFillBtn = $("autoFillBtn");
 
   if (noteBtn) {
-    noteBtn.textContent = "✎ 笔记：" + (noteMode ? "开" : "关");
+    noteBtn.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i> 笔记：' + (noteMode ? "开" : "关");
     noteBtn.classList.toggle("active-btn", noteMode);
     noteBtn.setAttribute("aria-pressed", noteMode ? "true" : "false");
   }
   if (candBtn) {
-    candBtn.textContent = "▦ 候选辅助：" + (showAllCands ? "开" : "关");
+    candBtn.innerHTML = '<i class="fa-solid fa-table" aria-hidden="true"></i> 候选辅助：' + (showAllCands ? "开" : "关");
     candBtn.classList.toggle("active-btn", showAllCands);
     candBtn.setAttribute("aria-pressed", showAllCands ? "true" : "false");
   }
   if (autoFillBtn) {
-    autoFillBtn.textContent = "⚡ 自动填入：" + (autoFillMode ? "开" : "关");
+    autoFillBtn.innerHTML = '<i class="fa-solid fa-bolt" aria-hidden="true"></i> 自动填入：' + (autoFillMode ? "开" : "关");
     autoFillBtn.classList.toggle("active-btn", autoFillMode);
     autoFillBtn.setAttribute("aria-pressed", autoFillMode ? "true" : "false");
   }
@@ -1139,7 +1139,7 @@ function fillNumber(value) {
     if (board[i] !== solution[i]) hasError = true;
   });
   if (hasError) {
-    showToast("数字不对哦，再想想 🤔");
+    showToast("数字不对哦，再想想");
     playSound("error");
   } else {
     playSound("fill");
@@ -1324,7 +1324,7 @@ function showTechHint() {
   if (result) {
     showTechHintBox(result.title, result.desc);
   } else {
-    showTechHintBox("💡 技巧提示", "当前暂无简单的技巧提示。<br>试试逐格分析候选数吧！");
+    showTechHintBox('<i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 技巧提示', "当前暂无简单的技巧提示。<br>试试逐格分析候选数吧！");
   }
 }
 
@@ -1342,7 +1342,7 @@ function findHiddenSingle() {
       if (positions.length === 1) {
         const c = positions[0] % 9 + 1;
         return {
-          title: "🔍 隐式唯一（Hidden Single）",
+          title: '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
           desc: "数字 <b>" + n + "</b> 在第 <b>" + (r+1) + "</b> 行只能放在第 <b>" + c + "</b> 列。<br>" +
                 "这一行其他空格都无法容纳 " + n + "，因此它必须在这里。"
         };
@@ -1362,7 +1362,7 @@ function findHiddenSingle() {
       if (positions.length === 1) {
         const r = Math.floor(positions[0] / 9) + 1;
         return {
-          title: "🔍 隐式唯一（Hidden Single）",
+          title: '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
           desc: "数字 <b>" + n + "</b> 在第 <b>" + (c+1) + "</b> 列只能放在第 <b>" + r + "</b> 行。<br>" +
                 "这一列其他空格都无法容纳 " + n + "，因此它必须在这里。"
         };
@@ -1441,59 +1441,59 @@ function runAutoFill(showEmptyToast = true) {
 
 /* 赞美话库 */
 const PRAISE_LIB = [
-  "春风得意马蹄疾，一日看尽长安花 🌸",
-  "会当凌绝顶，一览众山小 ⛰️",
-  "长风破浪会有时，直挂云帆济沧海 ⛵",
-  "千淘万漉虽辛苦，吹尽狂沙始到金 ✨",
-  "黄沙百战穿金甲，不破楼兰终不还 💪",
-  "仰天大笑出门去，我辈岂是蓬蒿人 😎",
-  "欲穷千里目，更上一层楼 🏞️",
-  "天生我材必有用，千金散尽还复来 💰",
-  "莫愁前路无知己，天下谁人不识君 🌟",
-  "大鹏一日同风起，扶摇直上九万里 🦅",
-  "宝剑锋从磨砺出，梅花香自苦寒来 🗡️",
-  "不畏浮云遮望眼，自缘身在最高层 🏔️",
-  "我要飞得更高！🎤",
-  "阳光总在风雨后 🌈️",
-  "我相信我就是我，我相信明天 🌉",
-  "我的未来不是梦 💫",
-  "少年自有少年狂，心似骄阳万丈光 ☀️",
-  "星辰大海，是你与我 ⭐",
-  "我命由我不由天 ⚡",
-  "我们一起闯荡，在这茫茫人海 🌊",
-  "追梦赤子心，热血铸青春 🔥",
-  "逆风的方向，更适合飞翔 🕊️",
-  "YYDS！你就是永远的神 🏆",
-  "大佬大佬，给大佬递茶 🍵",
-  "格局打开！这操作我直呼内行 🧐",
-  "DNA动了！这就是天才的直觉吗 🧬",
-  "666666，这波在大气层 🌍",
-  "牛逼！我直接好家伙 🐂",
-  "神仙操作！瑞思拜 🛐",
-  "双向奔赴了属于是 💞",
-  "破防了！太强了吧 😱",
-  "你真的强！强的离谱 💪",
-  "绝了绝了！这都能对 ❓",
-  "爷青回！这就是大神吗 🎆",
-  "太强了，我愿称你为最强 👑",
-  "这波操作，妥妥的教科书级别 📖",
-  "直接起飞！🛫",
-  "真的假不了，假的真不了——你真的太强了 💎",
-  "你这脑子，是不是装了外挂 🤖",
-  "你真棒！👏",
-  "太厉害了！🎉",
-  "简直是天才！✨",
-  "无解！完全无解！💥",
-  "完美！零失误！🎯",
-  "太强了！膜拜大佬 🙇",
-  "数独小天才就是你 🧠",
-  "这速度，没谁了 🏎️",
-  "智商天花板被你击穿了 🧠",
-  "服了服了，真服了 🏅",
-  "你就是数独之神 🔮",
-  "人类智慧之光 💡",
-  "这都不叫事，你太稳了 🅾",
-  "行云流水，一气呵成 🌊",
+  "春风得意马蹄疾，一日看尽长安花 ",
+  "会当凌绝顶，一览众山小 ️",
+  "长风破浪会有时，直挂云帆济沧海 ",
+  "千淘万漉虽辛苦，吹尽狂沙始到金 ",
+  "黄沙百战穿金甲，不破楼兰终不还 ",
+  "仰天大笑出门去，我辈岂是蓬蒿人 ",
+  "欲穷千里目，更上一层楼 ️",
+  "天生我材必有用，千金散尽还复来 ",
+  "莫愁前路无知己，天下谁人不识君 ",
+  "大鹏一日同风起，扶摇直上九万里 ",
+  "宝剑锋从磨砺出，梅花香自苦寒来 ️",
+  "不畏浮云遮望眼，自缘身在最高层 ️",
+  "我要飞得更高！",
+  "阳光总在风雨后 ️",
+  "我相信我就是我，我相信明天 ",
+  "我的未来不是梦 ",
+  "少年自有少年狂，心似骄阳万丈光 ️",
+  "星辰大海，是你与我 ",
+  "我命由我不由天 ",
+  "我们一起闯荡，在这茫茫人海 ",
+  "追梦赤子心，热血铸青春 ",
+  "逆风的方向，更适合飞翔 ️",
+  "YYDS！你就是永远的神 ",
+  "大佬大佬，给大佬递茶 ",
+  "格局打开！这操作我直呼内行 ",
+  "DNA动了！这就是天才的直觉吗 ",
+  "666666，这波在大气层 ",
+  "牛逼！我直接好家伙 ",
+  "神仙操作！瑞思拜 ",
+  "双向奔赴了属于是 ",
+  "破防了！太强了吧 ",
+  "你真的强！强的离谱 ",
+  "绝了绝了！这都能对 ",
+  "爷青回！这就是大神吗 ",
+  "太强了，我愿称你为最强 ",
+  "这波操作，妥妥的教科书级别 ",
+  "直接起飞！",
+  "真的假不了，假的真不了——你真的太强了 ",
+  "你这脑子，是不是装了外挂 ",
+  "你真棒！",
+  "太厉害了！",
+  "简直是天才！",
+  "无解！完全无解！",
+  "完美！零失误！",
+  "太强了！膜拜大佬 ",
+  "数独小天才就是你 ",
+  "这速度，没谁了 ️",
+  "智商天花板被你击穿了 ",
+  "服了服了，真服了 ",
+  "你就是数独之神 ",
+  "人类智慧之光 ",
+  "这都不叫事，你太稳了 ",
+  "行云流水，一气呵成 ",
 ];
 function getRandomPraise() {
   if (usedPraiseIndices.length >= PRAISE_LIB.length) usedPraiseIndices = [];
@@ -1607,7 +1607,7 @@ function toggleDarkMode() {
   const btn  = $("darkBtn");
   body.classList.toggle("dark");
   const isDark = body.classList.contains("dark");
-  btn.textContent = isDark ? "☀️" : "🌙";
+  btn.innerHTML = '<i class="fa-solid ' + (isDark ? 'fa-sun' : 'fa-moon') + '" aria-hidden="true"></i>';
   btn.classList.toggle("active", isDark);
   try { localStorage.setItem(CONFIG.STORAGE_DARK, isDark ? "1" : "0"); } catch(e) {}
 }
@@ -1617,7 +1617,7 @@ function restoreDarkMode() {
     const v = localStorage.getItem(CONFIG.STORAGE_DARK);
     if (v === "1") {
       document.body.classList.add("dark");
-      $("darkBtn").textContent = "☀️";
+      $("darkBtn").innerHTML = '<i class="fa-solid fa-sun" aria-hidden="true"></i>';
       $("darkBtn").classList.add("active");
     }
   } catch(e) {}
@@ -1680,7 +1680,7 @@ function playSound(type) {
 
 function toggleSound() {
   soundEnabled = !soundEnabled;
-  $("soundBtn").textContent = soundEnabled ? "🔊" : "🔇";
+  $("soundBtn").innerHTML = '<i class="fa-solid ' + (soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark') + '" aria-hidden="true"></i>';
   try { localStorage.setItem(CONFIG.STORAGE_SOUND, soundEnabled ? "1" : "0"); } catch(e) {}
 }
 
@@ -1689,7 +1689,7 @@ function restoreSoundSetting() {
     const v = localStorage.getItem(CONFIG.STORAGE_SOUND);
     if (v === "0") {
       soundEnabled = false;
-      $("soundBtn").textContent = "🔇";
+      $("soundBtn").innerHTML = '<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>';
     }
   } catch(e) {}
 }
@@ -2137,7 +2137,7 @@ function checkWinAndFinish() {
   lastPraiseText = praiseText;            // 保存，供分享复用
   $("finishMsg").style.display = "block";
   const finishMsg = $("finishMsg");
-  finishMsg.textContent = "🎉 " + praiseText + " · 用时 " + formatDuration(seconds);
+  finishMsg.textContent = praiseText + " · 用时 " + formatDuration(seconds);
   const shareButton = document.createElement("button");
   shareButton.type = "button";
   shareButton.className = "finish-share-btn";
@@ -2157,7 +2157,7 @@ function finishCollabGame() {
   lastPraiseText = praiseText;
   const finishMsg = $("finishMsg");
   finishMsg.style.display = "block";
-  finishMsg.textContent = "🎉 共同完成！" + praiseText + " · 用时 " + formatDuration(seconds);
+  finishMsg.textContent = "共同完成！" + praiseText + " · 用时 " + formatDuration(seconds);
   launchFireworks();
   playSound("complete");
   recordStats(currentDifficulty, seconds);

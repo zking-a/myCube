@@ -7,6 +7,7 @@
   <meta name="description" content="中国跳棋玩法大厅，支持人机对战、本地双人和好友对战。">
   <title>中国跳棋 · 选择玩法</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <link rel="stylesheet" href="checkers.css?v=20260822b">
   <script src="lobby.js?v=20260822c" defer></script>
 </head>
@@ -39,7 +40,7 @@
 
       <div class="mode-menu">
         <button type="button" class="mode-entry ai-entry ui-button" id="selectAiBtn" aria-expanded="false" aria-controls="aiConfig">
-          <span class="mode-icon" aria-hidden="true">🤖</span>
+          <span class="mode-icon" aria-hidden="true"><i class="fa-solid fa-robot" aria-hidden="true"></i></span>
           <span class="mode-copy"><span class="mode-kicker">SOLO</span><span class="mode-entry-title">人机对战</span><span class="mode-entry-desc">磨练路线和连续跳跃</span></span>
           <span class="mode-arrow" aria-hidden="true">→</span>
         </button>
@@ -54,13 +55,13 @@
         </section>
 
         <button type="button" class="mode-entry local-entry ui-button" id="startLocalBtn">
-          <span class="mode-icon" aria-hidden="true">👥</span>
+          <span class="mode-icon" aria-hidden="true"><i class="fa-solid fa-users" aria-hidden="true"></i></span>
           <span class="mode-copy"><span class="mode-kicker">TOGETHER</span><span class="mode-entry-title" id="startLocalLabel">本地双人</span><span class="mode-entry-desc">一台设备，固定红方视角</span></span>
           <span class="mode-arrow" aria-hidden="true">→</span>
         </button>
 
         <button type="button" class="mode-entry online-entry ui-button" id="selectOnlineBtn" aria-expanded="false" aria-controls="onlineCard">
-          <span class="mode-icon" aria-hidden="true">🌐</span>
+          <span class="mode-icon" aria-hidden="true"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i></span>
           <span class="mode-copy"><span class="mode-kicker">ONLINE</span><span class="mode-entry-title">好友对战</span><span class="mode-entry-desc">创建房间，和朋友实时对战</span></span>
           <span class="mode-arrow" aria-hidden="true">→</span>
         </button>

@@ -428,7 +428,8 @@ function resetGame(skipConfirm) {
 
 function toggleSound() {
   soundEnabled = !soundEnabled; safeSet(CONFIG.SOUND_KEY, soundEnabled ? '1' : '0');
-  $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); $('soundBtn').setAttribute('aria-label', soundEnabled ? '关闭音效' : '开启音效');
+  var soundBtnEl = $('soundBtn');
+  if (soundBtnEl) { soundBtnEl.innerHTML = '<i class="fa-solid ' + (soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark') + '" aria-hidden="true"></i>'; soundBtnEl.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); soundBtnEl.setAttribute('aria-label', soundEnabled ? '关闭音效' : '开启音效'); }
 }
 
 function websocketUrl() { return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/checkers-ws'; }
@@ -519,9 +520,10 @@ function init() {
   const requestedLevel = launchParams.get('level'); aiLevel = AI_LEVELS.includes(requestedLevel) ? requestedLevel : (AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel); viewPlayer = 'red';
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
-  $('soundBtn').textContent = soundEnabled ? '🔊' : '🔇'; $('soundBtn').setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
+  var soundBtnEl = $('soundBtn');
+  if (soundBtnEl) { soundBtnEl.innerHTML = '<i class="fa-solid ' + (soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark') + '" aria-hidden="true"></i>'; soundBtnEl.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); }
   $('onlineRoomBar').hidden = mode !== 'online';
-  $('modeBadge').textContent = mode === 'ai' ? '🤖 人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '👥 本地双人' : '🌐 好友对战');
+  $('modeBadge').textContent = mode === 'ai' ? '人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '本地双人' : '好友对战');
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 

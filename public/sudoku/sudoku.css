@@ -3,6 +3,7 @@
 
 /* ── 1.1 CSS 变量（浅色主题默认值）── */
 :root{
+  /* P1-1: 浅色变量已对齐 ui-foundation token；下方 body.dark 块为硬编码（foundation 暂无深色 token，保留以支撑深色主题）。语义游戏色(error/multi/same-num 等) 为有意本地色，不强制迁移。 */
   --bg-gradient:
     radial-gradient(circle at 10% 6%, rgba(91,108,255,.17), transparent 28%),
     radial-gradient(circle at 92% 18%, rgba(255,159,100,.16), transparent 30%),
@@ -11,40 +12,40 @@
   --bg-cell: var(--ui-surface);
   --bg-given: #f1f5f9;
   --bg-board: #f8fafc;
-  --border-board: #3347d8;
-  --border-cell: #e2e8f0;
+  --border-board: var(--ui-primary-strong);
+  --border-cell: var(--ui-border);
   --text-primary: var(--ui-text);
   --text-secondary: var(--ui-text-secondary);
   --text-muted: var(--ui-text-muted);
   --accent: var(--ui-primary);
   --accent-light: var(--ui-primary-soft);
   --accent-mid: var(--ui-accent);
-  --highlight: #fff3e6;
+  --highlight: var(--ui-accent-soft);
   --same-num: #e0f2fe;
   --same-num-ink: #3f51d7;
   --same-num-border: rgba(63,81,215,.28);
   --candidate-related: #f2f5ff;
-  --candidate-ring: #5668f5;
+  --candidate-ring: var(--ui-primary);
   --candidate-ring-bg: rgba(86,104,245,.14);
   --candidate-ring-border: rgba(86,104,245,.42);
   --error-bg: #ffe0e0;
   --error-text: #e11d48;
   --multi-bg: #ffe3cf;
-  --multi-border: #ff8a4c;
+  --multi-border: var(--ui-accent);
   --drag-bg: rgba(255,138,76,.08);
-  --drag-border: #ff8a4c;
-  --btn-bg: #fff;
-  --btn-border: #e2e8f0;
-  --btn-text: #1e293b;
+  --drag-border: var(--ui-accent);
+  --btn-bg: var(--ui-surface);
+  --btn-border: var(--ui-border);
+  --btn-text: var(--ui-text);
   --btn-hover: #f3f4fb;
-  --keypad-remain: #94a3b8;
+  --keypad-remain: var(--ui-text-muted);
   --keypad-used: #f1f5f9;
   --keypad-used-text: #cbd5e1;
   --progress-bg: #e0e0e0;
-  --progress-fill: #f47a42;
+  --progress-fill: #c2410c;
   --modal-overlay: rgba(15,23,42,.22);
-  --modal-bg: #fff;
-  --modal-text: #3347d8;
+  --modal-bg: var(--ui-surface);
+  --modal-text: var(--ui-primary-strong);
   --stats-even: #f8fafc;
   --toast-bg: rgba(255,77,79,.92);
   --toast-border: rgba(255,107,107,.6);
@@ -55,45 +56,27 @@
 
 /* ── 1.2 深色主题 ── */
 body.dark{
+  /* 仅保留 sudoku 语义专属深色色；generic 变量(--bg-card/--text-primary/--accent/--btn-* 等)
+     其浅色定义已指向 --ui-* token，进入 body.dark 时自动解析为下方 foundation 深色值。 */
   --bg-gradient: #0f172a;
-  --bg-card: #1e293b;
-  --bg-cell: #334155;
   --bg-given: #1e293b;
   --bg-board: #0f172a;
-  --border-board: #6f7dff;
-  --border-cell: #475569;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --accent: #6f7dff;
-  --accent-light: #20284f;
-  --accent-mid: #ff9a5c;
-  --highlight: #3a2c1e;
   --same-num: #1e3a5f;
   --same-num-ink: #aeb8ff;
   --same-num-border: rgba(103,232,249,.30);
   --candidate-related: #25324a;
-  --candidate-ring: #6f7dff;
   --candidate-ring-bg: rgba(255,154,92,.16);
   --candidate-ring-border: rgba(255,154,92,.46);
   --error-bg: #3b1515;
   --error-text: #f87171;
   --multi-bg: #5a3318;
-  --multi-border: #ff9a5c;
   --drag-bg: rgba(255,154,92,.15);
-  --drag-border: #ff9a5c;
-  --btn-bg: #334155;
-  --btn-border: #475569;
-  --btn-text: #e2e8f0;
   --btn-hover: #475569;
-  --keypad-remain: #64748b;
   --keypad-used: #1e293b;
   --keypad-used-text: #475569;
   --progress-bg: #334155;
   --progress-fill: #6f7dff;
   --modal-overlay: rgba(2,6,23,.52);
-  --modal-bg: #1e293b;
-  --modal-text: #e2e8f0;
   --stats-even: #273548;
   --toast-bg: rgba(220,38,38,.9);
   --toast-border: rgba(248,113,113,.5);
@@ -105,7 +88,7 @@ body.dark{
 /* ── 1.3 基础布局 ── */
 *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html,body{ margin:0; padding:0; }
-html{ background:#eef3ff; -webkit-text-size-adjust:100%; height:100%; }
+html{ background: var(--ui-canvas); -webkit-text-size-adjust:100%; height:100%; }
 body{
   background: var(--bg-gradient);
   font-family: var(--ui-font-sans);
@@ -122,9 +105,9 @@ body{
 .home-nav{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .home-stats{ padding:9px 13px; border:1px solid rgba(86,104,245,.16); border-radius:var(--ui-radius-sm); color:#3347d8; background:rgba(255,255,255,.72); font-weight:800; cursor:pointer; }
 .home-hero{ padding:22px 12px 20px; text-align:center; }
-.home-logo{ display:grid; width:82px; height:82px; margin:0 auto 14px; place-items:center; border-radius:26px; color:#fff; font-size:34px; font-weight:950; background:linear-gradient(145deg,#ffa667,#f47a42); box-shadow:0 17px 34px rgba(86,104,245,.24),inset 0 1px 0 rgba(255,255,255,.45); }
+.home-logo{ display:grid; width:82px; height:82px; margin:0 auto 14px; place-items:center; border-radius:26px; color:#fff; font-size:34px; font-weight:950; background:var(--ui-grad-accent); box-shadow:0 17px 34px rgba(86,104,245,.24),inset 0 1px 0 rgba(255,255,255,.45); }
 .home-logo span{ transform:translateY(-1px); }
-.home-eyebrow{ color:#f47a42; font-size:10px; font-weight:900; letter-spacing:2px; text-transform:uppercase; }
+.home-eyebrow{ color:#c2410c; font-size:10px; font-weight:900; letter-spacing:2px; text-transform:uppercase; }
 .home-hero h1{ margin:4px 0 7px; color:var(--text-primary); font-size:clamp(28px,6vw,38px); letter-spacing:-.7px; }
 .home-hero p{ margin:0; color:var(--text-secondary); font-size:14px; }
 .resume-card,.new-game-card{ border:1px solid rgba(218,226,241,.92); background:rgba(255,255,255,.92); box-shadow:0 14px 34px rgba(45,61,112,.09); }
@@ -133,11 +116,11 @@ body{
 .resume-kicker{ color:#e07a2a; font-size:9px; font-weight:900; letter-spacing:.5px; }
 .resume-copy strong{ overflow:hidden; color:var(--text-primary); font-size:15px; line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
 .resume-copy>span:last-child{ overflow:hidden; color:var(--text-secondary); font-size:11px; line-height:1.3; text-overflow:ellipsis; white-space:nowrap; }
-.resume-card button{ display:inline-flex; min-height:40px; flex:0 0 auto; padding:9px 12px; align-items:center; justify-content:center; border:0; border-radius:12px; color:#fff; background:linear-gradient(135deg,#ff8a4c,#e8692c); font-size:12px; font-weight:900; cursor:pointer; box-shadow:0 6px 14px rgba(86,104,245,.18); }
+.resume-card button{ display:inline-flex; min-height:40px; flex:0 0 auto; padding:9px 12px; align-items:center; justify-content:center; border:0; border-radius:12px; color:#fff; background:var(--ui-grad-accent); font-size:12px; font-weight:900; cursor:pointer; box-shadow:0 6px 14px rgba(86,104,245,.18); }
 .resume-card button b{ margin-left:6px; font-size:15px; }
 .new-game-card{ padding:20px; border-radius:23px; }
 .section-heading{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:15px; }
-.section-heading span{ color:#f47a42; font-size:10px; font-weight:900; }
+.section-heading span{ color:#c2410c; font-size:10px; font-weight:900; }
 .section-heading h2{ margin:3px 0 0; color:var(--text-primary); font-size:20px; }
 .section-heading .unique-badge{ padding:5px 9px; border-radius:999px; color:#e8692c; background:#fff3e6; white-space:nowrap; }
 .difficulty-cards{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
@@ -146,12 +129,12 @@ body{
 .difficulty-card b{ font-size:15px; }
 .difficulty-card span{ color:var(--text-secondary); font-size:11px; }
 .difficulty-card small{ color:var(--text-muted); font-size:9px; }
-.difficulty-card.active{ border-color:#f47a42; color:#e8692c; background:#fff3e6; box-shadow:0 0 0 3px rgba(255,154,92,.12); }
-.start-game-btn{ display:flex; width:100%; margin-top:14px; padding:14px 18px; align-items:center; justify-content:center; gap:12px; border:0; border-radius:14px; color:#fff; background:linear-gradient(135deg,#6678ff,#4459e6); box-shadow:0 10px 22px rgba(68,89,230,.22); font-size:15px; font-weight:900; cursor:pointer; }
+.difficulty-card.active{ border-color:#c2410c; color:#e8692c; background:#fff3e6; box-shadow:0 0 0 3px rgba(255,154,92,.12); }
+.start-game-btn{ display:flex; width:100%; margin-top:14px; padding:14px 18px; align-items:center; justify-content:center; gap:12px; border:0; border-radius:14px; color:#fff; background:var(--ui-grad-primary); box-shadow:0 10px 22px rgba(68,89,230,.22); font-size:15px; font-weight:900; cursor:pointer; }
 .start-game-btn span{ font-size:19px; }
 .feature-strip{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; }
 .feature-strip span{ padding:10px 6px; border:1px solid rgba(218,226,241,.84); border-radius:13px; color:var(--text-secondary); text-align:center; font-size:11px; font-weight:700; background:rgba(255,255,255,.68); }
-.feature-strip b{ color:#f47a42; }
+.feature-strip b{ color:#c2410c; }
 .home-tip{ margin:13px 0 0; color:var(--text-muted); font-size:11px; line-height:1.6; text-align:center; }
 
 .game-screen{ width:100%; }
@@ -355,7 +338,7 @@ body{
   box-shadow: 0 1px 4px rgba(86,104,245,.08); transition: all .12s;
   font-weight: 600;
 }
-.bottom-bar .primary-tool{ flex:1 1 120px; background:linear-gradient(135deg,#6678ff,#4459e6); border-color:transparent; color:#fff; box-shadow:0 8px 18px rgba(68,89,230,.22); }
+.bottom-bar .primary-tool{ flex:1 1 120px; background:var(--ui-grad-primary); border-color:transparent; color:#fff; box-shadow:0 8px 18px rgba(68,89,230,.22); }
 .tool-label{ width:min(506px,100%); margin:13px auto 2px; color:var(--text-muted); font-size:11px; font-weight:800; letter-spacing:.5px; }
 .tool-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
 .tool-grid button{ min-width:0; min-height:44px; padding:9px 5px; font-size:12px; }
@@ -369,7 +352,7 @@ body{
 .secondary-tools .danger-tool{ color:var(--error-text); }
 .tech-hint-body{ font-size:14px; line-height:1.8; color:var(--text-primary); padding:10px 0; }
 .share-canvas{ display:block; width:100%; border-radius:12px; margin:10px 0; }
-.finish-share-btn{ margin-top:9px; padding:7px 18px; border:0; border-radius:9px; background:linear-gradient(135deg,#6678ff,#4459e6); color:#fff; font-size:14px; font-weight:800; cursor:pointer; }
+.finish-share-btn{ margin-top:9px; padding:7px 18px; border:0; border-radius:9px; background:var(--ui-grad-primary); color:#fff; font-size:14px; font-weight:800; cursor:pointer; }
 .platform-back:focus-visible,.icon-btn:focus-visible,.bottom-bar button:focus-visible,.keypad button:focus-visible{ outline:3px solid rgba(86,104,245,.28); outline-offset:2px; }
 .cell:focus-visible:not(.selected){ outline:3px solid rgba(86,104,245,.38); outline-offset:-3px; }
 .bottom-bar button:active{ transform: scale(.95); }
@@ -593,8 +576,8 @@ body.dark .advanced-tools{ background:rgba(15,23,42,.28); }
 /* ── 24 点式大厅：先选择继续或新局，再展开难度 ── */
 .sudoku-home{width:min(560px,100%)}
 .home-hero{display:flex;align-items:center;gap:17px;margin:16px 2px 22px;padding:0;text-align:left}.home-logo{width:80px;height:88px;flex:0 0 auto;margin:0;border-radius:24px;font-size:34px}.home-heading{min-width:0}.home-eyebrow{display:block;font-size:10px}.home-hero h1{margin:4px 0 5px;font-size:29px;line-height:1.15}.home-hero p{font-size:13px;line-height:1.55}
-.sudoku-menu{display:grid;gap:11px}.resume-entry{position:relative;min-height:80px;margin:0;padding:14px 18px;border:1px solid rgba(255,255,255,.42);border-radius:17px;color:#fff;overflow:hidden;background:linear-gradient(135deg,#6678ff,#4459e6);box-shadow:0 12px 24px rgba(38,52,103,.14)}.resume-entry::after{position:absolute;right:-57px;top:-55px;width:116px;height:116px;border-radius:50%;background:rgba(255,255,255,.13);content:""}.resume-icon{position:relative;z-index:1;display:grid;width:45px;height:45px;place-items:center;flex:0 0 auto;margin-right:13px;border-radius:14px;color:#fff;background:rgba(255,255,255,.18);font-size:23px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}.resume-copy{position:relative;z-index:1}.resume-kicker{color:rgba(255,255,255,.76);font-size:9px;letter-spacing:1.4px}.resume-copy strong{color:#fff;font-size:18px}.resume-copy>span:last-child{color:rgba(255,255,255,.82);font-size:11px}.resume-entry button{position:relative;z-index:1;min-height:42px;border:1px solid rgba(255,255,255,.28);border-radius:12px;color:#fff;background:rgba(255,255,255,.16);box-shadow:none}.resume-entry button:hover{background:rgba(255,255,255,.25)}
-.sudoku-entry{position:relative;display:grid;width:100%;min-height:80px;padding:14px 18px;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;border:1px solid rgba(255,255,255,.42);border-radius:17px;color:#fff;text-align:left;cursor:pointer;overflow:hidden;background:linear-gradient(135deg,#ffa667,#f47a42);box-shadow:0 12px 24px rgba(144,78,38,.18);transition:transform .15s ease,box-shadow .15s ease}.sudoku-entry::after{position:absolute;right:-57px;top:-55px;width:116px;height:116px;border-radius:50%;background:rgba(255,255,255,.13);content:""}.sudoku-entry:hover{transform:translateY(-2px);box-shadow:0 16px 29px rgba(144,78,38,.23)}.sudoku-entry:active{transform:scale(.98)}.sudoku-entry-icon{position:relative;z-index:1;display:grid;width:45px;height:45px;place-items:center;border-radius:14px;color:#fff;background:rgba(255,255,255,.18);font-size:23px;font-weight:950;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}.sudoku-entry-copy{position:relative;z-index:1;display:flex;min-width:0;flex-direction:column;gap:2px}.sudoku-entry-kicker{color:rgba(255,255,255,.76);font-size:9px;font-weight:900;letter-spacing:1.6px}.sudoku-entry-title{font-size:18px;font-weight:900;line-height:1.2}.sudoku-entry-desc{overflow:hidden;color:rgba(255,255,255,.82);font-size:11px;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.sudoku-entry-arrow{position:relative;z-index:1;font-size:22px;opacity:.82;transition:transform .15s ease}.sudoku-entry:hover .sudoku-entry-arrow{transform:translateX(3px)}
+.sudoku-menu{display:grid;gap:11px}.resume-entry{position:relative;min-height:80px;margin:0;padding:14px 18px;border:1px solid rgba(255,255,255,.42);border-radius:17px;color:#fff;overflow:hidden;background:var(--ui-grad-primary);box-shadow:0 12px 24px rgba(38,52,103,.14)}.resume-entry::after{position:absolute;right:-57px;top:-55px;width:116px;height:116px;border-radius:50%;background:rgba(255,255,255,.13);content:""}.resume-icon{position:relative;z-index:1;display:grid;width:45px;height:45px;place-items:center;flex:0 0 auto;margin-right:13px;border-radius:14px;color:#fff;background:rgba(255,255,255,.18);font-size:23px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}.resume-copy{position:relative;z-index:1}.resume-kicker{color:rgba(255,255,255,.76);font-size:9px;letter-spacing:1.4px}.resume-copy strong{color:#fff;font-size:18px}.resume-copy>span:last-child{color:rgba(255,255,255,.82);font-size:11px}.resume-entry button{position:relative;z-index:1;min-height:42px;border:1px solid rgba(255,255,255,.28);border-radius:12px;color:#fff;background:rgba(255,255,255,.16);box-shadow:none}.resume-entry button:hover{background:rgba(255,255,255,.25)}
+.sudoku-entry{position:relative;display:grid;width:100%;min-height:80px;padding:14px 18px;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;border:1px solid rgba(255,255,255,.42);border-radius:17px;color:#fff;text-align:left;cursor:pointer;overflow:hidden;background:var(--ui-grad-accent);box-shadow:0 12px 24px rgba(144,78,38,.18);transition:transform .15s ease,box-shadow .15s ease}.sudoku-entry::after{position:absolute;right:-57px;top:-55px;width:116px;height:116px;border-radius:50%;background:rgba(255,255,255,.13);content:""}.sudoku-entry:hover{transform:translateY(-2px);box-shadow:0 16px 29px rgba(144,78,38,.23)}.sudoku-entry:active{transform:scale(.98)}.sudoku-entry-icon{position:relative;z-index:1;display:grid;width:45px;height:45px;place-items:center;border-radius:14px;color:#fff;background:rgba(255,255,255,.18);font-size:23px;font-weight:950;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}.sudoku-entry-copy{position:relative;z-index:1;display:flex;min-width:0;flex-direction:column;gap:2px}.sudoku-entry-kicker{color:rgba(255,255,255,.76);font-size:9px;font-weight:900;letter-spacing:1.6px}.sudoku-entry-title{font-size:18px;font-weight:900;line-height:1.2}.sudoku-entry-desc{overflow:hidden;color:rgba(255,255,255,.82);font-size:11px;font-weight:650;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}.sudoku-entry-arrow{position:relative;z-index:1;font-size:22px;opacity:.82;transition:transform .15s ease}.sudoku-entry:hover .sudoku-entry-arrow{transform:translateX(3px)}
 .new-game-card{margin:-3px 0 3px;padding:15px 16px 16px;border:1px solid #ffdccc;border-top:0;border-radius:0 0 17px 17px;background:var(--bg-card);box-shadow:0 10px 22px rgba(38,52,103,.08);animation:sudokuMenuIn .18s ease both}.new-game-card .section-heading{margin-bottom:11px}.new-game-card .section-heading>div>span{font-size:9px}.new-game-card .section-heading h2{font-size:17px}.new-game-card .unique-badge{font-size:9px}.new-game-card .difficulty-cards{gap:6px}.new-game-card .difficulty-card{min-height:82px;padding:9px 5px;border-radius:12px}.new-game-card .difficulty-card b{font-size:13px}.new-game-card .difficulty-card span{font-size:10px}.new-game-card .difficulty-card small{font-size:8px}.new-game-card .start-game-btn{min-height:46px;margin-top:11px;border-radius:13px;font-size:13px}@keyframes sudokuMenuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 .sudoku-home .feature-strip{margin-top:14px}.sudoku-home .feature-strip span{padding:11px 6px;font-size:10px}.home-tip{margin:12px 7px 0;font-size:10px}
 @media(max-width:420px){.page-shell{padding:14px 12px calc(34px + env(safe-area-inset-bottom))}.home-hero{gap:13px;margin:13px 1px 19px}.home-logo{width:68px;height:76px;border-radius:21px;font-size:31px}.home-hero h1{font-size:25px}.home-hero p{font-size:11px}.resume-entry,.sudoku-entry{min-height:74px;padding:13px 15px}.resume-icon,.sudoku-entry-icon{width:42px;height:42px;font-size:21px}.resume-copy strong,.sudoku-entry-title{font-size:17px}.new-game-card{padding:13px 14px 14px}.new-game-card .difficulty-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.new-game-card .difficulty-card:last-child{grid-column:1/-1;min-height:58px}.sudoku-home .feature-strip{grid-template-columns:1fr 1fr}}
@@ -605,8 +588,8 @@ body.dark .advanced-tools{ background:rgba(15,23,42,.28); }
 @media (prefers-reduced-motion:reduce){ *,*::before,*::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
 
 /* ── 好友协作：沿用大厅入口与棋局面板的轻竞技层级 ── */
-.collab-resume-entry{background:linear-gradient(135deg,#4f8ee8,#3b66c7);box-shadow:0 12px 24px rgba(38,78,150,.16)}
-.collab-entry{background:linear-gradient(135deg,#6277ee,#4a55ce);box-shadow:0 12px 24px rgba(48,58,152,.18)}
+.collab-resume-entry{background:var(--ui-grad-primary);box-shadow:0 12px 24px rgba(38,78,150,.16)}
+.collab-entry{background:var(--ui-grad-primary);box-shadow:0 12px 24px rgba(48,58,152,.18)}
 .collab-entry:hover{box-shadow:0 16px 29px rgba(48,58,152,.24)}
 .collab-card{border-color:#d9ddff;background:linear-gradient(180deg,#fff,#f8f9ff)}
 .compact-difficulty .difficulty-card{min-height:66px}.compact-difficulty .difficulty-card small{display:none}

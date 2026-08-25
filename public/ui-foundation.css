@@ -22,9 +22,20 @@
   --ui-warning: #f6c84c;
   --ui-danger: #e85d64;
   --ui-text: #18233d;
-  --ui-text-secondary: #71809a;
+  --ui-text-secondary: #5b6b86;
   --ui-text-muted: #94a3b8;
+
+  /* P0-1 渐变按钮 Token：白字压端部色均 >=4.5:1 (WCAG AA) */
+  --ui-grad-primary: linear-gradient(135deg, #4459e6, #3347d8);
+  --ui-grad-success: linear-gradient(135deg, #128f5a, #0f7a52);
+  --ui-grad-accent:  linear-gradient(135deg, #c2410c, #b8430f);
+  --ui-grad-danger:  linear-gradient(135deg, #cf3b46, #c0392b);
   --ui-text-disabled: #b6c0cf;
+
+  /* 奖牌/徽章语义色（金属色，不随深色主题改变） */
+  --ui-medal-gold: #e8b923;
+  --ui-medal-silver: #c4cdda;
+  --ui-medal-bronze: #cd7f32;
 
   /* Typography */
   --ui-font-sans: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
@@ -52,6 +63,34 @@
   --ui-duration-fast: 120ms;
   --ui-duration-base: 180ms;
   --ui-ease-standard: cubic-bezier(.2, .8, .3, 1);
+}
+
+/* 深色主题：所有引用 --ui-* token 的组件在进入 body.dark 时自动继承，
+   无需各游戏重复声明 generic 变量（消除 token drift）。 */
+body.dark {
+  --ui-canvas: #0b1220;
+  --ui-canvas-warm: #1a1206;
+  --ui-surface: #1e293b;
+  --ui-surface-raised: rgba(30, 41, 59, .92);
+  --ui-surface-soft: #334155;
+  --ui-surface-selected: #2a3658;
+  --ui-border: #334155;
+  --ui-border-strong: #475569;
+  --ui-primary: #7c8aff;
+  --ui-primary-strong: #8b95ff;
+  --ui-primary-soft: #20284f;
+  --ui-accent: #ff9a5c;
+  --ui-accent-soft: #3a2c1e;
+  --ui-success: #2ee0a0;
+  --ui-warning: #f6c84c;
+  --ui-danger: #f87171;
+  --ui-text: #e2e8f0;
+  --ui-text-secondary: #94a3b8;
+  --ui-text-muted: #64748b;
+  --ui-text-disabled: #475569;
+  --ui-focus-ring: rgba(124, 138, 255, .45);
+  --ui-shadow-sm: 0 8px 20px rgba(0, 0, 0, .35);
+  --ui-shadow-md: 0 14px 34px rgba(0, 0, 0, .45);
 }
 
 button, input, select, textarea, summary { font: inherit; }
@@ -84,7 +123,7 @@ button, input, select, textarea, summary { font: inherit; }
 
 .ui-button--primary {
   color: #fff;
-  background: linear-gradient(135deg, #6678ff, #4459e6);
+  background: var(--ui-grad-primary);
   box-shadow: 0 10px 22px rgba(68, 89, 230, .22);
 }
 
@@ -96,19 +135,19 @@ button, input, select, textarea, summary { font: inherit; }
 
 .ui-button--accent {
   color: #fff;
-  background: linear-gradient(135deg, #ffa667, var(--ui-accent));
+  background: var(--ui-grad-accent);
   box-shadow: 0 10px 22px rgba(244, 122, 66, .20);
 }
 
 .ui-button--success {
   color: #fff;
-  background: linear-gradient(135deg, #28c98c, #139b6a);
+  background: var(--ui-grad-success);
   box-shadow: 0 10px 22px rgba(19, 155, 106, .20);
 }
 
 .ui-button--danger {
   color: #fff;
-  background: linear-gradient(135deg, #f07b80, var(--ui-danger));
+  background: var(--ui-grad-danger);
 }
 
 .ui-button:not(:disabled):active { transform: scale(.98); }
@@ -142,3 +181,24 @@ button, input, select, textarea, summary { font: inherit; }
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ===== 图标字体（Font Awesome 6 Free，由 CDN 引入 all.min.css）=====
+   用法：<i class="fa-solid fa-xxx"></i>；图标自动继承 currentColor，
+   深色模式（body.dark）下随 --ui-text 自动反色，无需额外适配。 */
+.fa-solid, .fa-regular, .fas, .fa-brands { vertical-align: -0.075em; line-height: 1; }
+
+/* 图标位于文字之前时，与文字留出间距（仅对“图标+文字”型显式列出，避免误伤纯图标按钮） */
+.ui-button > i.fa-solid,
+.rpt-icon > i,
+#timerText > i,
+.summary > i.fa-solid { margin-right: 6px; }
+
+/* 纯图标按钮（无文字）：取消间距并微调尺寸 */
+.modal-close > i,
+.sound-button > i,
+.icon-btn > i,
+.medal > i,
+.hero-star > i,
+.mode-icon > i,
+.flight-mode-icon > i { margin-right: 0; }
+.sound-button > i, .icon-btn > i { font-size: 1.05em; }
