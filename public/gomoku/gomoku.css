@@ -10,7 +10,19 @@
 html, body { min-height: 100%; margin: 0; }
 body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radial-gradient(circle at 12% 6%, rgba(91, 108, 255, .15), transparent 32%), radial-gradient(circle at 90% 12%, rgba(255, 159, 100, .16), transparent 30%), linear-gradient(155deg, #edf2ff 0%, #f7f9ff 52%, #fff7ef 100%); }
 
-.gomoku-lobby-shell, .gomoku-shell { width: 100%; max-width: var(--ui-lobby-max-width); margin: 0 auto; padding: 16px; }
+.gomoku-lobby-shell {
+  width: 100%;
+  max-width: var(--ui-lobby-max-width);
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.gomoku-shell {
+  width: 100%;
+  max-width: min(1080px, calc(100vw - 24px));
+  margin: 0 auto;
+  padding: 16px;
+}
 .gomoku-lobby-page, .gomoku-play-page { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
 
 .lobby-nav {
@@ -142,6 +154,20 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   font-weight: 800;
 }
 
+.gomoku-nav-btn {
+  min-width: 98px;
+  border-color: var(--ui-border-strong);
+  color: var(--ui-primary-strong);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+  border-radius: var(--ui-radius-md);
+}
+.gomoku-nav-btn:hover,
+.gomoku-nav-btn:focus-visible {
+  border-color: #93a5ff;
+  background: linear-gradient(145deg, #f8faff, #edf2ff);
+}
+
 .turn-panel {
   display: grid;
   margin-top: 10px;
@@ -158,7 +184,7 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 .gomoku-layout {
   margin-top: 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   gap: 12px;
   align-items: start;
 }
@@ -214,6 +240,51 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 }
 .control-grid button { min-height: 40px; }
 
+.gomoku-control-btn {
+  border-radius: var(--ui-radius-md);
+  min-height: 44px;
+  border-width: 1px;
+  font-size: 13px;
+  font-weight: 900;
+}
+.gomoku-control-btn:hover,
+.gomoku-control-btn:focus-visible {
+  transform: translateY(-1px);
+}
+
+.gomoku-control-btn:active { transform: scale(0.98); }
+
+.gomoku-undo-btn {
+  color: #fff;
+  border-color: transparent;
+  background: var(--ui-grad-primary);
+  box-shadow: 0 10px 22px rgba(68, 89, 230, .2);
+}
+
+.gomoku-reset-btn {
+  color: #fff;
+  border-color: transparent;
+  background: var(--ui-grad-accent);
+  box-shadow: 0 10px 22px rgba(244, 122, 66, .2);
+}
+
+.gomoku-result-btn {
+  width: 100%;
+  min-height: 46px;
+  border-radius: var(--ui-radius-lg);
+  border: 0;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  background: var(--ui-grad-success);
+  box-shadow: 0 10px 24px rgba(19, 155, 106, .22);
+}
+
+.gomoku-result-btn:hover,
+.gomoku-result-btn:focus-visible {
+  filter: saturate(1.05) brightness(1.02);
+}
+
 .rule-card {
   margin-top: 8px;
   border: 1px solid var(--ui-border);
@@ -234,7 +305,12 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   line-height: 1.55;
 }
 
-.board-wrap { width: 100%; aspect-ratio: 1; }
+.board-wrap {
+  width: min(100%, 860px);
+  max-width: 860px;
+  margin: 0 auto;
+  aspect-ratio: 1;
+}
 .gomoku-board {
   width: 100%;
   height: 100%;

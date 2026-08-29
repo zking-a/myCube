@@ -7,13 +7,13 @@
   <meta name="description" content="五子棋对局页（单机人机 / 本地双人）。" />
   <title>五子棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
-  <link rel="stylesheet" href="gomoku.css?v=20260830a" />
+  <link rel="stylesheet" href="gomoku.css?v=20260830c" />
   <script src="gomoku.js?v=20260830a" defer></script>
 </head>
 <body class="gomoku-play-page">
   <main class="gomoku-shell">
     <header class="game-topbar">
-      <a class="ui-button ui-button--secondary" href="./" aria-label="返回五子棋大厅">← 五子棋大厅</a>
+      <a class="ui-button ui-button--secondary gomoku-nav-btn" href="./" aria-label="返回五子棋大厅">← 五子棋大厅</a>
       <div class="game-title">
         <span>轻量对战</span>
         <strong id="gameTitle">五子棋</strong>
@@ -55,8 +55,8 @@
         </div>
 
         <div class="control-grid">
-          <button type="button" id="undoBtn" class="ui-button ui-button--secondary">↩ 悔棋</button>
-          <button type="button" id="resetBtn" class="ui-button ui-button--secondary">↻ 重新开局</button>
+          <button type="button" id="undoBtn" class="ui-button gomoku-control-btn gomoku-undo-btn">↩ 悔棋</button>
+          <button type="button" id="resetBtn" class="ui-button gomoku-control-btn gomoku-reset-btn">↻ 重新开局</button>
         </div>
 
         <details class="rule-card">
@@ -74,7 +74,7 @@
       <div class="result-card ui-modal">
         <h2 id="resultTitle">本局结束</h2>
         <p id="resultText">黑方获胜</p>
-        <button type="button" id="resultRestart" class="ui-button ui-button--primary">再来一局</button>
+        <button type="button" id="resultRestart" class="ui-button gomoku-result-btn">再来一局</button>
       </div>
     </div>
   </main>
