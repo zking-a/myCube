@@ -4,6 +4,7 @@
   const CONFIG = {
     SAVE_KEY: 'light_games_flight_chess_save_v1',
     NICK_KEY: 'light_games_nickname',
+    CPU_KEY: 'light_games_flight_chess_cpu_v1',
     ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
     ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/
   };
@@ -14,6 +15,8 @@
   };
   let localPlayerCount = 4;
   let onlinePlayerCount = 2;
+  let cpuTotal = 4;
+  let cpuCount = 3;
 
   function $(id) { return document.getElementById(id); }
   function safeGet(key) { try { return localStorage.getItem(key); } catch (error) { return null; } }
@@ -60,11 +63,37 @@
   function setModeConfig(mode) {
     const localOpen = mode === 'local';
     const onlineOpen = mode === 'online';
+    const cpuOpen = mode === 'cpu';
     $('localConfig').hidden = !localOpen;
     $('onlineConfig').hidden = !onlineOpen;
+    $('cpuConfig').hidden = !cpuOpen;
     $('selectLocalBtn').setAttribute('aria-expanded', localOpen ? 'true' : 'false');
     $('selectOnlineBtn').setAttribute('aria-expanded', onlineOpen ? 'true' : 'false');
+    $('selectCpuBtn').setAttribute('aria-expanded', cpuOpen ? 'true' : 'false');
     if (!onlineOpen) setJoinOpen(false);
+  }
+  function selectCpuTotal(value) {
+    cpuTotal = window.FlightChessCore.normalizePlayerCount(value);
+    cpuCount = Math.min(Math.max(cpuCount, 1), cpuTotal - 1);
+    document.querySelectorAll('[data-cpu-total]').forEach(function (button) {
+      const active = Number(button.dataset.cpuTotal) === cpuTotal;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    updateCpuHint();
+  }
+  function selectCpuCount(value) {
+    cpuCount = Math.min(Math.max(Number(value) || 1, 1), cpuTotal - 1);
+    document.querySelectorAll('[data-cpu-count]').forEach(function (button) {
+      const active = Number(button.dataset.cpuCount) === cpuCount;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+    updateCpuHint();
+  }
+  function updateCpuHint() {
+    const human = cpuTotal - cpuCount;
+    $('cpuHint').textContent = '你执红方，' + cpuCount + ' 个电脑对手' + (human > 1 ? '（另有 ' + (human - 1) + ' 名真人）' : '') + '同时行动。';
   }
 
   function selectLocalPlayerCount(value) {
@@ -101,6 +130,8 @@
   function init() {
     selectLocalPlayerCount(4);
     selectOnlinePlayerCount(2);
+    selectCpuTotal(4);
+    selectCpuCount(3);
     $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
     const saved = readSavedGame();
     if (saved) {
@@ -140,10 +171,29 @@
       $('roomInput').value = normalizeRoom($('roomInput').value);
       showError('');
     });
-    $('resumeBtn').addEventListener('click', function () { goToGame({ mode: 'local' }); });
+    $('resumeBtn').addEventListener('click', function () {
+      const cpu = Number(safeGet(CONFIG.CPU_KEY)) || 0;
+      goToGame({ mode: 'local', cpu: cpu || undefined });
+    });
     $('startGameBtn').addEventListener('click', function () {
       if (saved && !window.confirm('开始新局会覆盖当前飞行棋进度，确定继续吗？')) return;
+      safeSet(CONFIG.CPU_KEY, '');
       goToGame({ mode: 'local', players: localPlayerCount, new: 1 });
+    });
+    $('selectCpuBtn').addEventListener('click', function () {
+      setModeConfig($('cpuConfig').hidden ? 'cpu' : '');
+    });
+    document.querySelectorAll('[data-cpu-total]').forEach(function (button) {
+      button.addEventListener('click', function () { selectCpuTotal(button.dataset.cpuTotal); });
+    });
+    document.querySelectorAll('[data-cpu-count]').forEach(function (button) {
+      button.addEventListener('click', function () { selectCpuCount(button.dataset.cpuCount); });
+    });
+    $('startCpuBtn').addEventListener('click', function () {
+      if (saved && !window.confirm('开始新局会覆盖当前飞行棋进度，确定继续吗？')) return;
+      const clamped = Math.min(Math.max(cpuCount, 1), cpuTotal - 1);
+      safeSet(CONFIG.CPU_KEY, String(clamped));
+      goToGame({ mode: 'local', players: cpuTotal, cpu: clamped, new: 1 });
     });
     $('createRoomBtn').addEventListener('click', function () {
       saveNickname();

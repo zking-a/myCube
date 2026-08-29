@@ -132,7 +132,7 @@
     var row = document.createElement('div');
     row.className = 'prow' + (opts.isMe ? ' me' : '') + (p.done ? ' done' : '') + (p.online ? '' : ' offline');
     var isHost = opts.isHost || (opts.hostCid && opts.hostCid === p.cid);
-    var medal = p.done ? '<i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>' : (opts.showCrown && isHost ? '<i class="fa-solid fa-crown" aria-hidden="true"></i>' : '');
+    var medal = p.done ? '<i class="ui-icon ui-icon--flag-checkered" aria-hidden="true"></i>' : (opts.showCrown && isHost ? '<i class="ui-icon ui-icon--crown" aria-hidden="true"></i>' : '');
     var status;
     if (opts.lobby) {
       if (!p.online) status = '离线';
@@ -420,7 +420,7 @@
         cell.className = 'stage-cell' + (unlocked ? '' : ' locked');
         var starStr = '★★★'.slice(0, stars) + '☆☆☆'.slice(0, 3 - stars);
         cell.innerHTML = '<div class="st-num">' + idx + '</div>' +
-          '<div class="st-stars">' + (unlocked ? starStr : '<i class="fa-solid fa-lock" aria-hidden="true"></i>') + '</div>';
+          '<div class="st-stars">' + (unlocked ? starStr : '<i class="ui-icon ui-icon--lock" aria-hidden="true"></i>') + '</div>';
         if (unlocked) cell.onclick = function () { openChallenge(level, idx); };
         grid.appendChild(cell);
       })(i);
@@ -1087,7 +1087,7 @@
       var row = document.createElement('div');
       row.className = 'rank-row' + (animate ? ' rank-in' + (i < 4 ? ' rank-' + (i + 1) : '') : '');
       var isMe = p.cid === vsState.myCid;
-      var medal = (i === 0 && p.done) ? '<i class="fa-solid fa-medal" style="color:var(--ui-medal-gold)"></i>' : (i === 1 && p.done ? '<i class="fa-solid fa-medal" style="color:var(--ui-medal-silver)"></i>' : (i === 2 && p.done ? '<i class="fa-solid fa-medal" style="color:var(--ui-medal-bronze)"></i>' : (i + 1)));
+      var medal = (i === 0 && p.done) ? '<i class="ui-icon ui-icon--medal" style="color:var(--ui-medal-gold)"></i>' : (i === 1 && p.done ? '<i class="ui-icon ui-icon--medal" style="color:var(--ui-medal-silver)"></i>' : (i === 2 && p.done ? '<i class="ui-icon ui-icon--medal" style="color:var(--ui-medal-bronze)"></i>' : (i + 1)));
       row.innerHTML = '<div class="medal">' + medal + '</div>' +
         '<div class="rn">' + (isMe ? '我（' + escapeHtml(p.nick || '我') + '）' : escapeHtml(p.nick || '玩家')) + '</div>' +
         '<div class="rt">' + (p.done ? formatClock(p.finalMs) : (p.online ? '答题中 ' + (p.prog || 0) + '/' + TOTAL_VS : '离线')) + '</div>';
@@ -1216,14 +1216,14 @@
       }
       var turnText = loss.length && winp.length ? ('你在第 ' + winp.join('、') + ' 题抢回优势，但第 ' + loss.join('、') + ' 题被对手拉开。') :
         (loss.length ? ('第 ' + loss.join('、') + ' 题是主要失分点。') : (winp.length ? ('第 ' + winp.join('、') + ' 题是你拉开差距的关键。') : '双方逐题结果完全一致，胜负由用时决定。'));
-      report.push({ icon: '<i class="fa-solid fa-bullseye" aria-hidden="true"></i>', title: '关键转折', text: turnText });
+      report.push({ icon: '<i class="ui-icon ui-icon--bullseye" aria-hidden="true"></i>', title: '关键转折', text: turnText });
       var advice = mePenalty > oppPenalty ? ('本局罚时比对手多 ' + gapText(mePenalty - oppPenalty) + '，优先减少错误和跳过。') :
         (meActual > oppActual ? ('基础用时慢 ' + gapText(meActual - oppActual) + '，下一局重点提升计算与操作速度。') : '速度与罚时控制都不错，继续保持稳定作答。');
-      report.push({ icon: '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>', title: '下一局建议', text: advice });
+      report.push({ icon: '<i class="ui-icon ui-icon--lightbulb" aria-hidden="true"></i>', title: '下一局建议', text: advice });
     }
     if (me.qms && me.qms.length) {
       var si = 0; for (var a = 1; a < me.qms.length; a++) if (me.qms[a] > me.qms[si]) si = a;
-      report.splice(Math.min(1, report.length), 0, { icon: '<i class="fa-solid fa-stopwatch" aria-hidden="true"></i>', title: '耗时瓶颈', text: '第 ' + (si + 1) + ' 题用时 ' + (toSafeMs(me.qms[si]) / 1000).toFixed(1) + ' 秒，是你本局最需要提速的一题。' });
+      report.splice(Math.min(1, report.length), 0, { icon: '<i class="ui-icon ui-icon--stopwatch" aria-hidden="true"></i>', title: '耗时瓶颈', text: '第 ' + (si + 1) + ' 题用时 ' + (toSafeMs(me.qms[si]) / 1000).toFixed(1) + ' 秒，是你本局最需要提速的一题。' });
     }
     $('vres-report').innerHTML = report.length ? report.map(function (r) {
       return '<div class="rpt-card"><span class="rpt-icon">' + r.icon + '</span><div><b>' + r.title + '</b><p>' + r.text + '</p></div></div>';

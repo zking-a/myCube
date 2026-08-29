@@ -10,7 +10,6 @@
 <meta http-equiv="Expires" content="0" />
 <title>24点大挑战 · 好友实时对战</title>
 <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 <style>
   /* 注：本文件样式分两块——上方为联机对战/结算等专用类的原定义（.compare-*、.attr-*、.duel-*、.rpt-*、.overlay、.result-*、.act-* 等仅在此处定义，勿删），
      下方“视觉升级”块（:root 平台蓝橘变量 + 首页/对局核心类）覆盖显示。两套共存，已视觉统一，请勿整体删除旧块。 */
@@ -23,7 +22,7 @@
     color: var(--ink); min-height: 100vh;
     display: flex; justify-content: center;
   }
-  #app { width: 100%; max-width: 480px; padding: 16px 16px calc(40px + env(safe-area-inset-bottom)); }
+  #app { width: 100%; max-width: var(--ui-lobby-max-width); padding: 16px 16px calc(40px + env(safe-area-inset-bottom)); }
   h1 { font-size: 26px; margin: 8px 0 2px; color: var(--blue); letter-spacing: 1px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .view { display: none; }
@@ -40,9 +39,9 @@
   .btn-blue { background: var(--ui-grad-primary); box-shadow: 0 6px 16px rgba(47,128,237,.35); }
   .btn-orange { background: var(--ui-grad-accent); box-shadow: 0 6px 16px rgba(242,153,74,.35); }
   .btn-green { background: var(--ui-grad-success); box-shadow: 0 6px 16px rgba(39,174,96,.35); }
-  .btn-ghost { background: #eef3fb; color: var(--blue); box-shadow: none; }
+  .btn-ghost { background: var(--ui-surface-raised); color: var(--ui-primary); border: 1px solid var(--ui-border); box-shadow: none; }
   .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
-  .back { background: #eef3fb; border: none; color: var(--blue); border-radius: 12px; padding: 8px 14px; font-size: 14px; cursor: pointer; font-weight: 600; flex: 0 0 auto; }
+  .back { background: var(--ui-surface-raised); border: 1px solid var(--ui-border); color: var(--ui-primary); border-radius: 12px; padding: 8px 14px; font-size: 14px; cursor: pointer; font-weight: 600; flex: 0 0 auto; }
   .title { font-size: 18px; font-weight: 700; text-align: center; flex: 1; }
 
   /* 合并棋盘：大字号、儿童友好 */
@@ -65,17 +64,17 @@
 
   .op-row { display: flex; gap: 10px; justify-content: center; margin-bottom: 12px; }
   .op-btn {
-    flex: 1 1 0; min-width: 56px; height: 66px; border: none; border-radius: 16px; background: #eef3fb;
-    color: var(--blue); font-size: 36px; font-weight: 800; cursor: pointer;
+    flex: 1 1 0; min-width: 56px; height: 66px; border: 1px solid var(--ui-border); border-radius: 16px; background: var(--ui-surface-raised);
+    color: var(--ui-primary); font-size: 36px; font-weight: 800; cursor: pointer;
   }
-  .op-btn:active { background: #dbe7fb; transform: scale(.96); }
+  .op-btn:active { background: var(--ui-surface-selected); transform: scale(.96); }
   .act-row { display: flex; gap: 10px; }
   .act-btn {
-    flex: 1; border: none; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 800; cursor: pointer; color: #fff;
+    flex: 1; border: 1px solid transparent; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 800; cursor: pointer; color: #fff;
   }
   .act-undo { background: var(--ui-grad-accent); }
-  .act-restart { background: #eef3fb; color: var(--blue); }
-  .act-skip { background: #eef3fb; color: var(--orange); }
+  .act-restart { background: var(--ui-surface-raised); color: var(--ui-primary); border-color: var(--ui-border); }
+  .act-skip { background: var(--ui-surface-raised); color: var(--ui-accent); border-color: var(--ui-border); }
   .act-submit { background: var(--ui-grad-success); }
 
   .feedback { min-height: 24px; text-align: center; font-size: 16px; font-weight: 700; margin: 12px 0; }
@@ -284,7 +283,7 @@
   }
   body::before { width: 180px; height: 180px; left: -92px; top: 34%; background: rgba(88,107,245,.09); }
   body::after { width: 220px; height: 220px; right: -130px; bottom: 5%; background: rgba(255,138,76,.1); }
-  #app { position: relative; z-index: 1; max-width: 540px; padding: 20px 18px calc(42px + env(safe-area-inset-bottom)); }
+  #app { position: relative; z-index: 1; max-width: var(--ui-lobby-max-width); padding: 20px 18px calc(42px + env(safe-area-inset-bottom)); }
   .view { animation: viewIn .26s ease both; }
   @keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -332,7 +331,7 @@
   .btn-blue { background: var(--ui-grad-primary); box-shadow: 0 10px 22px rgba(68,89,230,.25); }
   .btn-orange { background: linear-gradient(135deg,#ffa667,#f47a42); box-shadow: 0 10px 22px rgba(244,122,66,.23); }
   .btn-green { background: linear-gradient(135deg,#28c98c,#139b6a); box-shadow: 0 10px 22px rgba(19,155,106,.23); }
-  .btn-ghost { background: #eef1fb; color: var(--blue-deep); border: 1px solid #e2e7f5; }
+  .btn-ghost { background: var(--ui-surface-raised); color: var(--ui-primary); border: 1px solid var(--ui-border); }
   .home-rules { padding: 16px 18px; }
   .rule-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; font-weight: 900; margin-bottom: 12px; }
   .rule-title span { width: 26px; height: 26px; display: grid; place-items: center; color: var(--blue); background: #edf0ff; border-radius: 9px; }
@@ -351,7 +350,7 @@
     background: rgba(255,255,255,.84); box-shadow: 0 8px 24px rgba(40,55,102,.08);
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   }
-  .back { display:inline-flex; align-items:center; background: #eef1fb; color: var(--blue-deep); border: 1px solid #e3e7f4; border-radius: 11px; padding: 9px 12px; text-decoration:none; }
+  .back { display:inline-flex; align-items:center; background: var(--ui-surface-raised); color: var(--ui-primary); border: 1px solid var(--ui-border); border-radius: 11px; padding: 9px 12px; text-decoration:none; }
   .title { color: var(--ink); font-size: 17px; font-weight: 900; letter-spacing: -.2px; }
 
   .timer {
@@ -372,8 +371,8 @@
   .tk-bad { background: linear-gradient(145deg,#bec8d9,#8e9bb0); }
   .status { width: fit-content; max-width: 100%; margin: 6px auto 14px; padding: 7px 12px; border-radius: 10px; background: #f6f8fc; color: var(--muted); font-size: 14px; }
   .op-row { gap: 9px; }
-  .op-btn { height: 60px; border: 1px solid #e3e7f4; background: #f0f3fb; color: var(--blue-deep); font-size: 31px; box-shadow: inset 0 1px 0 #fff; }
-  .op-btn:hover { background: #e7ebfb; }
+  .op-btn { height: 60px; border: 1px solid var(--ui-border); background: var(--ui-surface-raised); color: var(--ui-primary); font-size: 31px; box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
+  .op-btn:hover { background: var(--ui-surface-soft); }
   .act-btn { min-height: 52px; padding: 13px; border-radius: 14px; font-size: 15px; }
   .feedback { font-size: 14px; margin: 10px 0; }
 
@@ -490,13 +489,13 @@
     </div>
     <div class="home-modes">
       <button id="btn-challenge" class="big-btn btn-blue home-mode ui-button ui-button--primary">
-        <span class="mode-icon"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span><span class="mode-copy"><strong>闯关挑战</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="ui-icon ui-icon--bullseye" aria-hidden="true"></i></span><span class="mode-copy"><strong>闯关挑战</strong><small>80 大关 · 难度逐级提升</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-speed" class="big-btn btn-orange home-mode ui-button ui-button--accent">
-        <span class="mode-icon"><i class="fa-solid fa-bolt" aria-hidden="true"></i></span><span class="mode-copy"><strong>竞速挑战</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="ui-icon ui-icon--bolt" aria-hidden="true"></i></span><span class="mode-copy"><strong>竞速挑战</strong><small>连续 10 题 · 挑战最快纪录</small></span><span class="mode-arrow">→</span>
       </button>
       <button id="btn-vs" class="big-btn btn-green home-mode ui-button ui-button--success">
-        <span class="mode-icon"><i class="fa-solid fa-users" aria-hidden="true"></i></span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
+        <span class="mode-icon"><i class="ui-icon ui-icon--users" aria-hidden="true"></i></span><span class="mode-copy"><strong>好友对战</strong><small>同题同步 · 实时进度与排名</small></span><span class="mode-arrow">→</span>
       </button>
     </div>
     <div class="panel rules home-rules">
@@ -522,7 +521,7 @@
     <div class="panel">
       <div id="stages-note" class="math-note"></div>
       <div id="stages-grid" class="grid" role="list" aria-label="题目列表"></div>
-      <button id="stages-reshuffle" class="big-btn btn-ghost"><i class="fa-solid fa-shuffle" aria-hidden="true"></i> 换一批题（随机）</button>
+      <button id="stages-reshuffle" class="big-btn btn-ghost"><i class="ui-icon ui-icon--shuffle" aria-hidden="true"></i> 换一批题（随机）</button>
     </div>
   </section>
 
@@ -545,12 +544,12 @@
       </div>
       <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="ch-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="ch-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
+        <button class="act-btn act-restart" id="ch-restart"><i class="ui-icon ui-icon--arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
       <div class="feedback" id="ch-feedback" aria-live="polite" aria-atomic="true"></div>
       <div class="u-flex-center-wrap">
-        <button class="big-btn btn-ghost u-flex140" id="ch-hint"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 提示</button>
-        <button class="big-btn btn-orange u-flex140" id="ch-reveal"><i class="fa-solid fa-book" aria-hidden="true"></i> 直接看答案</button>
+        <button class="big-btn btn-ghost u-flex140" id="ch-hint"><i class="ui-icon ui-icon--lightbulb" aria-hidden="true"></i> 提示</button>
+        <button class="big-btn btn-orange u-flex140" id="ch-reveal"><i class="ui-icon ui-icon--book" aria-hidden="true"></i> 直接看答案</button>
       </div>
       <div class="hints" id="ch-hints"></div>
     </div>
@@ -598,7 +597,7 @@
       </div>
       <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="sp-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="sp-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
+        <button class="act-btn act-restart" id="sp-restart"><i class="ui-icon ui-icon--arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
       <div class="feedback" id="sp-feedback" aria-live="polite" aria-atomic="true"></div>
       <button class="big-btn btn-orange" id="sp-skip">跳过此题 +15 秒</button>
@@ -660,7 +659,7 @@
         · 网络短暂中断会自动重连，并恢复当前题目与计时。
       </div>
       <details class="setting">
-        <summary><i class="fa-solid fa-gear" aria-hidden="true"></i> 高级：自定义联机服务器</summary>
+        <summary><i class="ui-icon ui-icon--gear" aria-hidden="true"></i> 高级：自定义联机服务器</summary>
         <div class="field u-mt8">
           <label>WebSocket 地址（部署后填入，如 wss://xxx.onrender.com）</label>
           <input id="vs-server" placeholder="留空 = 自动使用当前站点（推荐）" />
@@ -726,7 +725,7 @@
       </div>
       <div class="act-row u-mb6">
         <button class="act-btn act-undo" id="vp-undo">↩ 撤销</button>
-        <button class="act-btn act-restart" id="vp-restart"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 重来</button>
+        <button class="act-btn act-restart" id="vp-restart"><i class="ui-icon ui-icon--arrows-rotate" aria-hidden="true"></i> 重来</button>
       </div>
       <div class="feedback" id="vp-feedback" aria-live="polite" aria-atomic="true"></div>
       <button class="big-btn btn-orange" id="vp-skip">跳过此题 +15 秒</button>
@@ -801,7 +800,7 @@
       <div class="review" id="vres-review"></div>
     </div>
 
-    <button id="vres-again" class="big-btn btn-green"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> 再来一局（换新题）</button>
+    <button id="vres-again" class="big-btn btn-green"><i class="ui-icon ui-icon--arrows-rotate" aria-hidden="true"></i> 再来一局（换新题）</button>
     <button id="vres-home" class="big-btn btn-ghost">返回首页</button>
   </section>
 

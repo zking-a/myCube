@@ -182,13 +182,15 @@ button, input, select, textarea, summary { font: inherit; }
   }
 }
 
-/* ===== 图标字体（Font Awesome 6 Free，由 CDN 引入 all.min.css）=====
-   用法：<i class="fa-solid fa-xxx"></i>；图标自动继承 currentColor，
+/* ===== 图标：本地 SVG 系统（.ui-icon，见下方 §1），此段仅保留对
+   旧 fa-* 类名的兼容垫片（历史文件仍可能引用，但新代码一律用 .ui-icon）
+   用法：<i class="ui-icon ui-icon--xxx"></i>；自动继承 currentColor，
    深色模式（body.dark）下随 --ui-text 自动反色，无需额外适配。 */
 .fa-solid, .fa-regular, .fas, .fa-brands { vertical-align: -0.075em; line-height: 1; }
 
 /* 图标位于文字之前时，与文字留出间距（仅对“图标+文字”型显式列出，避免误伤纯图标按钮） */
 .ui-button > i.fa-solid,
+.ui-button > i.ui-icon,
 .rpt-icon > i,
 #timerText > i,
 .summary > i.fa-solid { margin-right: 6px; }
@@ -202,3 +204,218 @@ button, input, select, textarea, summary { font: inherit; }
 .mode-icon > i,
 .flight-mode-icon > i { margin-right: 0; }
 .sound-button > i, .icon-btn > i { font-size: 1.05em; }
+
+/* ==========================================================================
+   共享组件层 v1：图标系统 / 大厅 / 菜单卡 / 展开配置 / 功能条
+   四款游戏大厅复用同一套结构与尺寸，语义色统一，零 CDN 依赖。
+   所有组件仅引用 --ui-* token，进入 body.dark 时自动继承深色主题。
+   ========================================================================== */
+
+:root {
+  /* 布局尺寸 */
+  --ui-lobby-max-width: 580px;
+  --ui-menu-min-height: 80px;
+  --ui-menu-radius: 17px;
+  --ui-menu-icon-size: 45px;
+  --ui-menu-gap: 13px;
+  --ui-menu-pad: 15px;
+  --ui-expand-radius: 16px;
+
+  /* 语义色补全（供菜单卡 tint 使用） */
+  --ui-success-soft: #e6f8f1;
+}
+
+body.dark {
+  --ui-success-soft: #14372c;
+}
+
+/* --------------------------------------------------------------------------
+   1. 本地图标系统：CSS mask + data-uri SVG，零外部请求，继承 currentColor
+   用法：<i class="ui-icon ui-icon--lightbulb" aria-hidden="true"></i>
+   -------------------------------------------------------------------------- */
+.ui-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  background-color: currentColor;
+  -webkit-mask-image: var(--ui-icon-src);
+          mask-image: var(--ui-icon-src);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+}
+
+/* --------------------------------------------------------------------------
+   2. 大厅容器：统一最大宽度 580px（棋局页不受此约束）
+   -------------------------------------------------------------------------- */
+.ui-lobby {
+  width: 100%;
+  max-width: var(--ui-lobby-max-width);
+  margin-inline: auto;
+}
+
+/* --------------------------------------------------------------------------
+   3. 菜单卡：统一 80px 高 / 17px 圆角 / 45px 图标
+   语义变体决定图标配色：solo·cpu=蓝(primary)、local=橙(accent)、online·collab=绿(success)
+   -------------------------------------------------------------------------- */
+.ui-menu-card {
+  display: flex;
+  gap: var(--ui-menu-gap);
+  align-items: center;
+  width: 100%;
+  min-height: var(--ui-menu-min-height);
+  padding: 0 var(--ui-menu-pad);
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-menu-radius);
+  background: var(--ui-surface-raised);
+  color: var(--ui-text);
+  box-shadow: var(--ui-shadow-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--ui-duration-fast) var(--ui-ease-standard),
+    border-color var(--ui-duration-base) var(--ui-ease-standard),
+    box-shadow var(--ui-duration-base) var(--ui-ease-standard);
+}
+
+.ui-menu-card:not(:disabled):hover {
+  transform: translateY(-2px);
+  border-color: var(--ui-border-strong);
+  box-shadow: var(--ui-shadow-md);
+}
+.ui-menu-card:not(:disabled):active { transform: translateY(0); }
+
+/* 展开态：边框染上语义色，与下方配置面板形成视觉归属 */
+.ui-menu-card[aria-expanded="true"] {
+  border-color: var(--ui-menu-accent, var(--ui-primary));
+  box-shadow: var(--ui-shadow-md);
+}
+
+/* 语义变体 —— 单人 / 人机 = 蓝 */
+.ui-menu-card--solo,
+.ui-menu-card--cpu {
+  --ui-menu-accent: var(--ui-primary);
+  --ui-menu-tint: var(--ui-primary-soft);
+}
+/* 语义变体 —— 本地玩法 = 橙 */
+.ui-menu-card--local {
+  --ui-menu-accent: var(--ui-accent);
+  --ui-menu-tint: var(--ui-accent-soft);
+}
+/* 语义变体 —— 好友联机 / 协作 = 绿 */
+.ui-menu-card--online,
+.ui-menu-card--collab {
+  --ui-menu-accent: var(--ui-success);
+  --ui-menu-tint: var(--ui-success-soft);
+}
+
+/* 图标容器：45px，tint 底色 + 语义色图标 */
+.ui-menu-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: var(--ui-menu-icon-size);
+  height: var(--ui-menu-icon-size);
+  border-radius: 14px;
+  background: var(--ui-menu-tint, var(--ui-primary-soft));
+  color: var(--ui-menu-accent, var(--ui-primary));
+  font-size: 22px;
+}
+
+/* 文案区 */
+.ui-menu-copy { flex: 1 1 auto; min-width: 0; }
+.ui-menu-copy strong {
+  display: block;
+  color: var(--ui-text);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -.2px;
+}
+.ui-menu-copy small {
+  display: block;
+  margin-top: 2px;
+  color: var(--ui-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* 右侧箭头：展开时旋转 90° 指示状态 */
+.ui-menu-arrow {
+  flex: 0 0 auto;
+  color: var(--ui-text-muted);
+  font-size: 20px;
+  line-height: 1;
+  opacity: .8;
+  transition: transform var(--ui-duration-base) var(--ui-ease-standard);
+}
+.ui-menu-card[aria-expanded="true"] .ui-menu-arrow { transform: rotate(90deg); }
+
+/* --------------------------------------------------------------------------
+   4. 展开配置面板：点击菜单卡后原地展开
+   -------------------------------------------------------------------------- */
+.ui-expand {
+  margin-top: 10px;
+  padding: 15px;
+  border: var(--ui-border-width) solid var(--ui-border);
+  border-radius: var(--ui-expand-radius);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+  animation: uiExpandIn var(--ui-duration-base) var(--ui-ease-standard) both;
+}
+
+@keyframes uiExpandIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ui-expand[hidden] { display: none !important; }
+
+/* --------------------------------------------------------------------------
+   5. 功能条：大厅底部的一排辅助操作
+   -------------------------------------------------------------------------- */
+.ui-actionbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ui-actionbar--split > .ui-button { flex: 1 1 140px; }
+
+/* 无障碍：色觉障碍用户依靠图标形状 + 文案区分，而非仅靠颜色。
+   菜单卡语义色一律配独立图标，满足 WCAG 1.4.1（不能仅用颜色传达信息）。 */
+
+/* --------------------------------------------------------------------------
+   6. 图标定义表：26 个本地 SVG（data-uri，零外部请求）
+   命名沿用 font-awesome 语义名，便于原 fa-solid fa-* 直接替换。
+   -------------------------------------------------------------------------- */
+.ui-icon--lightbulb { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2zM9 18h6v1.5a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 19.5V18z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--arrows-rotate { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4V1L7.5 5.5 12 10V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7zm0 16v3l4.5-4.5L12 14v3a5 5 0 1 1 5-5h2a7 7 0 1 0-7 7z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--xmark { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.2 4.8 12 10.6l5.8-5.8 1.4 1.4L13.4 12l5.8 5.8-1.4 1.4L12 13.4l-5.8 5.8-1.4-1.4L10.6 12 4.8 6.2z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--stopwatch { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm1 4v5.6l4 2.3-.8 1.4-5-2.9V8h1.8zM9 2h6v2H9z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--medal { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a6 6 0 0 0-6 6c0 3.3 2.7 6 6 6s6-2.7 6-6c0-3.3-2.7-6-6-6zm-3.5 13L7 22l5-2.5L17 22l-1.5-7h-7z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--bolt { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13 2 4 14h6l-1 8 9-12h-6l1-8z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--volume-high { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 9h3.5L12 4.5v15L6.5 15H3V9zm11.5-2.5a5.5 5.5 0 0 1 0 11v-2.2a3.3 3.3 0 0 0 0-6.6V6.5z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--users { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm7.5 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zM9 14.5c4.2 0 7.5 2.2 7.5 4.5V21H1.5V19c0-2.3 3.3-4.5 7.5-4.5z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--table { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 3h6.5v6.5H3V3zm11.5 0H21v6.5h-6.5V3zM3 14.5h6.5V21H3v-6.5zm11.5 0H21V21h-6.5v-6.5z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--pencil { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 17.2V21h3.8L18.6 9.2 14.8 5.4 3 17.2zM20.7 7.1a1 1 0 0 0 0-1.4l-2.4-2.4a1 1 0 0 0-1.4 0L15 5.1 18.9 9l1.8-1.9z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--magnifying-glass { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--earth-asia { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 2.1v15.8c-3.3-.5-5.8-3.4-5.8-6.9v-2c0-3.5 2.5-6.4 5.8-6.9zm2 0c3.3.5 5.8 3.4 5.8 6.9v2c0 3.5-2.5 6.4-5.8 6.9V4.1z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--bullseye { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--volume-xmark { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 9h3.5L12 4.5v15L6.5 15H3V9zm11.6 1.4 1.4-1.4 3 3 3-3 1.4 1.4-3 3 3 3-1.4 1.4-3-3-3 3-1.4-1.4 3-3-3-3z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--sun { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5 1.8 3.5h-3.6L12 2zm0 22-1.8-3.5h3.6L12 24zM2 11h3.5v2H2v-2zm20 0h-3.5v2H22v-2zM4.9 4.9 6.3 6.3 4.9 7.7 3.5 6.3l1.4-1.4zm14.2 14.2 1.4 1.4-1.4 1.4-1.4-1.4 1.4-1.4zM19.1 4.9l1.4 1.4-1.4 1.4-1.4-1.4 1.4-1.4zM4.9 19.1l1.4 1.4-1.4 1.4L3.5 20.5l1.4-1.4z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--shuffle { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M17 3l4 4-4 4V8h-2.3l-3.2 4.5 3.2 4.5h2.3v-3l4 4-4 4v-3h-3.8l-3.7-5.2 3.7-5.2H17V3zM3 7h4.5l3.7 5.2L7.5 17H3v-2h4l1.5-2.1L7 11H3V7z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--robot { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a4 4 0 0 1 4 4v1h1a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a4 4 0 0 1 4-4h1V6a4 4 0 0 1 4-4zm-2 6h4V6a2 2 0 1 0-4 0v2zM9 11a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM9 16h6v1.5a3 3 0 0 1-6 0V16z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--moon { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12.7 2A9.5 9.5 0 1 0 22 12.2 7.5 7.5 0 0 1 12.7 2z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--lock { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a5 5 0 0 1 5 5v3h1a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h1V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v3h6V7a3 3 0 0 0-3-3z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--gear { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11 2h2v3.5l1.5.9 3-1.7 1 1.7-1.7 3 .9 1.5 3.5-.5v2l-3.5-.5-.9 1.5 1.7 3-1 1.7-3-1.7-1.5.9V22h-2v-3.5l-1.5-.9-3 1.7-1-1.7 1.7-3-.9-1.5-3.5.5v-2l3.5.5.9-1.5-1.7-3 1-1.7 3 1.7 1.5-.9V2zm1 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--flag-checkered { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 2h2v20H5V2zm4 0h9l-2 3.5L18 9H9V2zm0 11h9l-2 3.5L18 20H9v-7z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--crown { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 8l4 3 5-7 5 7 4-3-2 12H5L3 8z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--chart-column { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 20h3V10H4v10zm6.5 0h3V4h-3v16zM17 20h3v-7h-3v7z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--brain { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4a5 5 0 0 0-5 5v.5A4 4 0 0 0 6.5 17H8a4 4 0 0 0 4 3V4zm0 0a5 5 0 0 1 5 5v.5A4 4 0 0 1 17.5 17H16a4 4 0 0 1-4 3V4z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--book { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 4h6a3 3 0 0 1 2 .8A3 3 0 0 1 14 4h6v14h-6a2 2 0 0 0-1.6.8L12 19.2l-.4-.4A2 2 0 0 0 10 18H4V4zm2 2v10h4a4 4 0 0 1 2 .6 4 4 0 0 1 2-.6h4V6h-4a4 4 0 0 0-2 .6A4 4 0 0 0 10 6H6z' fill='%23000'/%3E%3C/svg%3E"); }
+.ui-icon--arrow-up-from-bracket { --ui-icon-src: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M11 3h2v9h4l-5 5-5-5h4V3zM4 19h16v2H4v-2z' fill='%23000'/%3E%3C/svg%3E"); }

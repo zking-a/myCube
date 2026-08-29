@@ -52,8 +52,8 @@
       </article>
 
       <div class="flight-mode-menu">
-        <button type="button" class="flight-mode-entry ui-button" id="selectLocalBtn" aria-expanded="false" aria-controls="localConfig">
-          <span class="flight-mode-icon" aria-hidden="true">✈︎</span>
+        <button type="button" class="flight-mode-entry flight-local-entry ui-button" id="selectLocalBtn" aria-expanded="false" aria-controls="localConfig">
+          <span class="flight-mode-icon" aria-hidden="true"><i class="ui-icon ui-icon--users" aria-hidden="true"></i></span>
           <span class="flight-mode-copy">
             <span class="flight-mode-kicker">TOGETHER</span>
             <span class="flight-mode-title">本地对战</span>
@@ -74,7 +74,7 @@
         </section>
 
         <button type="button" class="flight-mode-entry flight-online-entry ui-button" id="selectOnlineBtn" aria-expanded="false" aria-controls="onlineConfig">
-          <span class="flight-mode-icon" aria-hidden="true">⌁</span>
+          <span class="flight-mode-icon" aria-hidden="true"><i class="ui-icon ui-icon--earth-asia" aria-hidden="true"></i></span>
           <span class="flight-mode-copy">
             <span class="flight-mode-kicker">ONLINE</span>
             <span class="flight-mode-title">好友对战</span>
@@ -100,6 +100,33 @@
             <button type="button" class="flight-start ui-button ui-button--primary" id="joinRoomBtn">加入房间 <span aria-hidden="true">→</span></button>
           </section>
           <p class="flight-field-error" id="fieldError" role="alert" hidden></p>
+        </section>
+
+        <button type="button" class="flight-mode-entry flight-cpu-entry ui-button" id="selectCpuBtn" aria-expanded="false" aria-controls="cpuConfig">
+          <span class="flight-mode-icon" aria-hidden="true"><i class="ui-icon ui-icon--robot" aria-hidden="true"></i></span>
+          <span class="flight-mode-copy">
+            <span class="flight-mode-kicker">VS CPU</span>
+            <span class="flight-mode-title">人机对战</span>
+            <span class="flight-mode-desc">你执红方，其余席位由电脑托管</span>
+          </span>
+          <span class="flight-mode-arrow" aria-hidden="true">→</span>
+        </button>
+
+        <section class="flight-mode-config flight-cpu-config" id="cpuConfig" hidden aria-label="人机对战设置">
+          <span class="flight-config-label">总人数</span>
+          <div class="flight-player-picker" role="radiogroup" aria-label="选择人机对战总人数">
+            <button type="button" data-cpu-total="2" role="radio" aria-checked="false">2 人</button>
+            <button type="button" data-cpu-total="3" role="radio" aria-checked="false">3 人</button>
+            <button type="button" data-cpu-total="4" role="radio" class="active" aria-checked="true">4 人</button>
+          </div>
+          <span class="flight-config-label">电脑玩家数</span>
+          <div class="flight-player-picker" role="radiogroup" aria-label="选择电脑玩家数量">
+            <button type="button" data-cpu-count="1" role="radio" aria-checked="false">1 个</button>
+            <button type="button" data-cpu-count="2" role="radio" aria-checked="false">2 个</button>
+            <button type="button" data-cpu-count="3" role="radio" class="active" aria-checked="true">3 个</button>
+          </div>
+          <p class="flight-config-note" id="cpuHint">你执红方，3 个电脑对手同时行动。</p>
+          <button type="button" class="flight-start ui-button ui-button--primary" id="startCpuBtn">开始人机对战 <span aria-hidden="true">→</span></button>
         </section>
       </div>
     </section>

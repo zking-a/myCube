@@ -26,7 +26,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 /* ---------- 玩法大厅 ---------- */
 .flight-lobby-shell {
-  width: min(100%, 720px);
+  width: min(var(--ui-lobby-max-width), 100%);
   margin: 0 auto;
   padding: 24px 18px calc(42px + env(safe-area-inset-bottom));
 }
@@ -180,9 +180,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 86px;
+  min-height: var(--ui-menu-min-height);
   padding: 15px 17px;
   border-color: rgba(207,217,238,.9);
+  border-radius: var(--ui-menu-radius);
   color: #fff;
   text-align: left;
   background: var(--ui-grad-primary);
@@ -192,13 +193,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .flight-mode-icon {
   display: grid;
-  width: 48px;
-  height: 48px;
+  width: var(--ui-menu-icon-size);
+  height: var(--ui-menu-icon-size);
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid rgba(255,255,255,.22);
-  border-radius: 15px;
-  font-size: 24px;
+  border-radius: 14px;
+  font-size: 22px;
   background: rgba(255,255,255,.14);
 }
 .flight-mode-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
@@ -210,6 +211,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .flight-online-entry {
   background: var(--ui-grad-success);
   box-shadow: 0 12px 26px rgba(19,155,106,.2);
+}
+.flight-local-entry {
+  background: var(--ui-grad-accent);
+  box-shadow: 0 12px 26px rgba(244,122,66,.2);
 }
 
 .flight-mode-config {

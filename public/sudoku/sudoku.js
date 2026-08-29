@@ -843,7 +843,7 @@ function updateProgress() {
 }
 
 function updateTimer() {
-  $("timerText").innerHTML = '<i class="fa-solid fa-stopwatch" aria-hidden="true"></i> ' + formatDuration(seconds);
+  $("timerText").innerHTML = '<i class="ui-icon ui-icon--stopwatch" aria-hidden="true"></i> ' + formatDuration(seconds);
 }
 
 /* ========== SECTION 8: 格子选择与拖选 ========== */
@@ -1030,17 +1030,17 @@ function syncAssistButtons() {
   const autoFillBtn = $("autoFillBtn");
 
   if (noteBtn) {
-    noteBtn.innerHTML = '<i class="fa-solid fa-pencil" aria-hidden="true"></i> 笔记：' + (noteMode ? "开" : "关");
+    noteBtn.innerHTML = '<i class="ui-icon ui-icon--pencil" aria-hidden="true"></i> 笔记：' + (noteMode ? "开" : "关");
     noteBtn.classList.toggle("active-btn", noteMode);
     noteBtn.setAttribute("aria-pressed", noteMode ? "true" : "false");
   }
   if (candBtn) {
-    candBtn.innerHTML = '<i class="fa-solid fa-table" aria-hidden="true"></i> 候选辅助：' + (showAllCands ? "开" : "关");
+    candBtn.innerHTML = '<i class="ui-icon ui-icon--table" aria-hidden="true"></i> 候选辅助：' + (showAllCands ? "开" : "关");
     candBtn.classList.toggle("active-btn", showAllCands);
     candBtn.setAttribute("aria-pressed", showAllCands ? "true" : "false");
   }
   if (autoFillBtn) {
-    autoFillBtn.innerHTML = '<i class="fa-solid fa-bolt" aria-hidden="true"></i> 自动填入：' + (autoFillMode ? "开" : "关");
+    autoFillBtn.innerHTML = '<i class="ui-icon ui-icon--bolt" aria-hidden="true"></i> 自动填入：' + (autoFillMode ? "开" : "关");
     autoFillBtn.classList.toggle("active-btn", autoFillMode);
     autoFillBtn.setAttribute("aria-pressed", autoFillMode ? "true" : "false");
   }
@@ -1324,7 +1324,7 @@ function showTechHint() {
   if (result) {
     showTechHintBox(result.title, result.desc);
   } else {
-    showTechHintBox('<i class="fa-solid fa-lightbulb" aria-hidden="true"></i> 技巧提示', "当前暂无简单的技巧提示。<br>试试逐格分析候选数吧！");
+    showTechHintBox('<i class="ui-icon ui-icon--lightbulb" aria-hidden="true"></i> 技巧提示', "当前暂无简单的技巧提示。<br>试试逐格分析候选数吧！");
   }
 }
 
@@ -1342,7 +1342,7 @@ function findHiddenSingle() {
       if (positions.length === 1) {
         const c = positions[0] % 9 + 1;
         return {
-          title: '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
+          title: '<i class="ui-icon ui-icon--magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
           desc: "数字 <b>" + n + "</b> 在第 <b>" + (r+1) + "</b> 行只能放在第 <b>" + c + "</b> 列。<br>" +
                 "这一行其他空格都无法容纳 " + n + "，因此它必须在这里。"
         };
@@ -1362,7 +1362,7 @@ function findHiddenSingle() {
       if (positions.length === 1) {
         const r = Math.floor(positions[0] / 9) + 1;
         return {
-          title: '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
+          title: '<i class="ui-icon ui-icon--magnifying-glass" aria-hidden="true"></i> 隐式唯一（Hidden Single）',
           desc: "数字 <b>" + n + "</b> 在第 <b>" + (c+1) + "</b> 列只能放在第 <b>" + r + "</b> 行。<br>" +
                 "这一列其他空格都无法容纳 " + n + "，因此它必须在这里。"
         };
@@ -1607,7 +1607,7 @@ function toggleDarkMode() {
   const btn  = $("darkBtn");
   body.classList.toggle("dark");
   const isDark = body.classList.contains("dark");
-  btn.innerHTML = '<i class="fa-solid ' + (isDark ? 'fa-sun' : 'fa-moon') + '" aria-hidden="true"></i>';
+  btn.innerHTML = '<i class="ui-icon ' + (isDark ? 'ui-icon--sun' : 'ui-icon--moon') + '" aria-hidden="true"></i>';
   btn.classList.toggle("active", isDark);
   try { localStorage.setItem(CONFIG.STORAGE_DARK, isDark ? "1" : "0"); } catch(e) {}
 }
@@ -1617,7 +1617,7 @@ function restoreDarkMode() {
     const v = localStorage.getItem(CONFIG.STORAGE_DARK);
     if (v === "1") {
       document.body.classList.add("dark");
-      $("darkBtn").innerHTML = '<i class="fa-solid fa-sun" aria-hidden="true"></i>';
+      $("darkBtn").innerHTML = '<i class="ui-icon ui-icon--sun" aria-hidden="true"></i>';
       $("darkBtn").classList.add("active");
     }
   } catch(e) {}
@@ -1680,7 +1680,7 @@ function playSound(type) {
 
 function toggleSound() {
   soundEnabled = !soundEnabled;
-  $("soundBtn").innerHTML = '<i class="fa-solid ' + (soundEnabled ? 'fa-volume-high' : 'fa-volume-xmark') + '" aria-hidden="true"></i>';
+  $("soundBtn").innerHTML = '<i class="ui-icon ' + (soundEnabled ? 'ui-icon--volume-high' : 'ui-icon--volume-xmark') + '" aria-hidden="true"></i>';
   try { localStorage.setItem(CONFIG.STORAGE_SOUND, soundEnabled ? "1" : "0"); } catch(e) {}
 }
 
@@ -1689,7 +1689,7 @@ function restoreSoundSetting() {
     const v = localStorage.getItem(CONFIG.STORAGE_SOUND);
     if (v === "0") {
       soundEnabled = false;
-      $("soundBtn").innerHTML = '<i class="fa-solid fa-volume-xmark" aria-hidden="true"></i>';
+      $("soundBtn").innerHTML = '<i class="ui-icon ui-icon--volume-xmark" aria-hidden="true"></i>';
     }
   } catch(e) {}
 }

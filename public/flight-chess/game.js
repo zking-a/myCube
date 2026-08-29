@@ -74,6 +74,9 @@
   let toastTimer = null;
   let winnerDialogShown = false;
   let netClient = null;
+  const CPU_KEY = 'light_games_flight_chess_cpu_v1';
+  let cpuSeats = [];
+  let cpuThinking = false;
   const online = {
     cid: '', seat: null, status: 'connecting', state: null, pending: false, error: '',
     intent: params.get('intent') === 'create' ? 'create' : 'join'
@@ -294,6 +297,24 @@
 
     $('turnName').textContent = game.phase === 'gameover' ? '本局结束' : player.name;
     $('moveSummary').textContent = lastMoveMessage();
+    if (isCpuTurn()) {
+      if (game.phase === 'roll') {
+        $('turnInstruction').textContent = '电脑正在掷骰子…';
+        $('rollButton').textContent = '电脑行动中';
+        $('rollButton').disabled = true;
+        $('diceTip').textContent = '电脑托管中';
+      } else if (game.phase === 'move') {
+        $('turnInstruction').textContent = '电脑正在移动飞机…';
+        $('rollButton').textContent = '电脑行动中';
+        $('rollButton').disabled = true;
+        $('diceTip').textContent = '电脑选择中';
+      } else {
+        $('turnInstruction').textContent = '四架飞机已经抵达';
+        $('rollButton').textContent = '本局结束';
+        $('rollButton').disabled = true;
+      }
+      return;
+    }
     const ownTurn = isMyTurn();
     const paused = isOnline && !allOnline();
     if (game.phase === 'roll') {
@@ -397,6 +418,7 @@
     saveGame();
     render(true);
     if (game.lastMove && game.lastMove.type === 'pass') showToast(lastMoveMessage());
+    scheduleCpu();
   }
   function choosePlane(planeIndex) {
     if (isOnline) { if (isMyTurn()) sendOnline({ t: 'move', plane: planeIndex }); return; }
@@ -404,15 +426,18 @@
       game = Core.movePlane(game, planeIndex);
       saveGame();
       render(false);
+      scheduleCpu();
     } catch (error) { showToast(error.message || '这架飞机当前不能移动'); }
   }
   function startNewGame(confirmOverwrite) {
     if (isOnline) { sendOnline({ t: 'again' }); return; }
     if (confirmOverwrite && game.phase !== 'gameover' && !window.confirm('确定重新开始当前 ' + game.playerCount + ' 人棋局吗？')) return;
     game = Core.createGame(game.playerCount);
+    applyCpuSetup();
     winnerDialogShown = false;
     saveGame();
     render(false);
+    scheduleCpu();
   }
   function placeholderGame(capacity, players) {
     const next = Core.createGame(capacity);
@@ -463,10 +488,58 @@
     const forceNew = params.get('new') === '1';
     const saved = readSavedGame();
     game = forceNew || !saved || saved.phase === 'gameover' ? Core.createGame(requestedPlayers) : saved;
+    const cpuParam = Number(params.get('cpu'));
+    let cpuCount = Number.isInteger(cpuParam) && cpuParam > 0 ? cpuParam : (Number(safeGet(CPU_KEY)) || 0);
+    cpuCount = Math.max(0, Math.min(cpuCount, game.playerCount - 1));
+    cpuSeats = [];
+    for (let i = 1; i <= cpuCount; i++) cpuSeats.push(i);
+    safeSet(CPU_KEY, cpuCount > 0 ? String(cpuCount) : '');
+    applyCpuSetup();
     if (forceNew && window.history && window.history.replaceState) window.history.replaceState({}, '', 'play.html?mode=local');
     buildBoard();
     saveGame();
     render(false);
+    scheduleCpu();
+  }
+  function applyCpuSetup() {
+    if (!cpuSeats.length) return;
+    game.players[0].name = '你';
+    cpuSeats.forEach(function (seat) {
+      const color = Core.colorDefinition(game.players[seat].colorId);
+      if (color) game.players[seat].name = color.name + '（电脑）';
+    });
+  }
+  function isCpuTurn() {
+    return !isOnline && cpuSeats.includes(game.currentPlayer);
+  }
+  function chooseCpuPlane() {
+    const candidates = Core.getMovablePlanes(game, game.currentPlayer, game.dice);
+    if (!candidates.length) return candidates[0];
+    let best = candidates[0];
+    let bestScore = -Infinity;
+    candidates.forEach(function (planeIndex) {
+      const sim = Core.movePlane(Core.cloneGame(game), planeIndex);
+      const to = sim.players[game.currentPlayer].planes[planeIndex];
+      let score = to;
+      if (sim.lastMove.captured && sim.lastMove.captured.length) score += 1000 + sim.lastMove.captured.length * 100;
+      if (to === Core.FINISHED) score += 400;
+      else if (to >= Core.HOME_FIRST) score += 200;
+      if (sim.lastMove.bonus === 'shortcut') score += 80;
+      else if (sim.lastMove.bonus === 'color-hop') score += 40;
+      if (score > bestScore) { bestScore = score; best = planeIndex; }
+    });
+    return best;
+  }
+  function scheduleCpu() {
+    if (isOnline || !cpuSeats.length || game.phase === 'gameover' || game.winner !== null) return;
+    if (!cpuSeats.includes(game.currentPlayer) || cpuThinking) return;
+    cpuThinking = true;
+    window.setTimeout(function () {
+      cpuThinking = false;
+      if (isOnline || !cpuSeats.includes(game.currentPlayer) || game.phase === 'gameover' || game.winner !== null) return;
+      if (game.phase === 'roll') roll();
+      else if (game.phase === 'move') choosePlane(chooseCpuPlane());
+    }, 650);
   }
   function copyInvite() {
     const url = new URL('index.html?room=' + encodeURIComponent(roomCode), location.href).href;
