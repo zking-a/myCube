@@ -194,8 +194,8 @@ ok('棋盘飞机只通过规则核心给出的合法列表启用',
 ok('棋局提供自动存档、规则说明、响应式单列和减少动效支持',
   /saveGame\(\)/.test(gameSource) && /本局规则/.test(playHtml) &&
   /@media \(max-width: 900px\)/.test(css) && /prefers-reduced-motion/.test(css));
-ok('游戏平台首页已新增飞行棋入口并更新为四款游戏',
-  /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /四款游戏/.test(platformHtml));
+ok('游戏平台首页已新增飞行棋入口并更新为五款游戏',
+  /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /五款游戏/.test(platformHtml));
 ok('服务端为无尾斜杠飞行棋地址提供稳定重定向',
   /'\/flight-chess': '\/flight-chess\/'/.test(serverSource));
 ok('飞行棋服务端独立建房并权威生成骰点、校验移动与状态版本',

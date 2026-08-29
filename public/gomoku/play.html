@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#eef3ff" />
+  <meta name="description" content="五子棋对局页（单机人机 / 本地双人）。" />
+  <title>五子棋 · 对局</title>
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
+  <link rel="stylesheet" href="gomoku.css?v=20260830a" />
+  <script src="gomoku.js?v=20260830a" defer></script>
+</head>
+<body class="gomoku-play-page">
+  <main class="gomoku-shell">
+    <header class="game-topbar">
+      <a class="ui-button ui-button--secondary" href="./" aria-label="返回五子棋大厅">← 五子棋大厅</a>
+      <div class="game-title">
+        <span>轻量对战</span>
+        <strong id="gameTitle">五子棋</strong>
+      </div>
+      <span id="modeBadge" class="mode-badge">单机人机</span>
+    </header>
+
+    <section class="turn-panel ui-panel" aria-live="polite">
+      <strong id="turnText">黑方先手</strong>
+      <span id="turnSub">落子后切换对手</span>
+      <span id="moveText">第 0 手</span>
+    </section>
+
+    <section class="gomoku-layout">
+      <section class="board-panel ui-panel">
+        <div id="boardWrap" class="board-wrap">
+          <div id="gomokuBoard" class="gomoku-board" role="grid" aria-label="五子棋棋盘"></div>
+        </div>
+        <p id="hintText" class="board-hint"></p>
+      </section>
+
+      <aside class="side-panel ui-panel">
+        <div class="side-title">对局信息</div>
+        <div class="player-row" id="blackRow">
+          <span class="player-chip chip-black"></span>
+          <div>
+            <strong id="blackName">黑方</strong>
+            <small id="blackSub">先手</small>
+          </div>
+          <b id="blackCount">0</b>
+        </div>
+        <div class="player-row" id="whiteRow">
+          <span class="player-chip chip-white"></span>
+          <div>
+            <strong id="whiteName">白方</strong>
+            <small id="whiteSub">后手</small>
+          </div>
+          <b id="whiteCount">0</b>
+        </div>
+
+        <div class="control-grid">
+          <button type="button" id="undoBtn" class="ui-button ui-button--secondary">↩ 悔棋</button>
+          <button type="button" id="resetBtn" class="ui-button ui-button--secondary">↻ 重新开局</button>
+        </div>
+
+        <details class="rule-card">
+          <summary>五子棋规则 <span>⌄</span></summary>
+          <p>1. 先手是黑棋，先下 1 子。</p>
+          <p>2. 任一方向连续 5 子即为胜利。</p>
+          <p>3. 人机为「你对 AI」，AI 为白棋。</p>
+        </details>
+
+        <p class="status-caption">对局状态会实时保存在浏览器，离开后可继续。</p>
+      </aside>
+    </section>
+
+    <div id="resultOverlay" class="result-overlay" aria-hidden="true">
+      <div class="result-card ui-modal">
+        <h2 id="resultTitle">本局结束</h2>
+        <p id="resultText">黑方获胜</p>
+        <button type="button" id="resultRestart" class="ui-button ui-button--primary">再来一局</button>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

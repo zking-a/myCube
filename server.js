@@ -833,7 +833,8 @@ const server = http.createServer(function (req, res) {
     '/sudoku': '/sudoku/',
     '/sudoku.html': '/sudoku/',
     '/checkers': '/checkers/',
-    '/flight-chess': '/flight-chess/'
+    '/flight-chess': '/flight-chess/',
+    '/gomoku': '/gomoku/'
   };
   if (routeRedirects[urlPath]) {
     const query = (req.url || '').slice(urlPath.length);
@@ -1789,3 +1790,4 @@ flightChessWss.on('close', function () { if (!wss.clients.size && !checkersWss.c
 server.listen(PORT, function () {
   console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws，飞行棋 /flight-chess-ws)');
 });
+

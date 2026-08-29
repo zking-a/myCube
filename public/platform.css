@@ -100,3 +100,6 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; }
 }
+
+.game-card.gomoku::after { background: #9ca5f8; }
+.gomoku .game-card-icon { background: linear-gradient(145deg,#8a97ff,#5f73f4); }
