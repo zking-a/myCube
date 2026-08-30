@@ -58,7 +58,9 @@ function createFakeDom() {
       },
       dispatchEvent: function (type) {
         const target = this;
-        const event = { currentTarget: target, target: target, type: typeof type === 'string' ? type : type.type };
+        const event = typeof type === 'string'
+          ? { currentTarget: target, target: target, type: type }
+          : Object.assign({ currentTarget: target, target: target }, type);
         const list = listenersMap[event.type] || [];
         list.forEach(function (fn) { fn(event); });
       }
@@ -142,8 +144,21 @@ function ok(name, condition) {
 
 ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && /id="startLocalBtn"/.test(indexHtml));
 ok('五子棋棋局页包含关键控制区与状态区', /id="undoBtn"/.test(playHtml) && /id="resetBtn"/.test(playHtml) && /id="resultOverlay"/.test(playHtml));
+ok('对局顶部复用平台的左返回、中标题、右状态三栏结构',
+  /class="nav-back ui-button ui-button--secondary gomoku-nav-btn"/.test(playHtml) &&
+  /aria-label="返回五子棋首页"/.test(playHtml) &&
+  /class="top-actions"/.test(playHtml));
+ok('键盘焦点直接进入当前棋盘格，而不是停在无交互的棋盘容器',
+  !/id="gomokuBoard"[^>]*tabindex="0"/.test(playHtml));
 ok('棋盘网格与棋子样式样式片段完整',
   /\.gomoku-board/.test(css) && /\.gomoku-cell/.test(css) && /\.gomoku-stone/.test(css));
+ok('棋盘按 15 行 × 15 列生成，避免格子被压成单列', function () {
+  const env = runGomokuEnv('local');
+  const board = env.sandbox.document.getElementById('gomokuBoard');
+  return board.children.length === 15 && board.children.every(function (row) {
+    return /\bgomoku-row\b/.test(row.className) && row.children.length === 15;
+  });
+}());
 ok('对局页保持移动优先布局且桌面断点不会压缩棋盘',
   /\.board-wrap\s*\{[\s\S]*?max-width:\s*680px/.test(css) &&
   /@media\s*\(min-width:\s*1024px\)[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s*260px/.test(css));
@@ -170,7 +185,45 @@ const saved = {
 const localEnv = runGomokuEnv('local', { gomoku_save_local_v1: JSON.stringify(saved) });
 const localApi = localEnv.testApi;
 
+const headerEnv = runGomokuEnv('ai');
+ok('对局标题固定为游戏名，玩法信息只在右侧状态中显示一次',
+  headerEnv.sandbox.document.getElementById('gameTitle').textContent === '五子棋' &&
+  headerEnv.sandbox.document.getElementById('modeBadge').textContent === '单机人机');
+
 ok('加载历史可恢复对局状态', localEnv.testApi.getTestSnapshot().moveNumber === 2 && localApi.getTestSnapshot().board[7][7] === 1);
+ok('首次选择空位只显示预览，不会立即落子', function () {
+  localApi.setStateForTest({
+    board: new Array(15).fill(0).map(function () { return new Array(15).fill(0); }),
+    moveNumber: 0,
+    history: []
+  });
+  localApi.requestMove(7, 7);
+  const snap = localApi.getTestSnapshot();
+  return snap.moveNumber === 0 && snap.board[7][7] === 0 && snap.previewMove && snap.previewMove.r === 7 && snap.previewMove.c === 7;
+}());
+ok('再次选择同一预览位置才正式落子', function () {
+  localApi.setStateForTest({
+    board: new Array(15).fill(0).map(function () { return new Array(15).fill(0); }),
+    moveNumber: 0,
+    history: []
+  });
+  localApi.requestMove(7, 7);
+  localApi.requestMove(7, 7);
+  const snap = localApi.getTestSnapshot();
+  return snap.moveNumber === 1 && snap.board[7][7] === 1 && snap.previewMove === null;
+}());
+ok('方向键按格移动棋盘焦点', function () {
+  localApi.setStateForTest({
+    board: new Array(15).fill(0).map(function () { return new Array(15).fill(0); }),
+    moveNumber: 0,
+    history: []
+  });
+  const board = localEnv.sandbox.document.getElementById('gomokuBoard');
+  const center = board.children[7].children[7];
+  const right = board.children[7].children[8];
+  center.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: function () {} });
+  return center.tabIndex === -1 && right.tabIndex === 0;
+}());
 ok('空棋盘候选只返回中心点', function () {
   localApi.setStateForTest({ board: new Array(15).fill(0).map(function () { return new Array(15).fill(0); }) });
   const cands = localApi.collectCandidates();

@@ -9,6 +9,7 @@ const SAVE_KEYS = {
   local: 'gomoku_save_local_v1'
 };
 const DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
+const STAR_POINTS = new Set(['3,3', '3,11', '7,7', '11,3', '11,11']);
 
 const params = new URLSearchParams(window.location.search);
 const MODE = params.get('mode') === 'local' ? 'local' : 'ai';
@@ -49,6 +50,8 @@ let state = {
 
 const boardEl = $('gomokuBoard');
 const cells = [];
+let previewMove = null;
+let focusedCell = { r: Math.floor(BOARD_SIZE / 2), c: Math.floor(BOARD_SIZE / 2) };
 
 function createEmptyBoard() {
   const b = [];
@@ -138,6 +141,10 @@ function createBoardUI() {
   boardEl.innerHTML = '';
   cells.length = 0;
   for (let r = 0; r < BOARD_SIZE; r++) {
+    const rowElement = document.createElement('div');
+    rowElement.className = 'gomoku-row';
+    rowElement.setAttribute('role', 'row');
+    rowElement.setAttribute('aria-rowindex', String(r + 1));
     const row = [];
     for (let c = 0; c < BOARD_SIZE; c++) {
       const button = document.createElement('button');
@@ -145,20 +152,37 @@ function createBoardUI() {
       button.className = 'gomoku-cell is-empty';
       button.setAttribute('role', 'gridcell');
       button.setAttribute('aria-label', `第 ${r + 1} 行 第 ${c + 1} 列`);
+      button.setAttribute('aria-colindex', String(c + 1));
       button.setAttribute('data-r', String(r));
       button.setAttribute('data-c', String(c));
-      if (r === 0) button.classList.add('gomoku-row-first');
+      button.tabIndex = -1;
+      if (STAR_POINTS.has(r + ',' + c)) button.classList.add('is-star');
       button.style.setProperty('--r', r);
       button.style.setProperty('--c', c);
       const stone = document.createElement('span');
       stone.className = 'gomoku-stone';
       button.appendChild(stone);
       button.addEventListener('click', onCellClick);
-      boardEl.appendChild(button);
+      button.addEventListener('keydown', onCellKeydown);
+      rowElement.appendChild(button);
       row.push(button);
     }
+    boardEl.appendChild(rowElement);
     cells.push(row);
   }
+  setGridFocus(focusedCell.r, focusedCell.c, false);
+}
+
+function setGridFocus(r, c, shouldFocus) {
+  const nextR = Math.max(0, Math.min(BOARD_SIZE - 1, r));
+  const nextC = Math.max(0, Math.min(BOARD_SIZE - 1, c));
+  const previous = cells[focusedCell.r] && cells[focusedCell.r][focusedCell.c];
+  const next = cells[nextR] && cells[nextR][nextC];
+  if (!next) return;
+  if (previous && previous !== next) previous.tabIndex = -1;
+  next.tabIndex = 0;
+  focusedCell = { r: nextR, c: nextC };
+  if (shouldFocus && typeof next.focus === 'function') next.focus();
 }
 
 function isInside(r, c) {
@@ -197,12 +221,16 @@ function renderBoard() {
       const value = board[r][c];
       const cell = cells[r][c];
       const stone = cell.firstElementChild;
-      cell.classList.remove('is-black', 'is-white', 'is-empty', 'is-last', 'is-disabled');
+      const isPreview = !!previewMove && previewMove.r === r && previewMove.c === c && value === EMPTY;
+      cell.classList.remove('is-black', 'is-white', 'is-empty', 'is-last', 'is-disabled', 'is-preview');
       if (value === BLACK) {
         cell.classList.add('is-black');
         stone.style.display = 'block';
       } else if (value === WHITE) {
         cell.classList.add('is-white');
+        stone.style.display = 'block';
+      } else if (isPreview) {
+        cell.classList.add(previewMove.player === BLACK ? 'is-black' : 'is-white', 'is-preview');
         stone.style.display = 'block';
       } else {
         cell.classList.add('is-empty');
@@ -211,18 +239,22 @@ function renderBoard() {
       if (state.lastMove && state.lastMove.r === r && state.lastMove.c === c) {
         cell.classList.add('is-last');
       }
-      cell.disabled = state.finished || !!(value !== EMPTY);
+      cell.disabled = state.finished;
+      cell.setAttribute('aria-disabled', value !== EMPTY || state.finished ? 'true' : 'false');
+      cell.setAttribute('aria-selected', isPreview ? 'true' : 'false');
+      if (value === BLACK) {
+        cell.setAttribute('aria-label', `第 ${r + 1} 行 第 ${c + 1} 列，黑方棋子`);
+      } else if (value === WHITE) {
+        cell.setAttribute('aria-label', `第 ${r + 1} 行 第 ${c + 1} 列，白方棋子`);
+      } else if (isPreview) {
+        cell.setAttribute('aria-label', `第 ${r + 1} 行 第 ${c + 1} 列，${previewMove.player === BLACK ? '黑方' : '白方'}预览，按回车或再次点击确认`);
+      } else {
+        cell.setAttribute('aria-label', `第 ${r + 1} 行 第 ${c + 1} 列，空位`);
+      }
       if (value !== EMPTY || state.finished) {
         cell.classList.add('is-disabled');
       }
     }
-  }
-  if (!state.finished) {
-    cells.flat().forEach(function (cell) {
-      if (cell.firstElementChild.style.display === 'none' && !cell.classList.contains('is-disabled')) {
-        cell.classList.remove('is-disabled');
-      }
-    });
   }
   updatePlayers();
   updateStatus();
@@ -262,18 +294,21 @@ function updateStatus() {
   } else if (state.winner === 0 && isAiTurn()) {
     turnText.textContent = turnName;
     turnSub.textContent = 'AI 正在思考…';
+  } else if (previewMove) {
+    turnText.textContent = `${turnName}确认落子`;
+    turnSub.textContent = '再次点击同一位置确认，或选择其他空位重新预览';
   } else {
     turnText.textContent = `${turnName}落子`; 
-    turnSub.textContent = state.moveNumber === 0 ? '黑方先手，点击任意空位开始' : '点击空位落子';
+    turnSub.textContent = state.moveNumber === 0 ? '黑方先手，点击空位预览后再次确认' : '点击空位预览后再次确认';
   }
 
   blackCount.textContent = String(state.history.filter(function (m) { return m.player === BLACK; }).length);
   whiteCount.textContent = String(state.history.filter(function (m) { return m.player === WHITE; }).length);
 
   if (MODE === 'ai') {
-    badge.textContent = '单机人机（AI 对局）';
+    badge.textContent = '单机人机';
   } else {
-    badge.textContent = '本地双人（同屏对战）';
+    badge.textContent = '本地双人';
   }
 }
 
@@ -296,6 +331,7 @@ function isAiTurn() {
 function placeStone(r, c, player) {
   if (!isInside(r, c) || state.finished) return false;
   if (board[r][c] !== EMPTY) return false;
+  previewMove = null;
   board[r][c] = player;
   state.history.push({ r: r, c: c, player: player, t: Date.now() });
   state.moveNumber += 1;
@@ -319,19 +355,52 @@ function placeStone(r, c, player) {
 }
 
 function onCellClick(event) {
-  if (state.finished) return;
   const cell = event.currentTarget;
   const r = parseInt(cell.dataset.r, 10);
   const c = parseInt(cell.dataset.c, 10);
   if (Number.isNaN(r) || Number.isNaN(c)) return;
-  if (!canPlayNow()) {
-    setHint('AI 回合，等待电脑落子');
+  setGridFocus(r, c, false);
+  requestMove(r, c);
+}
+
+function onCellKeydown(event) {
+  const cell = event.currentTarget;
+  const r = parseInt(cell.dataset.r, 10);
+  const c = parseInt(cell.dataset.c, 10);
+  if (Number.isNaN(r) || Number.isNaN(c)) return;
+  const arrows = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+  if (arrows[event.key]) {
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    setGridFocus(r + arrows[event.key][0], c + arrows[event.key][1], true);
     return;
   }
-  if (!placeStone(r, c, state.turn)) return;
+  if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+    if (typeof event.preventDefault === 'function') event.preventDefault();
+    requestMove(r, c);
+  }
+}
+
+function requestMove(r, c) {
+  if (state.finished || !isInside(r, c)) return false;
+  if (!canPlayNow()) {
+    setHint('AI 回合，等待电脑落子');
+    return false;
+  }
+  if (board[r][c] !== EMPTY) {
+    setHint('该位置已有棋子，请选择空位');
+    return false;
+  }
+  if (!previewMove || previewMove.r !== r || previewMove.c !== c || previewMove.player !== state.turn) {
+    previewMove = { r: r, c: c, player: state.turn };
+    setHint('已显示预览，再次点击同一位置确认落子');
+    renderBoard();
+    return true;
+  }
+  if (!placeStone(r, c, state.turn)) return false;
   if (!state.finished && isAiTurn()) {
     scheduleAiMove();
   }
+  return true;
 }
 
 function canPlayNow() {
@@ -483,6 +552,7 @@ function undo() {
   state.winner = 0;
   state.finished = false;
   state.winnerLine = null;
+  previewMove = null;
   setHint('已悔棋');
   saveState();
   renderBoard();
@@ -494,6 +564,7 @@ function undo() {
 function newGame() {
   state = createState();
   board = state.board;
+  previewMove = null;
   $('resultOverlay').classList.remove('show');
   safeRemove(STORAGE_KEY);
   setHint('新局已开始，黑方先手');
@@ -543,6 +614,7 @@ function setStateForTest(seed) {
     whiteName: MODE === 'ai' ? '电脑（白）' : '玩家 B（白）'
   };
   board = state.board;
+  previewMove = null;
   renderBoard();
   return {
     turn: state.turn,
@@ -561,6 +633,7 @@ function getTestSnapshot() {
     moveNumber: state.moveNumber,
     history: state.history.slice(),
     lastMove: state.lastMove && Object.assign({}, state.lastMove),
+    previewMove: previewMove && Object.assign({}, previewMove),
     board: cloneBoard(board)
   };
 }
@@ -604,6 +677,7 @@ if (typeof window !== 'undefined') {
     undo: undo,
     newGame: newGame,
     chooseAiMove: chooseAiMove,
+    requestMove: requestMove,
     setStateForTest: setStateForTest,
     getTestSnapshot: getTestSnapshot,
     setHint: setHint,
@@ -614,11 +688,7 @@ if (typeof window !== 'undefined') {
 function initMode() {
   const title = $('gameTitle');
   const isLocal = MODE === 'local';
-  if (isLocal) {
-    title.textContent = '五子棋 · 本地双人';
-  } else {
-    title.textContent = '五子棋 · 单机人机';
-  }
+  title.textContent = '五子棋';
   document.body.classList.add(isLocal ? 'mode-local' : 'mode-ai');
 }
 

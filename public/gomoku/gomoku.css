@@ -160,8 +160,14 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 .game-title { text-align: center; }
 .game-title span { color: var(--ui-text-secondary); font-size: 11px; }
 .game-title strong { display: block; margin-top: 2px; font-size: 20px; }
-.mode-badge {
+.top-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
   justify-self: end;
+}
+.mode-badge {
   padding: 6px 10px;
   border-radius: 999px;
   color: var(--ui-text-secondary);
@@ -361,18 +367,13 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   content: '';
   pointer-events: none;
   position: absolute;
-  inset: 0;
+  inset: calc(100% / (var(--gomoku-size) * 2));
   background-image:
-    repeating-linear-gradient(
-      to right,
-      transparent calc(var(--gomoku-step) - 1px),
-      var(--gomoku-line) calc(var(--gomoku-step) - 1px) var(--gomoku-step)
-    ),
-    repeating-linear-gradient(
-      to bottom,
-      transparent calc(var(--gomoku-step) - 1px),
-      var(--gomoku-line) calc(var(--gomoku-step) - 1px) var(--gomoku-step)
-    );
+    linear-gradient(to right, var(--gomoku-line) 0 1px, transparent 1px),
+    linear-gradient(to bottom, var(--gomoku-line) 0 1px, transparent 1px);
+  background-size:
+    calc(100% / (var(--gomoku-size) - 1)) 100%,
+    100% calc(100% / (var(--gomoku-size) - 1));
 }
 
 .gomoku-row {
@@ -380,11 +381,13 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   z-index: 1;
   display: grid;
   flex: 1 1 auto;
+  min-height: 0;
   grid-template-columns: repeat(var(--gomoku-size), minmax(0, 1fr));
 }
 .gomoku-cell {
   position: relative;
-  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
   border: 0;
   padding: 0;
   background: transparent;
