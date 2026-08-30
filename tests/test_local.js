@@ -10,10 +10,10 @@
  *   6) B 完成 → 双方看到 phase=done
  *   7) A 再来一局 → 双方收到 start.round=2
  *
- * 运行：先把服务器起在本地（PORT=3000），再 NODE_PATH=xxx node server/test_local.js
- */
+ * 运行：先把服务器起在本地（PORT=3000），再 NODE_PATH=xxx node tests/test_local.js
+*/
 const WebSocket = require('ws');
-const Questions = require('./server_questions');
+const Questions = require('../server_questions');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const URL = 'ws://127.0.0.1:' + PORT + '/ws';

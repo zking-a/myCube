@@ -1,8 +1,8 @@
 'use strict';
 
 const fs = require('fs');
-const Core = require('./public/flight-chess/flight_chess_core');
-const Net = require('./public/flight-chess/flight_chess_net');
+const Core = require('../public/flight-chess/flight_chess_core');
+const Net = require('../public/flight-chess/flight_chess_net');
 
 const lobbyHtml = fs.readFileSync('public/flight-chess/index.html', 'utf8');
 const playHtml = fs.readFileSync('public/flight-chess/play.html', 'utf8');
@@ -206,8 +206,8 @@ ok('飞行棋服务端独立建房并权威生成骰点、校验移动与状态�
 ok('飞行棋新建房会回收同来源已离线的单人等待房',
   /releaseAbandonedFlightChessRoomsForIp/.test(serverSource) && /旧的飞行棋等待房已由新房间替换/.test(serverSource));
 ok('package scripts 提供飞行棋测试及整站统一回归入口',
-  packageJson.scripts['test:flight-chess'] === 'node test_flight_chess.js' &&
-  packageJson.scripts['test:flight-chess:e2e'] === 'node test_flight_chess_online.js' &&
-  /test_flight_chess_online\.js/.test(packageJson.scripts['test:all']));
+  packageJson.scripts['test:flight-chess'] === 'node tests/test_flight_chess.js' &&
+  packageJson.scripts['test:flight-chess:e2e'] === 'node tests/test_flight_chess_online.js' &&
+  /tests\/test_flight_chess_online\.js/.test(packageJson.scripts['test:all']));
 
 console.log('\n✅ 飞行棋规则与页面契约测试全部通过（' + passed + ' 项）');

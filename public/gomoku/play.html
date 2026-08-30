@@ -4,11 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#eef3ff" />
-  <meta name="description" content="五子棋对局页（单机人机 / 本地双人）。" />
+  <meta name="description" content="五子棋对局页（单机人机）。" />
   <title>五子棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
-  <link rel="stylesheet" href="gomoku.css?v=20260830f" />
-  <script src="gomoku.js?v=20260830f" defer></script>
+  <link rel="stylesheet" href="gomoku.css?v=20260831a" />
+  <script src="gomoku_core.js?v=20260831a" defer></script>
+  <script src="gomoku_net.js?v=20260831a" defer></script>
+  <script src="gomoku.js?v=20260831a" defer></script>
 </head>
 <body class="gomoku-play-page">
   <main class="gomoku-shell">
@@ -19,6 +21,7 @@
         <strong id="gameTitle">五子棋</strong>
       </div>
       <div class="top-actions">
+        <span id="netBadge" class="net-badge" hidden></span>
         <span id="modeBadge" class="mode-badge">单机人机</span>
       </div>
     </header>
@@ -56,6 +59,16 @@
           </div>
           <b id="whiteCount">0</b>
         </div>
+
+        <section class="room-panel" id="roomPanel" hidden aria-label="联机房间信息">
+          <div class="side-title">联机房间</div>
+          <div class="room-code-row">
+            <span class="room-code" id="roomCode">-----</span>
+            <button type="button" id="copyInviteBtn" class="ui-button ui-button--secondary gomoku-room-copy">复制邀请</button>
+          </div>
+          <p class="room-players" id="roomPlayers">正在连接…</p>
+          <button type="button" id="leaveRoomBtn" class="ui-button ui-button--secondary gomoku-room-leave">退出房间</button>
+        </section>
 
         <div class="control-grid" aria-label="棋局操作">
           <button type="button" id="undoBtn" class="ui-button ui-button--secondary gomoku-control-btn gomoku-undo-btn">↩ 悔棋</button>

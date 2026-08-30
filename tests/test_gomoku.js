@@ -106,7 +106,7 @@ function runGomokuEnv(mode, storageSeed) {
     setTimeout, clearTimeout,
     localStorage,
     document: dom.document,
-    location: { search: mode === 'local' ? '?mode=local' : '?mode=ai' },
+    location: { search: mode === 'online' ? '?mode=online' : '?mode=ai' },
     window: null,
     listeners: [],
     addEventListener: function (type, handler) {
@@ -142,7 +142,7 @@ function ok(name, condition) {
   console.log('  PASS  ' + name);
 }
 
-ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && /id="startLocalBtn"/.test(indexHtml));
+ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && !/id="startLocalBtn"/.test(indexHtml));
 const modeGridRule = css.match(/\.mode-grid\s*\{[^}]*\}/);
 ok('五子棋大厅在所有屏幕宽度下均以纵向玩法菜单展示',
   !!modeGridRule && /grid-template-columns:\s*1fr\s*;/.test(modeGridRule[0]));
@@ -156,7 +156,7 @@ ok('键盘焦点直接进入当前棋盘格，而不是停在无交互的棋盘�
 ok('棋盘网格与棋子样式样式片段完整',
   /\.gomoku-board/.test(css) && /\.gomoku-cell/.test(css) && /\.gomoku-stone/.test(css));
 ok('棋盘按 15 行 × 15 列生成，避免格子被压成单列', function () {
-  const env = runGomokuEnv('local');
+  const env = runGomokuEnv('ai');
   const board = env.sandbox.document.getElementById('gomokuBoard');
   return board.children.length === 15 && board.children.every(function (row) {
     return /\bgomoku-row\b/.test(row.className) && row.children.length === 15;
@@ -176,7 +176,7 @@ const savedBoard = new Array(15).fill(0).map(function () { return new Array(15).
 savedBoard[7][7] = 1;
 savedBoard[7][8] = 2;
 const saved = {
-  mode: 'local',
+  mode: 'ai',
   turn: 1,
   winner: 0,
   finished: false,
@@ -185,7 +185,7 @@ const saved = {
   lastMove: { r: 7, c: 8, player: 2 },
   board: savedBoard
 };
-const localEnv = runGomokuEnv('local', { gomoku_save_local_v1: JSON.stringify(saved) });
+const localEnv = runGomokuEnv('ai', { gomoku_save_ai_v1: JSON.stringify(saved) });
 const localApi = localEnv.testApi;
 
 const headerEnv = runGomokuEnv('ai');
@@ -238,7 +238,7 @@ localApi.setStateForTest({
   moveNumber: 0,
   history: []
 });
-ok('本地双人模式可下子、可悔棋并回退局面', function () {
+ok('单机模式可下子、可悔棋并回退局面', function () {
   localApi.placeStone(7, 7, 1);
   localApi.placeStone(7, 8, 2);
   localApi.undo();
@@ -277,10 +277,10 @@ ok('AI 模式默认下黑先手，当前仅一个候选中心位可用于开局'
 }());
 
 ok('连续两步后会写入本地存档，重建后可读到最近局面', function () {
-  const env = runGomokuEnv('local');
+  const env = runGomokuEnv('ai');
   env.testApi.placeStone(0, 0, 1);
   env.testApi.placeStone(1, 1, 2);
-  return Object.prototype.hasOwnProperty.call(env.storage, 'gomoku_save_local_v1');
+  return Object.prototype.hasOwnProperty.call(env.storage, 'gomoku_save_ai_v1');
 });
 
 console.log('\n✅ 五子棋冒烟测试通过（' + passed + ' 项）');

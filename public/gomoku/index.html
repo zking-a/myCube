@@ -4,18 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#eef3ff" />
-  <meta name="description" content="五子棋：单机人机和本地双人对战，15x15 经典对局。" />
+  <meta name="description" content="五子棋：单机人机与好友联机对战，15×15 经典对局。" />
   <title>五子棋 · 选择玩法</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
-  <link rel="stylesheet" href="gomoku.css?v=20260830a" />
-  <script src="gomoku-index.js?v=20260830a" defer></script>
+  <link rel="stylesheet" href="gomoku.css?v=20260831a" />
+  <script src="gomoku-index.js?v=20260831a" defer></script>
 </head>
 <body class="gomoku-lobby-page">
   <main class="ui-lobby gomoku-lobby-shell">
     <nav class="lobby-nav">
       <a class="nav-back ui-button ui-button--secondary" href="../" aria-label="返回游戏大厅">← 游戏大厅</a>
       <span>轻量游戏站</span>
-      <span class="lobby-mode-badge">单机 · 双人本地</span>
+      <span class="lobby-mode-badge">单机 · 好友联机</span>
     </nav>
 
     <section class="lobby-hero" aria-labelledby="gomokuHeroTitle">
@@ -23,7 +23,7 @@
       <div class="hero-copy">
         <span class="eyebrow">Gomoku</span>
         <h1 id="gomokuHeroTitle">五子棋</h1>
-        <p>五子连珠赢，支持人机对弈和同屏双人。</p>
+        <p>五子连珠赢，支持你我单机对弈和好友联机。</p>
       </div>
     </section>
 
@@ -43,15 +43,24 @@
 
       <article class="mode-card ui-panel">
         <div class="mode-head">
-          <span class="mode-icon mode-icon-local">👥</span>
+          <span class="mode-icon mode-icon-online">🌐</span>
           <span>
-            <strong>本地双人</strong>
-            <small>两位玩家同屏交替</small>
+            <strong>好友对战</strong>
+            <small>创建房间，邀请好友实时对弈</small>
           </span>
-          <span class="mode-chip chip-alt">双人模式</span>
+          <span class="mode-chip chip-online">联机</span>
         </div>
-        <p>固定黑白先后顺序，支持暂停后继续，本地断点自动保存。</p>
-        <button type="button" id="startLocalBtn" class="mode-btn ui-button ui-button--accent">进入对战</button>
+        <p>服务端同步棋盘与轮次，各执黑白，支持断线重连续局。</p>
+        <label class="gomoku-field"><span>显示昵称</span><input class="ui-input" id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="朋友会看到这个名字"></label>
+        <div class="gomoku-online-actions">
+          <button type="button" id="createRoomBtn" class="mode-btn ui-button ui-button--primary">创建房间</button>
+          <button type="button" id="openJoinBtn" class="mode-btn ui-button ui-button--secondary" aria-expanded="false" aria-controls="joinConfig">加入房间</button>
+        </div>
+        <div class="gomoku-join-config" id="joinConfig" hidden>
+          <label class="gomoku-field"><span>房间码</span><input class="ui-input" id="roomInput" type="text" maxlength="5" autocomplete="off" spellcheck="false" placeholder="输入 5 位房间码"></label>
+          <button type="button" id="joinRoomBtn" class="mode-btn ui-button ui-button--primary">进入房间 →</button>
+        </div>
+        <p class="gomoku-field-error" id="fieldError" role="alert" hidden></p>
       </article>
     </section>
 
@@ -60,9 +69,10 @@
       <span><b>✓</b> 五子连珠即胜</span>
       <span><b>✓</b> 断点续玩</span>
       <span><b>✓</b> 悔棋与重开</span>
+      <span><b>⇄</b> 好友联机</span>
     </div>
 
-    <p class="lobby-tip">AI 为近似智能：先手杀法、阻挡与线段评估，支持策略级进阶版本扩展。</p>
+    <p class="lobby-tip">AI 为近似智能：先手杀法、阻挡与线段评估。联机模式由服务端同步棋盘与轮次，断线后可带着原身份重连续局。</p>
   </main>
 </body>
 </html>

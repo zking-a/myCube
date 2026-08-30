@@ -35,6 +35,7 @@ const WebSocket = require('ws');
 const Questions = require('./server_questions');
 const CheckersCore = require('./public/checkers/checkers_core');
 const FlightChessCore = require('./public/flight-chess/flight_chess_core');
+const GomokuCore = require('./public/gomoku/gomoku_core');
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const SYNC_DELAY = 2000;     // 开局同步缓冲(ms)，给两端网络延迟留余量
@@ -118,6 +119,8 @@ const checkersRooms = new Map();
 const sudokuRooms = new Map();
 /** roomCode -> 飞行棋房间（2–4 人，服务端权威骰点与棋局） */
 const flightChessRooms = new Map();
+/** roomCode -> 五子棋房间（2 人，服务端权威落子与胜负判定） */
+const gomokuRooms = new Map();
 
 function createRoom(code, creatorIp) {
   const room = {
@@ -299,6 +302,115 @@ function releaseAbandonedFlightChessRoomsForIp(ip) {
   });
 }
 
+// ===================== 五子棋房间（2 人，服务端权威落子） =====================
+
+function createGomokuRoom(code, creatorIp) {
+  const room = {
+    code: code,
+    phase: 'waiting', // waiting | playing | done
+    capacity: 2,
+    round: 1,
+    revision: 0,
+    game: null,
+    hostCid: null,
+    creatorIp: creatorIp || '',
+    players: new Map(),
+    createdAt: Date.now(),
+    lastActivityAt: Date.now(),
+    _gc: null
+  };
+  gomokuRooms.set(code, room);
+  return room;
+}
+
+function gomokuPlayerList(room) {
+  return Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; }).map(function (player) {
+    return {
+      cid: player.cid,
+      nick: player.nick,
+      seat: player.seat,
+      color: GomokuCore.seatColor(player.seat),
+      online: player.online
+    };
+  });
+}
+
+function broadcastGomokuState(room) {
+  const state = JSON.stringify({
+    t: 'state',
+    room: room.code,
+    phase: room.phase,
+    capacity: room.capacity,
+    round: room.round,
+    revision: room.revision,
+    host: room.hostCid,
+    players: gomokuPlayerList(room),
+    game: GomokuCore.publicGame(room.game),
+    serverNow: Date.now()
+  });
+  room.players.forEach(function (player) { send(player.ws, state); });
+}
+
+function pickGomokuHost(room) {
+  const next = Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; })
+    .find(function (player) { return player.online; }) || room.players.values().next().value;
+  room.hostCid = next ? next.cid : null;
+}
+
+function nextGomokuSeat(room) {
+  const used = new Set(Array.from(room.players.values()).map(function (player) { return player.seat; }));
+  for (let seat = 0; seat < 2; seat++) if (!used.has(seat)) return seat;
+  return -1;
+}
+
+function startGomokuGame(room, nextRound) {
+  const players = Array.from(room.players.values()).sort(function (a, b) { return a.seat - b.seat; });
+  if (nextRound) room.round += 1;
+  room.game = GomokuCore.createGame(players.map(function (player) { return player.nick; }));
+  room.phase = 'playing';
+  room.revision += 1;
+  room.lastActivityAt = Date.now();
+}
+
+function resetGomokuWaitingRoom(room) {
+  room.phase = 'waiting';
+  room.game = null;
+  room.revision += 1;
+  room.createdAt = Date.now();
+  room.lastActivityAt = Date.now();
+}
+
+function scheduleGomokuGC(room) {
+  if (room._gc) clearTimeout(room._gc);
+  room._gc = setTimeout(function () {
+    const anyOnline = Array.from(room.players.values()).some(function (player) { return player.online; });
+    if (!anyOnline && gomokuRooms.get(room.code) === room) gomokuRooms.delete(room.code);
+  }, ROOM_TTL);
+}
+
+function expireGomokuRoom(room, reason) {
+  if (!room || gomokuRooms.get(room.code) !== room) return;
+  gomokuRooms.delete(room.code);
+  if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+  room.players.forEach(function (player) {
+    send(player.ws, { t: 'err', code: 'ROOM_EXPIRED', msg: reason });
+    if (player.ws) { try { player.ws.close(1000, 'room expired'); } catch (error) {} }
+    player.online = false;
+    player.ws = null;
+  });
+}
+
+// 与飞行棋同策略：建房前回收同来源已完全离线的单人等待房。
+function releaseAbandonedGomokuRoomsForIp(ip) {
+  gomokuRooms.forEach(function (room) {
+    if (room.creatorIp !== ip || room.phase !== 'waiting' || room.players.size > 1) return;
+    const hasOpenPlayer = Array.from(room.players.values()).some(function (player) {
+      return player.online && player.ws && player.ws.readyState === WebSocket.OPEN;
+    });
+    if (!hasOpenPlayer) expireGomokuRoom(room, '旧的五子棋等待房已由新房间替换');
+  });
+}
+
 function sudokuPlayerList(room) {
   return Array.from(room.players.values()).map(function (p) {
     return { cid: p.cid, seat: p.seat, online: p.online };
@@ -427,6 +539,7 @@ function countSeats() {
   checkersRooms.forEach(function (room) { total += room.players.size; });
   sudokuRooms.forEach(function (room) { total += room.players.size; });
   flightChessRooms.forEach(function (room) { total += room.players.size; });
+  gomokuRooms.forEach(function (room) { total += room.players.size; });
   return total;
 }
 
@@ -444,6 +557,9 @@ function countSeatsForIp(ip) {
   flightChessRooms.forEach(function (room) {
     room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
   });
+  gomokuRooms.forEach(function (room) {
+    room.players.forEach(function (p) { if (p.clientIp === ip) total++; });
+  });
   return total;
 }
 
@@ -454,11 +570,12 @@ function countRoomsForIp(ip) {
   checkersRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   sudokuRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   flightChessRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
+  gomokuRooms.forEach(function (room) { if (room.creatorIp === ip) total++; });
   return total;
 }
 
 function countRooms() {
-  return rooms.size + checkersRooms.size + sudokuRooms.size + flightChessRooms.size;
+  return rooms.size + checkersRooms.size + sudokuRooms.size + flightChessRooms.size + gomokuRooms.size;
 }
 
 function createReconnectToken() {
@@ -675,6 +792,22 @@ setInterval(function () {
       if (room._gc) { clearTimeout(room._gc); room._gc = null; }
     }
   });
+  gomokuRooms.forEach(function (room, code) {
+    const anyOnline = Array.from(room.players.values()).some(function (player) { return player.online; });
+    if (room.phase === 'waiting' && room.players.size < 2 && now - room.createdAt > UNMATCHED_ROOM_TTL_MS) {
+      expireGomokuRoom(room, '等待对手超时，房间已自动释放');
+      return;
+    }
+    const idleLimit = room.phase === 'waiting' ? LOBBY_IDLE_MS : ONLINE_ROOM_IDLE_MS;
+    if (anyOnline && now - (room.lastActivityAt || room.createdAt) > idleLimit) {
+      expireGomokuRoom(room, '五子棋房间长时间没有操作，已自动释放');
+      return;
+    }
+    if (!anyOnline && now - (room.lastActivityAt || room.createdAt || now) > ROOM_TTL) {
+      gomokuRooms.delete(code);
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+    }
+  });
   roomCreateLog.forEach(function (timestamps, ip) {
     const recent = timestamps.filter(function (t) { return now - t < ROOM_CREATE_WINDOW; });
     if (recent.length) roomCreateLog.set(ip, recent);
@@ -792,6 +925,7 @@ const server = http.createServer(function (req, res) {
       roomsCheckers: checkersRooms.size,
       roomsSudoku: sudokuRooms.size,
       roomsFlightChess: flightChessRooms.size,
+      roomsGomoku: gomokuRooms.size,
       seats: countSeats(),
       sockets: liveConnections,
       ts: Date.now()
@@ -854,6 +988,7 @@ const wss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD })
 const checkersWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 const sudokuWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 const flightChessWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
+const gomokuWss = new WebSocket.Server({ noServer: true, maxPayload: MAX_WS_PAYLOAD });
 
 // 显式分发升级请求，避免多个 WebSocket.Server 各自监听 server 时互相抢占路径。
 server.on('upgrade', function (req, socket, head) {
@@ -862,7 +997,8 @@ server.on('upgrade', function (req, socket, head) {
   const target = pathname === '/ws' ? wss
     : (pathname === '/checkers-ws' ? checkersWss
       : (pathname === '/sudoku-ws' ? sudokuWss
-        : (pathname === '/flight-chess-ws' ? flightChessWss : null)));
+        : (pathname === '/flight-chess-ws' ? flightChessWss
+          : (pathname === '/gomoku-ws' ? gomokuWss : null))));
   if (!target) { socket.destroy(); return; }
   target.handleUpgrade(req, socket, head, function (ws) { target.emit('connection', ws, req); });
 });
@@ -1771,9 +1907,218 @@ flightChessWss.on('connection', function (ws, req) {
   ws.on('error', function () {});
 });
 
+gomokuWss.on('connection', function (ws, req) {
+  const clientIp = getClientIp(req);
+  const origin = req && req.headers && req.headers.origin;
+  if (origin) {
+    const host = req.headers.host;
+    const ok = origin === ALLOWED_ORIGIN ||
+      (host && (origin === 'https://' + host || origin === 'http://' + host)) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    if (!ok) { ws.close(1008, 'origin not allowed'); return; }
+  }
+  if (!checkConnectionAttemptLimit(clientIp)) { ws.close(1013, 'too many connection attempts'); return; }
+  const ipConnections = liveConnectionsByIp.get(clientIp) || 0;
+  if (ipConnections >= MAX_SOCKET_CONNECTIONS_PER_IP) { ws.close(1013, 'too many connections from this ip'); return; }
+  if (liveConnections >= MAX_SOCKET_CONNECTIONS) { ws.close(1013, 'too many connections'); return; }
+
+  liveConnections++;
+  liveConnectionsByIp.set(clientIp, ipConnections + 1);
+  ws.isAlive = true;
+  ws.on('pong', function () { ws.isAlive = true; });
+
+  let tokens = RATE_BURST;
+  let lastRefill = Date.now();
+  let player = null;
+  function fail(code, msg) { send(ws, { t: 'err', code: code, msg: msg }); }
+  const joinTimer = setTimeout(function () {
+    if (!player) { try { ws.close(1000, 'join timeout'); } catch (error) {} }
+  }, JOIN_IDLE_MS);
+
+  function allSeatsOnline(room) {
+    return room.players.size === 2 &&
+      Array.from(room.players.values()).every(function (seat) { return seat.online; });
+  }
+
+  function requireCurrentRevision(room, message) {
+    if (Number(message.rev) === room.revision) return true;
+    fail('STATE_OUTDATED', '棋局状态已更新，请按最新状态操作');
+    broadcastGomokuState(room);
+    return false;
+  }
+
+  ws.on('message', function (data) {
+    const now = Date.now();
+    tokens = Math.min(RATE_BURST, tokens + ((now - lastRefill) / 1000) * RATE_LIMIT);
+    lastRefill = now;
+    if (tokens < 1) { ws.close(1008, 'rate limit'); return; }
+    tokens -= 1;
+
+    let message;
+    try { message = JSON.parse(data.toString()); } catch (error) { return; }
+    if (!message || typeof message.t !== 'string') return;
+
+    if (message.t === 'join') {
+      if (player) return;
+      const code = String(message.room || '').toUpperCase();
+      if (!ROOM_CODE_RE.test(code)) { fail('ROOM_INVALID', '房间码格式不正确'); return; }
+      const cid = typeof message.cid === 'string' ? message.cid.slice(0, 32) : '';
+      if (!cid || cid.length < 4) { fail('SESSION_INVALID', '玩家身份格式不正确'); return; }
+      const nick = typeof message.nick === 'string' && message.nick.trim()
+        ? message.nick.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, 16)
+        : '玩家';
+      const reconnectToken = typeof message.token === 'string' ? message.token.slice(0, 128) : '';
+      const intent = message.intent === 'create' ? 'create' : 'join';
+
+      let room = gomokuRooms.get(code);
+      if (!room) {
+        if (intent !== 'create') { fail('ROOM_NOT_FOUND', '五子棋房间不存在或已失效，请向房主确认房间码'); return; }
+        releaseAbandonedGomokuRoomsForIp(clientIp);
+        if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
+          fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
+        }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
+          fail('IP_ROOM_LIMIT', '当前网络已有正在使用的房间，请先退出旧房间再创建'); return;
+        }
+        if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
+        if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
+        room = createGomokuRoom(code, clientIp);
+      } else if (intent === 'create') {
+        const ownSeat = room.players.get(cid);
+        if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，请重新创建'); return; }
+        if (!tokenMatches(ownSeat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '重连身份已失效，请退出房间后重新加入'); return;
+        }
+      }
+
+      let seat = room.players.get(cid);
+      let replacedSocket = null;
+      if (seat) {
+        if (!tokenMatches(seat.reconnectToken, reconnectToken)) {
+          fail('SESSION_INVALID', '无法验证该玩家身份，请退出房间后重新加入'); return;
+        }
+        replacedSocket = seat.ws && seat.ws !== ws ? seat.ws : null;
+        seat.ws = ws;
+        seat.nick = nick;
+        seat.online = true;
+        seat.clientIp = clientIp;
+        seat.disconnectedAt = null;
+        seat._room = room;
+      } else {
+        if (room.phase !== 'waiting') { fail('ROUND_IN_PROGRESS', '棋局已经开始，只允许原玩家重连'); return; }
+        if (room.players.size >= 2) { fail('ROOM_FULL', '这个房间已经有两位棋手了'); return; }
+        if (countSeats() >= MAX_CONNECTIONS) { fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return; }
+        if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) { fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限'); return; }
+        const seatIndex = nextGomokuSeat(room);
+        if (seatIndex < 0) { fail('ROOM_FULL', '这个房间已经有两位棋手了'); return; }
+        seat = {
+          cid: cid,
+          nick: nick,
+          seat: seatIndex,
+          ws: ws,
+          online: true,
+          clientIp: clientIp,
+          disconnectedAt: null,
+          reconnectToken: createReconnectToken(),
+          _room: room
+        };
+        room.players.set(cid, seat);
+        if (!room.hostCid) room.hostCid = cid;
+      }
+
+      if (room._gc) { clearTimeout(room._gc); room._gc = null; }
+      player = seat;
+      send(ws, { t: 'session', cid: seat.cid, token: seat.reconnectToken, seat: seat.seat });
+      if (replacedSocket) { try { replacedSocket.terminate(); } catch (error) {} }
+      room.lastActivityAt = Date.now();
+      clearTimeout(joinTimer);
+      // 两位棋手到齐且都在线时自动开局，省掉一次多余点击。
+      if (room.phase === 'waiting' && allSeatsOnline(room)) startGomokuGame(room, false);
+      broadcastGomokuState(room);
+      return;
+    }
+
+    if (!player) return;
+    if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (error) {} return; }
+    const room = player._room;
+    if (!room || gomokuRooms.get(room.code) !== room) return;
+
+    if (message.t === 'start') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以开始棋局'); return; }
+      if (room.phase !== 'waiting') return;
+      if (room.players.size !== 2) { fail('ROOM_NOT_READY', '请等待两位棋手全部加入'); return; }
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '有棋手暂时离线，请等待其重连'); return; }
+      startGomokuGame(room, false);
+      broadcastGomokuState(room);
+    } else if (message.t === 'move') {
+      if (room.phase !== 'playing' || !room.game) return;
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '有棋手暂时离线，棋局已暂停'); return; }
+      if (!requireCurrentRevision(room, message)) return;
+      const color = GomokuCore.seatColor(player.seat);
+      if (room.game.turn !== color) { fail('NOT_YOUR_TURN', '还没有轮到你落子'); return; }
+      const r = Number(message.r);
+      const c = Number(message.c);
+      if (!Number.isInteger(r) || !Number.isInteger(c)) { fail('MOVE_INVALID', '落子坐标不正确'); return; }
+      try {
+        room.game = GomokuCore.placeStone(room.game, r, c, color);
+      } catch (error) {
+        const reason = error && error.message;
+        if (reason === 'OCCUPIED') { fail('OCCUPIED', '这个位置已经有棋子了'); return; }
+        if (reason === 'OUT_OF_BOARD') { fail('MOVE_INVALID', '落子超出棋盘范围'); return; }
+        if (reason === 'NOT_YOUR_TURN') { fail('NOT_YOUR_TURN', '还没有轮到你落子'); return; }
+        fail('ILLEGAL_MOVE', '这一步不合法'); return;
+      }
+      room.revision += 1;
+      room.lastActivityAt = now;
+      if (room.game.finished) room.phase = 'done';
+      broadcastGomokuState(room);
+    } else if (message.t === 'again') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以发起下一局'); return; }
+      if (room.phase !== 'done') return;
+      if (!allSeatsOnline(room)) { fail('PLAYER_OFFLINE', '请等待两位棋手重连后再开新局'); return; }
+      startGomokuGame(room, true);
+      broadcastGomokuState(room);
+    } else if (message.t === 'leave') {
+      room.players.delete(player.cid);
+      if (room.hostCid === player.cid) pickGomokuHost(room);
+      player = null;
+      if (!room.players.size) {
+        gomokuRooms.delete(room.code);
+        if (room._gc) clearTimeout(room._gc);
+      } else {
+        resetGomokuWaitingRoom(room);
+        broadcastGomokuState(room);
+      }
+      try { ws.close(1000, 'left room'); } catch (error) {}
+    } else if (message.t === 'ping') {
+      send(ws, { t: 'pong', s: Date.now() });
+    }
+  });
+
+  ws.on('close', function () {
+    clearTimeout(joinTimer);
+    liveConnections = Math.max(0, liveConnections - 1);
+    const remainingForIp = Math.max(0, (liveConnectionsByIp.get(clientIp) || 1) - 1);
+    if (remainingForIp) liveConnectionsByIp.set(clientIp, remainingForIp);
+    else liveConnectionsByIp.delete(clientIp);
+    if (!player) return;
+    if (player.ws !== ws) { player = null; return; }
+    player.online = false;
+    player.ws = null;
+    player.disconnectedAt = Date.now();
+    const room = player._room;
+    if (room && gomokuRooms.get(room.code) === room) {
+      room.lastActivityAt = Date.now();
+      broadcastGomokuState(room);
+      scheduleGomokuGC(room);
+    }
+  });
+  ws.on('error', function () {});
+});
+
 // WebSocket 心跳：及时清理移动网络留下的“半开连接”，让重连和房主转移更可靠。
 const heartbeatTimer = setInterval(function () {
-  [wss, checkersWss, sudokuWss, flightChessWss].forEach(function (socketServer) {
+  [wss, checkersWss, sudokuWss, flightChessWss, gomokuWss].forEach(function (socketServer) {
     socketServer.clients.forEach(function (ws) {
       if (ws.isAlive === false) { try { ws.terminate(); } catch (e) {} return; }
       ws.isAlive = false;
@@ -1782,12 +2127,18 @@ const heartbeatTimer = setInterval(function () {
   });
 }, 30000);
 heartbeatTimer.unref();
-wss.on('close', function () { if (!checkersWss.clients.size && !sudokuWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
-checkersWss.on('close', function () { if (!wss.clients.size && !sudokuWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
-sudokuWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size && !flightChessWss.clients.size) clearInterval(heartbeatTimer); });
-flightChessWss.on('close', function () { if (!wss.clients.size && !checkersWss.clients.size && !sudokuWss.clients.size) clearInterval(heartbeatTimer); });
+// 只有五路通道全部空闲才停心跳，避免某一路关闭时误停其它游戏的检测。
+function allChannelsIdle() {
+  return !wss.clients.size && !checkersWss.clients.size && !sudokuWss.clients.size
+    && !flightChessWss.clients.size && !gomokuWss.clients.size;
+}
+wss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbeatTimer); });
+checkersWss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbeatTimer); });
+sudokuWss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbeatTimer); });
+flightChessWss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbeatTimer); });
+gomokuWss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbeatTimer); });
 
 server.listen(PORT, function () {
-  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws，飞行棋 /flight-chess-ws)');
+  console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws，飞行棋 /flight-chess-ws，五子棋 /gomoku-ws)');
 });
 

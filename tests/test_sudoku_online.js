@@ -2,12 +2,14 @@
 
 const { spawn } = require('child_process');
 const WebSocket = require('ws');
+const path = require('path');
+const rootDir = path.join(__dirname, '..');
 
 const PORT = 33600 + Math.floor(Math.random() * 400);
 const HTTP_URL = 'http://127.0.0.1:' + PORT;
 const WS_URL = 'ws://127.0.0.1:' + PORT + '/sudoku-ws';
 const child = spawn(process.execPath, ['server.js'], {
-  cwd: __dirname,
+  cwd: rootDir,
   env: Object.assign({}, process.env, {
     PORT: String(PORT), MAX_ROOMS: '4', MAX_ROOMS_PER_IP: '1',
     MAX_CONNECTIONS: '8', MAX_CONNECTIONS_PER_IP: '8', MAX_SOCKET_CONNECTIONS_PER_IP: '10'

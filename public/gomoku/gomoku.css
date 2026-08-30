@@ -114,6 +114,7 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 }
 .mode-icon-ai { background: var(--ui-surface-selected); }
 .mode-icon-local { background: #ffefdf; }
+.mode-icon-online { background: #e6f1fb; }
 .mode-head strong { font-size: 16px; display: block; }
 .mode-head small { display: block; color: var(--ui-text-secondary); font-size: 12px; margin-top: 3px; }
 .mode-chip {
@@ -126,12 +127,29 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   color: var(--ui-accent);
 }
 .mode-chip.chip-alt { background: #e8f8f1; color: var(--ui-success); }
+.mode-chip.chip-online { background: #e6f1fb; color: #185fa5; }
 .mode-card p { margin: 10px 0 12px; color: var(--ui-text-secondary); font-size: 13px; line-height: 1.5; }
 .mode-btn { width: 100%; min-height: 42px; }
 
+.gomoku-field { display: block; margin-bottom: 10px; }
+.gomoku-field > span { display: block; margin-bottom: 5px; color: var(--ui-text-secondary); font-size: 12px; font-weight: 700; }
+.gomoku-online-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gomoku-join-config { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--ui-border); }
+.gomoku-field-error {
+  margin: 9px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #ffd8d5;
+  border-radius: 11px;
+  background: #fff1f1;
+  color: #c0392b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .feature-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
@@ -175,6 +193,18 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   font-size: 10px;
   font-weight: 800;
 }
+.net-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.net-badge.is-online { background: #eaf9f3; border-color: #d1f0e3; color: #0f6e56; }
+.net-badge.is-connecting,
+.net-badge.is-offline { background: #fff4eb; border-color: #ffe2cf; color: #c2410c; }
+.net-badge.is-failed { background: #fff1f1; border-color: #ffd8d5; color: #c0392b; }
 
 .gomoku-nav-btn {
   display: inline-flex;
@@ -279,6 +309,33 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
   margin: 10px auto;
 }
 .control-grid button { min-height: 44px; }
+
+.room-panel {
+  margin: 12px 0 0;
+  padding: 11px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 13px;
+  background: var(--ui-surface-selected);
+}
+.room-code-row { display: flex; align-items: center; gap: 8px; }
+.room-code {
+  flex: 1;
+  min-width: 0;
+  font-size: 25px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ui-primary);
+}
+.gomoku-room-copy { flex: 0 0 auto; min-height: 36px; padding: 0 11px; font-size: 12px; }
+.room-players {
+  margin: 8px 0 9px;
+  color: var(--ui-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+.gomoku-room-leave { width: 100%; min-height: 38px; font-size: 12px; }
 
 .gomoku-control-btn {
   display: inline-flex;

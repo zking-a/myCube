@@ -5,15 +5,31 @@ const EMPTY = 0;
 const BLACK = 1;
 const WHITE = 2;
 const SAVE_KEYS = {
-  ai: 'gomoku_save_ai_v1',
-  local: 'gomoku_save_local_v1'
+  ai: 'gomoku_save_ai_v1'
 };
 const DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]];
 const STAR_POINTS = new Set(['3,3', '3,11', '7,7', '11,3', '11,11']);
 
 const params = new URLSearchParams(window.location.search);
-const MODE = params.get('mode') === 'local' ? 'local' : 'ai';
-const STORAGE_KEY = SAVE_KEYS[MODE];
+const RAW_MODE = params.get('mode');
+const MODE = RAW_MODE === 'online' ? 'online' : 'ai';
+const STORAGE_KEY = SAVE_KEYS[MODE] || SAVE_KEYS.ai;
+const IS_ONLINE = MODE === 'online';
+// 联机态：棋盘与轮次完全由 /gomoku-ws 下发，本地只负责渲染与上报落子。
+const ONLINE = {
+  room: String(params.get('room') || '').toUpperCase(),
+  intent: params.get('intent') === 'create' ? 'create' : 'join',
+  nick: '',
+  seat: -1,
+  color: 0,
+  revision: 0,
+  phase: '',
+  status: 'connecting',
+  client: null,
+  host: '',
+  players: [],
+  inviteUrl: ''
+};
 
 const CONFIG = {
   aiColor: WHITE,
@@ -72,8 +88,8 @@ function createState() {
     history: [],
     lastMove: null,
     board: createEmptyBoard(),
-    blackName: MODE === 'ai' ? '你（黑）' : '玩家 A（黑）',
-    whiteName: MODE === 'ai' ? '电脑（白）' : '玩家 B（白）'
+    blackName: '你（黑）',
+    whiteName: '电脑（白）'
   };
 }
 
@@ -86,6 +102,8 @@ function safeNumber(value) {
 }
 
 function loadSaved() {
+  // 联机局的权威状态在服务端，本地存档会让重连后出现两套棋局。
+  if (IS_ONLINE) return null;
   try {
     const raw = safeGet(STORAGE_KEY);
     if (!raw) return null;
@@ -110,8 +128,8 @@ function loadSaved() {
       history: Array.isArray(data.history) ? data.history : [],
       lastMove: data.lastMove || null,
       board: cloneBoard(data.board),
-      blackName: MODE === 'ai' ? '你（黑）' : '玩家 A（黑）',
-      whiteName: MODE === 'ai' ? '电脑（白）' : '玩家 B（白）'
+      blackName: '你（黑）',
+      whiteName: '电脑（白）'
     };
   } catch (error) {
     return null;
@@ -119,6 +137,7 @@ function loadSaved() {
 }
 
 function saveState() {
+  if (IS_ONLINE) return;
   if (state.finished) {
     safeRemove(STORAGE_KEY);
     return;
@@ -270,8 +289,8 @@ function updateStatus() {
   const blackRow = $('blackRow');
   const whiteRow = $('whiteRow');
 
-  const blackName = MODE === 'ai' ? '你（黑）' : '玩家 A（黑）';
-  const whiteName = MODE === 'ai' ? '电脑（白）' : '玩家 B（白）';
+  const blackName = state.blackName || '你（黑）';
+  const whiteName = state.whiteName || '电脑（白）';
   const turnName = state.turn === BLACK ? blackName : whiteName;
 
   $('blackName').textContent = blackName;
@@ -283,10 +302,10 @@ function updateStatus() {
   if (state.finished) {
     if (state.winner === BLACK) {
       turnText.textContent = '黑方赢了';
-      turnSub.textContent = `${MODE === 'ai' ? '你' : '玩家 A'} 完成五子连珠`; 
+      turnSub.textContent = `${blackName} 完成五子连珠`;
     } else if (state.winner === WHITE) {
       turnText.textContent = '白方赢了';
-      turnSub.textContent = `${MODE === 'ai' ? '电脑' : '玩家 B'} 完成五子连珠`;
+      turnSub.textContent = `${whiteName} 完成五子连珠`;
     } else {
       turnText.textContent = '和局';
       turnSub.textContent = '棋盘已满，未分胜负';
@@ -302,13 +321,19 @@ function updateStatus() {
     turnSub.textContent = state.moveNumber === 0 ? '黑方先手，点击空位预览后再次确认' : '点击空位预览后再次确认';
   }
 
-  blackCount.textContent = String(state.history.filter(function (m) { return m.player === BLACK; }).length);
-  whiteCount.textContent = String(state.history.filter(function (m) { return m.player === WHITE; }).length);
-
-  if (MODE === 'ai') {
-    badge.textContent = '单机人机';
+  if (IS_ONLINE) {
+    // 服务端只下发盘面，子数直接数棋盘，避免依赖本地 history。
+    blackCount.textContent = String(countStones(BLACK));
+    whiteCount.textContent = String(countStones(WHITE));
   } else {
-    badge.textContent = '本地双人';
+    blackCount.textContent = String(state.history.filter(function (m) { return m.player === BLACK; }).length);
+    whiteCount.textContent = String(state.history.filter(function (m) { return m.player === WHITE; }).length);
+  }
+
+  if (IS_ONLINE) {
+    badge.textContent = '好友联机';
+  } else {
+    badge.textContent = '单机人机';
   }
 }
 
@@ -383,7 +408,7 @@ function onCellKeydown(event) {
 function requestMove(r, c) {
   if (state.finished || !isInside(r, c)) return false;
   if (!canPlayNow()) {
-    setHint('AI 回合，等待电脑落子');
+    setHint(IS_ONLINE ? '对手回合，请等待对方落子' : 'AI 回合，等待电脑落子');
     return false;
   }
   if (board[r][c] !== EMPTY) {
@@ -396,6 +421,7 @@ function requestMove(r, c) {
     renderBoard();
     return true;
   }
+  if (IS_ONLINE) return sendOnlineMove(r, c);
   if (!placeStone(r, c, state.turn)) return false;
   if (!state.finished && isAiTurn()) {
     scheduleAiMove();
@@ -405,7 +431,7 @@ function requestMove(r, c) {
 
 function canPlayNow() {
   if (state.finished) return false;
-  if (MODE === 'local') return true;
+  if (IS_ONLINE) return isMyOnlineTurn();
   return state.turn === CONFIG.humanColor;
 }
 
@@ -610,8 +636,8 @@ function setStateForTest(seed) {
     history: next.history,
     lastMove: next.lastMove,
     board: next.board,
-    blackName: MODE === 'ai' ? '你（黑）' : '玩家 A（黑）',
-    whiteName: MODE === 'ai' ? '电脑（白）' : '玩家 B（白）'
+    blackName: '你（黑）',
+    whiteName: '电脑（白）'
   };
   board = state.board;
   previewMove = null;
@@ -685,23 +711,252 @@ if (typeof window !== 'undefined') {
   };
 }
 
+/* ===================== 联机模式 ===================== */
+/* 棋盘、轮次与胜负全部由服务端裁决；本地只渲染并上报落子坐标。 */
+
+function onlineNick() {
+  try { return String(localStorage.getItem('light_games_nickname') || '').trim().slice(0, 16); }
+  catch (error) { return ''; }
+}
+
+function isMyOnlineTurn() {
+  if (!IS_ONLINE || !ONLINE.client) return false;
+  if (ONLINE.status !== 'online') return false;
+  return ONLINE.color !== 0 && state.turn === ONLINE.color;
+}
+
+function setNetBadge(status) {
+  const badge = $('netBadge');
+  if (badge) {
+    const labels = { online: '已连接', connecting: '连接中', offline: '重连中', failed: '连接失败' };
+    badge.hidden = false;
+    badge.classList.remove('is-online', 'is-connecting', 'is-offline', 'is-failed');
+    badge.classList.add('is-' + status);
+    badge.textContent = labels[status] || status;
+  }
+  ONLINE.status = status;
+  if (status === 'failed') {
+    setHint('连接失败，请返回五子棋首页重新创建或加入房间');
+  } else if (status === 'offline') {
+    setHint('连接中断，正在尝试重连…');
+  }
+}
+
+function countStones(color) {
+  let total = 0;
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) if (board[r][c] === color) total++;
+  }
+  return total;
+}
+
+function applyServerGame(game) {
+  if (!game) {
+    board = createEmptyBoard();
+    state.board = board;
+    state.turn = BLACK;
+    state.moveNumber = 0;
+    state.history = [];
+    state.lastMove = null;
+    state.winner = 0;
+    state.finished = false;
+  } else {
+    board = normalizeBoardForTest(game.board);
+    state.board = board;
+    state.turn = game.turn === WHITE ? WHITE : BLACK;
+    state.moveNumber = Number(game.moveNumber) || 0;
+    state.lastMove = game.lastMove || null;
+    state.winner = game.winner === BLACK ? BLACK : (game.winner === WHITE ? WHITE : 0);
+    state.finished = !!game.finished;
+  }
+  previewMove = null;
+  renderBoard();
+  if (state.finished && IS_ONLINE) showOnlineResult();
+}
+
+function sendOnlineMove(r, c) {
+  if (!ONLINE.client || ONLINE.status !== 'online') {
+    setHint('正在连接房间，请稍候');
+    return false;
+  }
+  const sent = ONLINE.client.send({ t: 'move', r: r, c: c, rev: ONLINE.revision });
+  if (!sent) {
+    setHint('网络不稳定，落子没有送出，请再点一次');
+    return false;
+  }
+  previewMove = null;
+  setHint('已落子，等待对手…');
+  renderBoard();
+  return true;
+}
+
+function updateRoomPanel() {
+  const panel = $('roomPanel');
+  if (panel) panel.hidden = false;
+  const code = $('roomCode');
+  if (code) code.textContent = ONLINE.room || '-----';
+  const players = $('roomPlayers');
+  if (!players) return;
+  if (!ONLINE.players.length) {
+    players.textContent = '正在连接房间…';
+    return;
+  }
+  const myCid = ONLINE.client && ONLINE.client.identity ? ONLINE.client.identity.cid : '';
+  // 整段用 textContent 输出：昵称是用户可控内容，不拼 HTML。
+  const lines = ONLINE.players.map(function (player) {
+    const side = player.color === WHITE ? '白方' : '黑方';
+    const presence = player.online ? '在线' : '离线';
+    const tag = player.cid === myCid ? '（你）' : (player.cid === ONLINE.host ? '（房主）' : '');
+    return side + ' ' + player.nick + tag + ' · ' + presence;
+  });
+  if (ONLINE.players.length < 2) lines.push('等待对手加入，把房间码或邀请链接发给朋友。');
+  players.textContent = lines.join('\n');
+}
+
+function showOnlineResult() {
+  const overlay = $('resultOverlay');
+  const title = $('resultTitle');
+  const text = $('resultText');
+  const restart = $('resultRestart');
+  title.textContent = '本局结束';
+  if (state.winner && state.winner === ONLINE.color) text.textContent = '你赢了，完成五子连珠';
+  else if (state.winner === BLACK) text.textContent = '黑方获胜';
+  else if (state.winner === WHITE) text.textContent = '白方获胜';
+  else text.textContent = '和局，棋盘已满';
+  if (restart) {
+    const myCid = ONLINE.client && ONLINE.client.identity ? ONLINE.client.identity.cid : '';
+    const isHost = !!ONLINE.host && ONLINE.host === myCid;
+    restart.textContent = isHost ? '再战一局' : '等待房主开新局';
+    restart.disabled = !isHost;
+  }
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function handleOnlineState(message) {
+  ONLINE.revision = Number(message.revision) || 0;
+  ONLINE.phase = message.phase || '';
+  ONLINE.host = message.host || '';
+  ONLINE.players = Array.isArray(message.players) ? message.players : [];
+  const myCid = ONLINE.client && ONLINE.client.identity ? ONLINE.client.identity.cid : '';
+  const me = ONLINE.players.find(function (player) { return player.cid === myCid; });
+  if (me) {
+    ONLINE.seat = me.seat;
+    ONLINE.color = me.color === WHITE ? WHITE : BLACK;
+  }
+  const black = ONLINE.players.find(function (player) { return player.seat === 0; });
+  const white = ONLINE.players.find(function (player) { return player.seat === 1; });
+  state.blackName = black ? black.nick : '黑方';
+  state.whiteName = white ? white.nick : '白方';
+  applyServerGame(message.game);
+  updateRoomPanel();
+  if (!message.game) {
+    setHint(ONLINE.players.length >= 2 ? '两位棋手已就位，准备开局' : '等待对手加入房间…');
+  } else if (!state.finished) {
+    setHint(isMyOnlineTurn() ? '轮到你落子' : '对手回合，请稍候');
+  }
+}
+
+function initOnline() {
+  if (typeof GomokuNet === 'undefined') {
+    setHint('联机模块没有加载成功，请刷新页面重试');
+    setNetBadge('failed');
+    return;
+  }
+  ONLINE.nick = onlineNick();
+  let client = null;
+  try {
+    client = GomokuNet.createClient({
+      room: ONLINE.room,
+      intent: ONLINE.intent,
+      nick: ONLINE.nick || '玩家',
+      onStatus: setNetBadge,
+      onState: handleOnlineState,
+      onError: function (message) {
+        if (message && message.msg) setHint(message.msg);
+      }
+    });
+  } catch (error) {
+    setHint('房间码不正确，请返回五子棋首页重新创建或加入房间');
+    setNetBadge('failed');
+    return;
+  }
+  ONLINE.client = client;
+  ONLINE.room = client.room;
+  const base = String(window.location.href).split('?')[0].replace(/play\.html$/, '');
+  ONLINE.inviteUrl = base + '?r=' + encodeURIComponent(ONLINE.room);
+  updateRoomPanel();
+  setNetBadge('connecting');
+  client.connect();
+
+  const leaveBtn = $('leaveRoomBtn');
+  if (leaveBtn) leaveBtn.addEventListener('click', function () {
+    client.leave();
+    window.location.href = './';
+  });
+
+  const copyBtn = $('copyInviteBtn');
+  if (copyBtn) copyBtn.addEventListener('click', function () {
+    if (!ONLINE.inviteUrl) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ONLINE.inviteUrl).then(
+        function () { setHint('邀请链接已复制，发给朋友即可加入'); },
+        function () { setHint('复制失败，请手动复制地址栏链接'); }
+      );
+    } else {
+      setHint('请手动复制地址栏链接邀请朋友');
+    }
+  });
+
+  window.addEventListener('beforeunload', function () { client.dispose(); });
+}
+
 function initMode() {
   const title = $('gameTitle');
-  const isLocal = MODE === 'local';
   title.textContent = '五子棋';
-  document.body.classList.add(isLocal ? 'mode-local' : 'mode-ai');
+  document.body.classList.add(IS_ONLINE ? 'mode-online' : 'mode-ai');
+  if (!IS_ONLINE) return;
+  // 联机不提供本地悔棋与自由重开，回合推进交给服务端，新局由房主发起。
+  const undoBtn = $('undoBtn');
+  const resetBtn = $('resetBtn');
+  if (undoBtn) undoBtn.hidden = true;
+  if (resetBtn) resetBtn.hidden = true;
+  const caption = document.querySelector('.status-caption');
+  if (caption) caption.textContent = '联机对局由服务端同步棋盘与轮次，刷新或断线后可带着原身份续局。';
 }
 
 function bindEvents() {
   $('undoBtn').addEventListener('click', undo);
   $('resetBtn').addEventListener('click', newGame);
-  $('resultRestart').addEventListener('click', newGame);
+  $('resultRestart').addEventListener('click', function () {
+    if (!IS_ONLINE) {
+      newGame();
+      return;
+    }
+    if (!ONLINE.client || ONLINE.status !== 'online') {
+      setHint('正在连接房间，请稍候');
+      return;
+    }
+    ONLINE.client.send({ t: 'again', rev: ONLINE.revision });
+    setHint('已请求再战一局');
+  });
 }
 
 function init() {
   board = createEmptyBoard();
   createBoardUI();
   initMode();
+  if (IS_ONLINE) {
+    state = createState();
+    state.blackName = '黑方';
+    state.whiteName = '白方';
+    board = state.board;
+    bindEvents();
+    renderBoard();
+    setHint('正在连接房间…');
+    initOnline();
+    return;
+  }
   state = loadSaved() || createState();
   board = state.board;
   if (!Array.isArray(state.history)) state.history = [];

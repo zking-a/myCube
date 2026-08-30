@@ -8,8 +8,9 @@
 | 24点（单机 / 联机） | `/24/`；邀请链接使用 `/24/#r=房间码` |
 | 数独挑战 | `/sudoku/` |
 | 中国跳棋（人机 / 本地 / 联机） | 大厅 `/checkers/`；棋局 `/checkers/play.html` |
+| 五子棋（人机 / 本地 / 联机） | 大厅 `/gomoku/`；棋局 `/gomoku/play.html`；邀请 `/gomoku/?r=房间码` |
 | 飞行棋（2–4 人本地 / 联机） | 大厅 `/flight-chess/`；棋局 `/flight-chess/play.html` |
-| 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws`；飞行棋 `/flight-chess-ws` |
+| 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws`；数独 `/sudoku-ws`；飞行棋 `/flight-chess-ws`；五子棋 `/gomoku-ws` |
 | 健康检查 | `/health` |
 
 部署后得到一个永久免费域名 `https://xxx.onrender.com`，前端与中转**同域**，打开即玩，联机**零配置**（不用填服务器地址）。
@@ -36,14 +37,15 @@
 
 ## 二、部署后怎么玩
 
-1. 打开 `https://xxx.onrender.com`，在游戏大厅选择「24点大挑战」「数独挑战」或「中国跳棋」。
+1. 打开 `https://xxx.onrender.com`，在游戏大厅选择「24点大挑战」「数独挑战」「中国跳棋」「五子棋」或「飞行棋」。
 2. 24点联机：房主点「联机对战」→「创建房间」→「分享邀请」；朋友打开链接即可加入，不会被游戏大厅拦截。
 3. 客人点「我准备好了」，房主看到全员准备后同步开局。
 4. 双方实时看到对手进度；短暂掉线会自动重连并恢复当前轮次、题号和计时，答完自动排名。
 5. 数独先进入独立挑战大厅，可继续存档或选择五档难度开局；游戏页支持手机沉浸全屏、大字号棋盘、候选笔记、提示、整盘撤销、自动存档、统计和深色模式。
 6. 跳棋先在独立大厅选择人机、本地或联机模式，再进入专用棋局页；联机会同步上一步的起点、完整跳跃路线和落点。
+7. 五子棋在大厅选择单机人机、本地双人（同屏轮流）或好友对战；好友对战创建房间后，把房间码或邀请链接发给朋友，两人到齐自动开局，黑先白后，五子连珠由服务端判定胜负，断线可带着原身份续局。
 
-**不需要填服务器地址**：游戏检测到是网页（非本地文件）时，会自动把「当前域名」当作中转服务器（同域 `/ws`），零配置直接联机。
+**不需要填服务器地址**：游戏检测到是网页（非本地文件）时，会自动把「当前域名」当作中转服务器（同域 `/ws`、`/gomoku-ws` 等），零配置直接联机。
 
 ---
 
@@ -80,11 +82,14 @@ npm run test:checkers
 npm run test:checkers:e2e
 npm run test:flight-chess
 npm run test:flight-chess:e2e
+npm run test:gomoku
+npm run test:gomoku:e2e
+npm run test:gomoku:ui
 npm run test:all
 npm run test:security
 ```
 
-这些测试分别检查网络协议、数独核心规则、跳棋与飞行棋的规则和联机同步，以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
+这些测试分别检查网络协议、数独核心规则、跳棋与飞行棋的规则和联机同步、五子棋规则与联机（含前端端到端），以及 Origin、伪造代理 IP、重连容量和 gzip/ETag 缓存。
 
 ### 重新训练跳棋困难电脑
 
@@ -224,6 +229,14 @@ server/
 │   │   ├── sudoku.css
 │   │   └── sudoku.js
 │   ├── checkers/      # 中国跳棋大厅、棋局、规则核心与训练实验室
+│   ├── gomoku/        # 五子棋大厅、本地/人机/联机棋局、规则核心与联机客户端
+│   │   ├── index.html
+│   │   ├── play.html
+│   │   ├── gomoku_core.js   # 15×15 规则核心（服务端与浏览器共用）
+│   │   ├── gomoku_net.js    # 联机客户端（重连身份与消息收发）
+│   │   ├── gomoku-index.js
+│   │   ├── gomoku.js
+│   │   └── gomoku.css
 │   └── flight-chess/  # 2–4 人飞行棋大厅、本地/联机棋局与可复用规则核心
 │       ├── index.html
 │       ├── play.html
@@ -232,10 +245,18 @@ server/
 │       ├── lobby.js
 │       ├── game.js
 │       └── flight_chess.css
-├── test_local.js      # 24点联机协议单元测试
-├── test_sudoku.js     # 数独核心规则回归测试
-├── test_checkers.js   # 中国跳棋规则、AI 与页面契约测试
-├── test_ai_engine.js  # 可复用 AI 引擎与训练管线测试
-├── test_flight_chess.js # 飞行棋规则与页面契约测试
-└── test_security.js   # 代理 IP、Origin、连接余量与静态缓存回归
+├── tests/                         # 自动化测试
+│   ├── test_local.js      # 24点联机协议单元测试
+│   ├── test_sudoku.js     # 数独核心规则回归测试
+│   ├── test_sudoku_online.js # 数独联机协议测试
+│   ├── test_net.js        # 网络层与房间协议回归测试
+│   ├── test_checkers.js   # 中国跳棋规则、AI 与页面契约测试
+│   ├── test_ai_engine.js  # 可复用 AI 引擎与训练管线测试
+│   ├── test_flight_chess.js # 飞行棋规则与页面契约测试
+│   ├── test_gomoku.js     # 五子棋规则、AI 与本地存档测试
+│   ├── test_gomoku_online.js    # 五子棋联机协议集成测试（建房/落子/胜负/重连）
+│   ├── test_gomoku_online_ui.js # 五子棋联机前端端到端测试（DOM 桩驱动真实页面脚本）
+│   ├── test_checkers_online.js # 中国跳棋联机与大厅协议测试
+│   ├── test_flight_chess_online.js # 飞行棋联机与重连流程测试
+│   └── test_security.js   # 代理 IP、Origin、连接余量与静态缓存回归
 ```

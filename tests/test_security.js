@@ -3,6 +3,8 @@
 const { spawn } = require('child_process');
 const http = require('http');
 const WebSocket = require('ws');
+const path = require('path');
+const rootDir = path.join(__dirname, '..');
 
 const PORT = 3211;
 const BASE = 'ws://127.0.0.1:' + PORT + '/ws';
@@ -41,7 +43,7 @@ function closedResult(ws) {
 
 (async function () {
   const child = spawn(process.execPath, ['server.js'], {
-    cwd: __dirname,
+    cwd: rootDir,
     env: Object.assign({}, process.env, {
       PORT: String(PORT), TRUST_PROXY_HOPS: '0',
       MAX_CONNECTIONS: '4', MAX_SOCKET_CONNECTIONS: '8',

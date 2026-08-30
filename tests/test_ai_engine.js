@@ -2,10 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { PolicyValueModel, PuctMcts, ReplayBuffer, bidirectionalAStar, playSelfGame, playLeagueGame, splitByGroup, splitByGame } = require('./ai-engine');
-const { ChineseCheckersAdapter, Core } = require('./ai-engine/games/chinese_checkers_adapter');
-const { ChineseCheckersShortestPathSolver } = require('./ai-engine/games/chinese_checkers_shortest_path');
-const { buildOpeningPair, selectOpening } = require('./ai-engine/games/chinese_checkers_openings');
+const rootDir = path.join(__dirname, '..');
+const { PolicyValueModel, PuctMcts, ReplayBuffer, bidirectionalAStar, playSelfGame, playLeagueGame, splitByGroup, splitByGame } = require('../ai-engine');
+const { ChineseCheckersAdapter, Core } = require('../ai-engine/games/chinese_checkers_adapter');
+const { ChineseCheckersShortestPathSolver } = require('../ai-engine/games/chinese_checkers_shortest_path');
+const { buildOpeningPair, selectOpening } = require('../ai-engine/games/chinese_checkers_openings');
 
 let passed = 0;
 function ok(name, condition) {
@@ -245,8 +246,8 @@ ok('paired opening 由确定性开局及精确换色镜像组成',
   openingA.startState.turn !== openingB.startState.turn &&
   Core.positionKey(roundTripOpening.pieces) === Core.positionKey(openingA.startState.pieces));
 
-const trainerSource = fs.readFileSync(path.join(__dirname, 'scripts', 'train_checkers_robot_v11.js'), 'utf8');
-const packageScripts = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')).scripts;
+const trainerSource = fs.readFileSync(path.join(rootDir, 'scripts', 'train_checkers_robot_v11.js'), 'utf8');
+const packageScripts = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')).scripts;
 ok('V1.4 历史模型缺失时 fail-closed，不再静默克隆当前模型',
   !/current-teacher-snapshot|fallback=current-teacher/.test(trainerSource) &&
   /冻结历史 checkpoint 不存在/.test(trainerSource));
@@ -258,7 +259,7 @@ ok('V1.4 默认训练与竞技场强制使用 hybrid 并固定历史 checkpoint 
   /--init-sha256 [a-f0-9]{64}/.test(packageScripts['train:checkers-robot']) &&
   /--skip-teacher-fit --skip-league-fit/.test(packageScripts['train:checkers-robot']));
 
-const numpyTrainerSource = fs.readFileSync(path.join(__dirname, 'scripts', 'train_policy_value_numpy.py'), 'utf8');
+const numpyTrainerSource = fs.readFileSync(path.join(rootDir, 'scripts', 'train_policy_value_numpy.py'), 'utf8');
 ok('V1.4 NumPy 初始化必须显式选择 scratch/policy/all 并记录逐组件来源',
   /"--init-components", required=True/.test(numpyTrainerSource) &&
   /POLICY_COMPONENTS/.test(numpyTrainerSource) && /"componentSources"/.test(numpyTrainerSource) &&
@@ -270,7 +271,7 @@ ok('模型增强 DFS 在模型维度不兼容时安全回退到合法 V0 hard �
   legal.some(function (action) { return checkers.actionKey(action) === checkers.actionKey(guidedMove); }));
 
 ['checkers-policy-value-v1_3-numpy.json'].forEach(function (fileName) {
-  const checkpointPath = path.join(__dirname, 'models', fileName);
+  const checkpointPath = path.join(rootDir, 'models', fileName);
   if (!fs.existsSync(checkpointPath)) return;
   const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
   const trainedModel = PolicyValueModel.fromJSON(checkpoint);

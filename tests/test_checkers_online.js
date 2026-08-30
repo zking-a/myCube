@@ -2,13 +2,15 @@
 
 const { spawn } = require('child_process');
 const WebSocket = require('ws');
-const Core = require('./public/checkers/checkers_core');
+const path = require('path');
+const rootDir = path.join(__dirname, '..');
+const Core = require('../public/checkers/checkers_core');
 
 const PORT = 33100 + Math.floor(Math.random() * 500);
 const HTTP_URL = 'http://127.0.0.1:' + PORT;
 const WS_URL = 'ws://127.0.0.1:' + PORT + '/checkers-ws';
 const child = spawn(process.execPath, ['server.js'], {
-  cwd: __dirname,
+  cwd: rootDir,
   env: Object.assign({}, process.env, {
     PORT: String(PORT), MAX_ROOMS: '4', MAX_ROOMS_PER_IP: '1',
     MAX_CONNECTIONS: '8', MAX_CONNECTIONS_PER_IP: '8', MAX_SOCKET_CONNECTIONS_PER_IP: '10'
