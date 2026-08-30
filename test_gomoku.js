@@ -143,6 +143,9 @@ function ok(name, condition) {
 }
 
 ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && /id="startLocalBtn"/.test(indexHtml));
+const modeGridRule = css.match(/\.mode-grid\s*\{[^}]*\}/);
+ok('五子棋大厅在所有屏幕宽度下均以纵向玩法菜单展示',
+  !!modeGridRule && /grid-template-columns:\s*1fr\s*;/.test(modeGridRule[0]));
 ok('五子棋棋局页包含关键控制区与状态区', /id="undoBtn"/.test(playHtml) && /id="resetBtn"/.test(playHtml) && /id="resultOverlay"/.test(playHtml));
 ok('对局顶部复用平台的左返回、中标题、右状态三栏结构',
   /class="nav-back ui-button ui-button--secondary gomoku-nav-btn"/.test(playHtml) &&

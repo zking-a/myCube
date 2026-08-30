@@ -89,7 +89,7 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 
 .mode-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 .mode-card {
@@ -482,7 +482,6 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 .result-card p { margin: 0 0 14px; color: var(--ui-text-secondary); }
 
 @media (max-width: 860px) {
-  .mode-grid { grid-template-columns: 1fr; }
   .hero-copy h1 { font-size: 30px; }
   .feature-strip { grid-template-columns: 1fr 1fr; }
 }
