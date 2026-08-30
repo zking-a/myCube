@@ -7,8 +7,8 @@
   <meta name="description" content="五子棋对局页（单机人机 / 本地双人）。" />
   <title>五子棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" />
-  <link rel="stylesheet" href="gomoku.css?v=20260830c" />
-  <script src="gomoku.js?v=20260830a" defer></script>
+  <link rel="stylesheet" href="gomoku.css?v=20260830f" />
+  <script src="gomoku.js?v=20260830f" defer></script>
 </head>
 <body class="gomoku-play-page">
   <main class="gomoku-shell">
@@ -30,8 +30,9 @@
     <section class="gomoku-layout">
       <section class="board-panel ui-panel">
         <div id="boardWrap" class="board-wrap">
-          <div id="gomokuBoard" class="gomoku-board" role="grid" aria-label="五子棋棋盘"></div>
+          <div id="gomokuBoard" class="gomoku-board" role="grid" aria-label="五子棋棋盘" aria-describedby="boardAssist" tabindex="0"></div>
         </div>
+        <p id="boardAssist" class="visually-hidden">方向键可移动焦点，回车/空格落子。空位点击一次后会显示预览，再次点击该点可完成落子。</p>
         <p id="hintText" class="board-hint"></p>
       </section>
 
@@ -55,8 +56,8 @@
         </div>
 
         <div class="control-grid">
-          <button type="button" id="undoBtn" class="ui-button gomoku-control-btn gomoku-undo-btn">↩ 悔棋</button>
-          <button type="button" id="resetBtn" class="ui-button gomoku-control-btn gomoku-reset-btn">↻ 重新开局</button>
+          <button type="button" id="undoBtn" class="ui-button ui-button--secondary gomoku-control-btn gomoku-undo-btn">↩ 悔棋</button>
+          <button type="button" id="resetBtn" class="ui-button ui-button--secondary gomoku-control-btn gomoku-reset-btn">↻ 重新开局</button>
         </div>
 
         <details class="rule-card">
@@ -70,11 +71,11 @@
       </aside>
     </section>
 
-    <div id="resultOverlay" class="result-overlay" aria-hidden="true">
+    <div id="resultOverlay" class="result-overlay" role="dialog" aria-modal="true" aria-labelledby="resultTitle" aria-describedby="resultText" aria-hidden="true" tabindex="-1">
       <div class="result-card ui-modal">
         <h2 id="resultTitle">本局结束</h2>
         <p id="resultText">黑方获胜</p>
-        <button type="button" id="resultRestart" class="ui-button gomoku-result-btn">再来一局</button>
+        <button type="button" id="resultRestart" class="ui-button ui-button--primary gomoku-result-btn">再来一局</button>
       </div>
     </div>
   </main>

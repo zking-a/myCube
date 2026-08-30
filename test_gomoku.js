@@ -144,6 +144,15 @@ ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test
 ok('五子棋棋局页包含关键控制区与状态区', /id="undoBtn"/.test(playHtml) && /id="resetBtn"/.test(playHtml) && /id="resultOverlay"/.test(playHtml));
 ok('棋盘网格与棋子样式样式片段完整',
   /\.gomoku-board/.test(css) && /\.gomoku-cell/.test(css) && /\.gomoku-stone/.test(css));
+ok('对局页保持移动优先布局且桌面断点不会压缩棋盘',
+  /\.board-wrap\s*\{[\s\S]*?max-width:\s*680px/.test(css) &&
+  /@media\s*\(min-width:\s*1024px\)[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s*260px/.test(css));
+ok('对局操作遵循公共按钮的主次语义',
+  /id="undoBtn"[^>]*ui-button--secondary/.test(playHtml) &&
+  /id="resetBtn"[^>]*ui-button--secondary/.test(playHtml) &&
+  /id="resultRestart"[^>]*ui-button--primary/.test(playHtml));
+ok('手机端隐藏重复模式徽章并保留单行顶栏',
+  /@media\s*\(max-width:\s*520px\)[\s\S]*?\.mode-badge\s*\{\s*display:\s*none/.test(css));
 
 const savedBoard = new Array(15).fill(0).map(function () { return new Array(15).fill(0); });
 savedBoard[7][7] = 1;
