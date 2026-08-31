@@ -587,11 +587,18 @@ function undo() {
   }
 }
 
+function hideResultOverlay() {
+  const overlay = $('resultOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+
 function newGame() {
   state = createState();
   board = state.board;
   previewMove = null;
-  $('resultOverlay').classList.remove('show');
+  hideResultOverlay();
   safeRemove(STORAGE_KEY);
   setHint('新局已开始，黑方先手');
   saveState();
@@ -772,6 +779,7 @@ function applyServerGame(game) {
   previewMove = null;
   renderBoard();
   if (state.finished && IS_ONLINE) showOnlineResult();
+  else if (IS_ONLINE) hideResultOverlay();
 }
 
 function sendOnlineMove(r, c) {

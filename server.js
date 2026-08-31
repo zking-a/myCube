@@ -172,6 +172,18 @@ function resetCheckersRoom(room) {
   room.lastActivityAt = Date.now();
 }
 
+// 创建新房间前，释放同一 IP 遗留的“单人等待房”（房主已离开但房间未被 GC），
+// 否则 MAX_ROOMS_PER_IP 会把强制退出后的再次建房挡在门外（表现为“提示已存在房间”）。
+function releaseAbandonedCheckersRoomsForIp(ip) {
+  checkersRooms.forEach(function (room) {
+    if (room.creatorIp !== ip || room.phase !== 'waiting' || room.players.size > 1) return;
+    const hasOpenPlayer = Array.from(room.players.values()).some(function (player) {
+      return player.online && player.ws && player.ws.readyState === WebSocket.OPEN;
+    });
+    if (!hasOpenPlayer) expireCheckersRoom(room, '旧的跳棋等待房已由新房间替换');
+  });
+}
+
 function createSudokuRoom(code, creatorIp, puzzle, difficulty) {
   const room = {
     code: code,
@@ -191,6 +203,17 @@ function createSudokuRoom(code, creatorIp, puzzle, difficulty) {
   };
   sudokuRooms.set(code, room);
   return room;
+}
+
+// 与五子棋/飞行棋同款兜底：释放同一 IP 遗留的“单人协作等待房”，避免再次创建时被 IP 房间上限拦截。
+function releaseAbandonedSudokuRoomsForIp(ip) {
+  sudokuRooms.forEach(function (room) {
+    if (room.creatorIp !== ip || room.phase !== 'waiting' || room.players.size > 1) return;
+    const hasOpenPlayer = Array.from(room.players.values()).some(function (player) {
+      return player.online && player.ws && player.ws.readyState === WebSocket.OPEN;
+    });
+    if (!hasOpenPlayer) expireSudokuRoom(room, '旧的协作等待房已由新房间替换');
+  });
 }
 
 function createFlightChessRoom(code, creatorIp, capacity) {
@@ -1385,11 +1408,12 @@ checkersWss.on('connection', function (ws, req) {
       let room = checkersRooms.get(code);
       if (!room) {
         if (intent !== 'create') { fail('ROOM_NOT_FOUND', '房间不存在或已失效，请向房主确认房间码'); return; }
+        releaseAbandonedCheckersRoomsForIp(clientIp);
         if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
           fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
         }
         if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) {
-          fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return;
+          fail('IP_ROOM_LIMIT', '当前网络已有正在使用的房间，请先退出旧房间再创建'); return;
         }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
         if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
@@ -1576,10 +1600,11 @@ sudokuWss.on('connection', function (ws, req) {
         if (intent !== 'create') { fail('ROOM_NOT_FOUND', '协作房间不存在或已失效，请向朋友确认邀请码'); return; }
         const difficulty = Number.isInteger(m.difficulty) && m.difficulty >= 0 && m.difficulty <= 4 ? m.difficulty : 0;
         if (!isSudokuPuzzle(m.solution, m.givens)) { fail('PUZZLE_INVALID', '协作题目校验失败，请刷新后重试'); return; }
+        releaseAbandonedSudokuRoomsForIp(clientIp);
         if (countSeats() >= MAX_CONNECTIONS || countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) {
           fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return;
         }
-        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) { fail('IP_ROOM_LIMIT', '当前网络已经创建了一个房间，请使用原房间或等待释放'); return; }
+        if (countRoomsForIp(clientIp) >= MAX_ROOMS_PER_IP) { fail('IP_ROOM_LIMIT', '当前网络已有正在使用的房间，请先退出旧房间再创建'); return; }
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
         if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
         room = createSudokuRoom(code, clientIp, { solution: m.solution, givens: m.givens }, difficulty);
