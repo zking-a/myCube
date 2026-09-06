@@ -3,6 +3,22 @@
 const fs = require('fs');
 const vm = require('vm');
 
+function makeSimpleStorage() {
+  const store = Object.create(null);
+  return {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
+    },
+    setItem(key, value) {
+      store[key] = String(value);
+    },
+    removeItem(key) {
+      delete store[key];
+    },
+    __store: store
+  };
+}
+
 const sandbox = {
   console, Math, Date, JSON, Number, String, Array, Object, Set, Map, Error, RegExp,
   Uint8Array, URL, URLSearchParams,
@@ -10,7 +26,7 @@ const sandbox = {
   document: {},
   location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai', search: '?mode=ai' },
   navigator: {},
-  localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+  localStorage: makeSimpleStorage(),
   WebSocket: { OPEN: 1 }
 };
 sandbox.window = sandbox;
@@ -60,6 +76,237 @@ ok('联机视角只由服务器分配的本机阵营决定',
   T.getViewPlayerForMode('online', 'red') === 'red' && T.getViewPlayerForMode('online', 'blue') === 'blue');
 ok('棋盘不再通过 CSS 旋转或按回合切换视角',
   !/checker-board\.view-(red|blue)/.test(css) && !/\.checker-board[^}]*rotate/.test(css) && !/viewPlayer\s*=\s*turn/.test(source));
+ok('棋盘页支持 2D/3D 切换控件与持久化配置键',
+  /boardModeSelect/.test(playHtml) && /data-view="3d"/.test(playHtml) && /BOARD_VIEW_KEY/.test(source));
+ok('棋盘只保留单一渲染层，不再出现第二块 board3d 容器',
+  !/board3d/.test(playHtml) && !/board3d/.test(source) && !/renderBoard2D|renderBoard3D/.test(source));
+
+vm.runInContext(`
+  selectedKey = '3:-3';
+  legalMoves = Core.getLegalMoves(pieces, '3:-3');
+  lastMove = null;
+`, sandbox);
+const baseModel = T.buildBoardModel();
+const campCells = baseModel.cells.filter(function (cell) { return cell.camp; });
+const legalTargets = C.getLegalMoves(C.createInitialPieces(), '3:-3').all.length;
+const markedTargets = baseModel.cells.filter(function (cell) { return cell.moveKind; });
+ok('棋盘模型输出 121 个孔位，并把坐标归一化到 0~1',
+  baseModel.cells.length === 121 &&
+  baseModel.cells.every(function (cell) {
+    return cell.x >= 0 && cell.x <= 1 && cell.y >= 0 && cell.y <= 1;
+  }));
+ok('棋盘模型同时给出营地、选中、落点与键盘焦点标记',
+  campCells.length === 20 && campCells.every(function (cell) { return cell.camp === 'top' || cell.camp === 'bottom'; }) &&
+  baseModel.cells.some(function (cell) { return cell.key === '3:-3' && cell.selected && !cell.moveKind; }) &&
+  markedTargets.length === legalTargets &&
+  markedTargets.every(function (cell) { return cell.moveKind === 'step' || cell.moveKind === 'jump'; }) &&
+  baseModel.cells.filter(function (cell) { return cell.focus; }).length === 1);
+ok('棋盘模型把双方目标营地输出为三角形区域',
+  baseModel.zones.length === 2 &&
+  baseModel.zones.every(function (zone) {
+    return zone.points.length === 3 && /-zone$/.test(zone.className);
+  }));
+
+vm.runInContext(`
+  lastMove = {
+    player: 'red', from: '3:-3', target: '6:-6', kind: 'jump',
+    path: ['3:-3', '4:-4', '6:-6'], moveNumber: 1
+  };
+`, sandbox);
+const jumpModel = T.buildBoardModel();
+ok('棋盘模型按段区分相邻段与跳跃段，并保留行动方',
+  jumpModel.routes.length === 2 && jumpModel.routes[0].jump === false && jumpModel.routes[1].jump === true &&
+  jumpModel.routes.every(function (segment) {
+    return segment.player === 'red' && segment.length > 0 && Number.isFinite(segment.angle);
+  }));
+function oriented(key) { const cell = C.BOARD_CELLS.find(function (item) { return item.key === key; }); return C.orientPoint(cell, 'red'); }
+const originPoint = oriented('8:0');
+const navChecks = [[0, -1, 'y', -1], [0, 1, 'y', 1], [-1, 0, 'x', -1], [1, 0, 'x', 1]].map(function (probe) {
+  const nextKey = T.findNeighborKey('8:0', probe[0], probe[1]);
+  if (!nextKey || nextKey === '8:0') return false;
+  const next = oriented(nextKey);
+  return (next[probe[2]] - originPoint[probe[2]]) * probe[3] > 0;
+});
+ok('方向键能在六角星棋盘上找到对应方向的下一个孔位', navChecks.every(Boolean));
+ok('3D 模式用 rotateX 形成真实透视，2D 保持平面',
+  /rotateX\(var\(--board-tilt/.test(css) && /--board-tilt:17deg/.test(css) && /--board-tilt:0deg/.test(css) &&
+  !/\.checker-board[^}]*rotate/.test(css));
+ok('棋盘热区不小于 7% 宽度，避免回退成过小的点击区域',
+  /\.ck-cell\{[^}]*width:7\.4%/.test(css) && /\.ck-piece\{[^}]*width:4\.94%/.test(css));
+
+const boardStorage = makeSimpleStorage();
+const boardNodes = Object.create(null);
+function hasClass(node, name) { return String(node.className).split(/\s+/).indexOf(name) >= 0; }
+function addClass(node, name) { if (!hasClass(node, name)) node.className = (node.className ? node.className + ' ' : '') + name; }
+function removeClass(node, name) {
+  node.className = String(node.className).split(/\s+/).filter(function (item) { return item && item !== name; }).join(' ');
+}
+function createNode(tag) {
+  const node = {
+    tagName: String(tag || 'div').toUpperCase(),
+    className: '', hidden: false, style: {}, dataset: {}, children: [], __attrs: {},
+    appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
+    replaceChildren() { this.children.length = 0; },
+    remove() {
+      const parent = this.parentNode;
+      if (!parent) return;
+      const index = parent.children.indexOf(this);
+      if (index >= 0) parent.children.splice(index, 1);
+      this.parentNode = null;
+    },
+    setAttribute(name, value) {
+      this.__attrs[name] = String(value);
+      if (name === 'class') this.className = String(value);
+    },
+    getAttribute(name) { return this.__attrs[name]; },
+    addEventListener() {},
+    querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
+    querySelectorAll(selector) {
+      const wanted = String(selector).replace(/^\./, '');
+      const found = [];
+      (function walk(current) {
+        current.children.forEach(function (child) {
+          if (hasClass(child, wanted)) found.push(child);
+          if (child.tagName === selector) found.push(child);
+          walk(child);
+        });
+      })(this);
+      return found;
+    },
+    focus() {}
+  };
+  node.classList = {
+    add(name) { addClass(node, name); },
+    remove(name) { removeClass(node, name); },
+    contains(name) { return hasClass(node, name); },
+    toggle(name, force) {
+      const on = force === undefined ? !hasClass(node, name) : !!force;
+      if (on) addClass(node, name); else removeClass(node, name);
+      return on;
+    }
+  };
+  return node;
+}
+function findByClass(root, className) {
+  let found = null;
+  (function walk(current) {
+    if (found) return;
+    if (hasClass(current, className)) { found = current; return; }
+    current.children.forEach(walk);
+  })(root);
+  return found;
+}
+['board', 'boardModeSelect', 'soundBtn', 'onlineRoomBar', 'modeBadge', 'saveNote', 'roomCodeText',
+  'undoBtn', 'newGameBtn', 'winnerNewBtn', 'exitBtn', 'copyInviteBtn', 'leaveRoomBtn',
+  'turnPiece', 'turnText', 'turnKicker', 'moveCount', 'redProgress', 'blueProgress',
+  'redPlayer', 'bluePlayer', 'redName', 'blueName', 'lastMoveBar', 'lastMovePiece',
+  'lastMoveText', 'lastMoveKind', 'boardWait', 'onlineStatus', 'boardTip',
+  'winnerOverlay', 'winnerPiece', 'winnerTitle', 'winnerText', 'toast'
+].forEach(function (id) { boardNodes[id] = createNode('div'); boardNodes[id].id = id; });
+boardNodes.boardWait.appendChild(createNode('strong'));
+boardNodes.boardWait.appendChild(createNode('small'));
+const readyHandlers = Object.create(null);
+const boardSandbox = {
+  console, Math, Date, JSON, Number, String, Array, Object, Set, Map, Error, RegExp,
+  Uint8Array, URL, URLSearchParams,
+  setTimeout, clearTimeout,
+  document: {
+    createElement: createNode,
+    createElementNS: function (_ns, tag) { return createNode(tag); },
+    getElementById: function (id) { return boardNodes[id] || null; }
+  },
+  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai', search: '?mode=ai' },
+  navigator: {},
+  localStorage: boardStorage,
+  WebSocket: { OPEN: 1 }
+};
+boardSandbox.window = boardSandbox;
+boardSandbox.globalThis = boardSandbox;
+boardSandbox.addEventListener = function (type, handler) {
+  (readyHandlers[type] = readyHandlers[type] || []).push(handler);
+};
+vm.createContext(boardSandbox);
+vm.runInContext(coreSource, boardSandbox, { filename: 'checkers_core.js' });
+vm.runInContext(source, boardSandbox, { filename: 'checkers.js' });
+const boardTest = boardSandbox.__checkersTest;
+boardTest.applyBoardModeLayout('2d');
+ok('2D 模式写入 data-view 并持久化配置',
+  boardNodes.board.dataset.view === '2d' && boardNodes.boardModeSelect.value === '2d' &&
+  boardStorage.getItem(boardTest.CONFIG.BOARD_VIEW_KEY) === '2d');
+boardTest.applyBoardModeLayout('3d');
+ok('3D 模式写入 data-view 并持久化配置',
+  boardNodes.board.dataset.view === '3d' && boardStorage.getItem(boardTest.CONFIG.BOARD_VIEW_KEY) === '3d');
+
+const holeLayer = findByClass(boardNodes.board, 'board-holes');
+const pieceLayer = findByClass(boardNodes.board, 'board-pieces');
+const shadowLayer = findByClass(boardNodes.board, 'board-shadows');
+const pieceNodes = pieceLayer.children.filter(function (node) { return hasClass(node, 'ck-piece'); });
+ok('棋盘一次建成 121 个常驻孔位与 20 枚棋子节点',
+  holeLayer && pieceLayer && holeLayer.children.length === 121 && pieceNodes.length === 20);
+ok('孔位与棋子按归一化坐标定位，不会全部堆在棋盘角落',
+  holeLayer.children.every(function (node) { return /%$/.test(node.style.left) && /%$/.test(node.style.top); }) &&
+  new Set(holeLayer.children.map(function (node) { return node.style.left + ',' + node.style.top; })).size === 121 &&
+  pieceNodes.every(function (node) { return /%$/.test(node.style.left) && /%$/.test(node.style.top); }));
+
+const pieceBefore = pieceNodes.find(function (node) { return node.dataset.key === '3:-3'; });
+vm.runInContext(`
+  const moved = Core.applyMove(pieces, 'red', '3:-3', '4:-4');
+  pieces = moved.pieces;
+  lastMove = { player: 'red', from: '3:-3', target: '4:-4', kind: 'step', path: ['3:-3', '4:-4'], moveNumber: 1 };
+  renderBoard();
+`, boardSandbox);
+ok('走子复用棋子节点而不是重建，位移动画才有意义',
+  pieceNodes.length === 20 && pieceNodes.indexOf(pieceBefore) >= 0 &&
+  pieceBefore.dataset.key === '4:-4' && holeLayer.children.length === 121);
+ok('接触阴影独立成层，与棋子同键同步且初始不抬起',
+  shadowLayer && shadowLayer.children.length === 20 &&
+  pieceNodes.every(function (node) {
+    return node.children.length === 1 && String(node.children[0].tagName || '').toUpperCase() === 'SVG' &&
+      node.children[0].children.length > 0;
+  }) &&
+  shadowLayer.children.every(function (node) { return hasClass(node, 'ck-shadow') && /%$/.test(node.style.left); }) &&
+  shadowLayer.children.every(function (node) { return !hasClass(node, 'is-lifted'); }));
+vm.runInContext("selectedKey = '0:0'; renderBoard();", boardSandbox);
+const liftedShadow = shadowLayer.children.find(function (node) { return node.dataset.key === '0:0'; });
+ok('选中棋子时只有它的接触阴影缩小分离，其余保持贴地',
+  liftedShadow && hasClass(liftedShadow, 'is-lifted') &&
+  shadowLayer.children.filter(function (node) { return hasClass(node, 'is-lifted'); }).length === 1);
+vm.runInContext("selectedKey = ''; renderBoard();", boardSandbox);
+
+function collectAttrs(node, names) {
+  const found = [];
+  (function walk(current) {
+    names.forEach(function (name) { const value = current.getAttribute(name); if (value) found.push(String(value)); });
+    current.children.forEach(walk);
+  })(node);
+  return found;
+}
+const defNodes = pieceLayer.children.filter(function (node) { return hasClass(node, 'ck-defs'); });
+const allIds = defNodes.length === 1 ? collectAttrs(defNodes[0], ['id']) : [];
+const pieceSample = pieceNodes.find(function (node) { return hasClass(node, 'red-piece'); });
+const pieceSvg = pieceSample ? pieceSample.children[0] : null;
+ok('棋子渐变、暗角与裁剪滤镜全站只注入一份 defs，20 颗棋子不会互相串色',
+  defNodes.length === 1 && allIds.length === 12 && new Set(allIds).size === allIds.length &&
+  allIds.indexOf('ckclip-marble') >= 0 && allIds.indexOf('ckg-soft') >= 0);
+ok('棋子内嵌 SVG 正确创建，颜色写死在渐变里而不是依赖属性中的 var()',
+  pieceSvg && pieceSvg.getAttribute('viewBox') === '0 0 100 100' &&
+  collectAttrs(pieceSvg, ['fill']).some(function (value) { return value.indexOf('url(#ckg-red-base)') === 0; }) &&
+  collectAttrs(pieceSvg, ['fill']).some(function (value) { return value.indexOf('#a51228') === 0; }) &&
+  collectAttrs(pieceSvg, ['filter']).some(function (value) { return value.indexOf('url(#ckg-soft)') === 0; }) &&
+  collectAttrs(pieceSvg, ['stop-color']).every(function (value) { return value.indexOf('var(') !== 0; }) &&
+  collectAttrs(pieceSvg, ['stroke']).some(function (value) { return value.indexOf('rgba(112,8,24') === 0; }) &&
+  collectAttrs(pieceSvg, ['stroke']).every(function (value) { return value.indexOf('rgba(30,10,4') !== 0; }));
+
+(readyHandlers.DOMContentLoaded || []).forEach(function (handler) { handler(); });
+const firstCell = holeLayer.children[0];
+ok('页面初始化走通整条渲染链路并写入无障碍标签',
+  boardNodes.board.dataset.view === '3d' && holeLayer.children.length === 121 &&
+  pieceNodes.length === 20 &&
+  /中国跳棋棋盘/.test(boardNodes.board.getAttribute('aria-label')) &&
+  /第 \d+ 行/.test(firstCell.getAttribute('aria-label')) &&
+  boardNodes.turnText.textContent.length > 0 && boardNodes.redName.textContent === '你 · 红方');
+ok('初始化后只有一个孔位进入 Tab 序列，配合方向键完成键盘导航',
+  holeLayer.children.filter(function (node) { return node.getAttribute('tabindex') === '0'; }).length === 1);
 
 const initial = C.createInitialPieces();
 const owners = Object.values(initial);

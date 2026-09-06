@@ -7,6 +7,7 @@ const CONFIG = {
   SAVE_PREFIX: 'chinese_checkers_save_v2_',
   SOUND_KEY: 'chinese_checkers_sound',
   AI_LEVEL_KEY: 'chinese_checkers_ai_level',
+  BOARD_VIEW_KEY: 'chinese_checkers_board_view',
   NICK_KEY: 'light_games_nickname',
   CID_KEY: 'chinese_checkers_cid',
   TOKEN_PREFIX: 'chinese_checkers_token_',
@@ -25,6 +26,8 @@ const mode = ['ai', 'local', 'online'].includes(requestedMode) ? requestedMode :
 const launchIntent = launchParams.get('intent') === 'create' ? 'create' : 'join';
 const BOARD_CELLS = Core.BOARD_CELLS;
 const CELL_BY_KEY = new Map(BOARD_CELLS.map(function (cell) { return [cell.key, cell]; }));
+/** 规则核心输出的坐标空间边长，模型统一归一化到 0~1，渲染层再换算成百分比。 */
+const BOARD_SPAN = 320;
 
 let viewPlayer = 'red';
 let pieces = Core.createInitialPieces();
@@ -42,6 +45,7 @@ let aiTimer = null;
 let aiWorker = null;
 let aiRequestId = 0;
 let toastTimer = null;
+let boardView = '3d';
 
 const online = {
   active: false, ws: null, room: '', cid: '', token: '', color: '', phase: 'idle',
@@ -49,14 +53,115 @@ const online = {
   reconnectTimer: null, retryAttempt: 0, retryDelay: 0
 };
 
-function $(id) { return document.getElementById(id); }
+function $(id) { return document.getElementById ? document.getElementById(id) : null; }
 function emptyMoves() { return { steps: [], jumps: [], all: [] }; }
-function svgElement(name) { return document.createElementNS('http://www.w3.org/2000/svg', name); }
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(doc, name, attrs) {
+  const node = doc.createElementNS(SVG_NS, name);
+  Object.keys(attrs || {}).forEach(function (key) { node.setAttribute(key, attrs[key]); });
+  return node;
+}
+
+/**
+ * 棋子的渐变与裁剪全站只注入一份（放在棋子层首位），20 颗棋子按阵营引用。
+ * 如果每颗棋子各自带 defs，重复的 id 会让 url(#...) 全部解析到第一个，颜色就串了。
+ */
+function buildPieceDefs(doc) {
+  const svg = svgEl(doc, 'svg', { 'class': 'ck-defs', width: '0', height: '0', 'aria-hidden': 'true' });
+  const defs = doc.createElementNS(SVG_NS, 'defs');
+  const mkGrad = function (id, cx, cy, r, stops) {
+    const grad = doc.createElementNS(SVG_NS, 'radialGradient');
+    grad.setAttribute('id', id);
+    grad.setAttribute('cx', cx); grad.setAttribute('cy', cy); grad.setAttribute('r', r);
+    stops.forEach(function (stop) {
+      const s = doc.createElementNS(SVG_NS, 'stop');
+      s.setAttribute('offset', stop[0]);
+      s.setAttribute('stop-color', stop[1]);
+      if (stop.length > 2) s.setAttribute('stop-opacity', String(stop[2]));
+      grad.appendChild(s);
+    });
+    defs.appendChild(grad);
+  };
+  mkGrad('ckg-red-base', '34%', '26%', '76%', [['0%', '#f2606c'], ['38%', '#d02138'], ['74%', '#9c1124'], ['100%', '#6e0a19']]);
+  mkGrad('ckg-blue-base', '34%', '26%', '76%', [['0%', '#63c3f0'], ['38%', '#2b93d6'], ['74%', '#1867a8'], ['100%', '#0d4a80']]);
+  mkGrad('ckg-red-shade', '50%', '50%', '50%', [['0%', 'rgba(90,6,20,.46)'], ['100%', 'rgba(90,6,20,0)']]);
+  mkGrad('ckg-blue-shade', '50%', '50%', '50%', [['0%', 'rgba(8,48,88,.46)'], ['100%', 'rgba(8,48,88,0)']]);
+  mkGrad('ckg-red-rim', '50%', '112%', '58%', [['0%', 'rgba(255,172,152,.96)'], ['45%', 'rgba(255,142,120,.55)'], ['100%', 'rgba(255,142,120,0)']]);
+  mkGrad('ckg-blue-rim', '50%', '112%', '58%', [['0%', 'rgba(152,224,255,.96)'], ['45%', 'rgba(122,206,250,.55)'], ['100%', 'rgba(122,206,250,0)']]);
+  mkGrad('ckg-hi', '40%', '38%', '64%', [['0%', 'rgba(255,255,255,1)'], ['46%', 'rgba(255,255,255,.72)'], ['100%', 'rgba(255,255,255,0)']]);
+  mkGrad('ckg-hi2', '50%', '50%', '50%', [['0%', 'rgba(255,255,255,.88)'], ['100%', 'rgba(255,255,255,0)']]);
+  mkGrad('ckg-red-vig', '50%', '50%', '50%', [['0%', 'rgba(70,4,14,0)'], ['60%', 'rgba(70,4,14,0)'], ['100%', 'rgba(70,4,14,.4)']]);
+  mkGrad('ckg-blue-vig', '50%', '50%', '50%', [['0%', 'rgba(4,32,60,0)'], ['60%', 'rgba(4,32,60,0)'], ['100%', 'rgba(4,32,60,.4)']]);
+  const soft = svgEl(doc, 'filter', { id: 'ckg-soft', x: '-20%', y: '-20%', width: '140%', height: '140%' });
+  soft.appendChild(svgEl(doc, 'feGaussianBlur', { stdDeviation: '0.9' }));
+  defs.appendChild(soft);
+  const clip = svgEl(doc, 'clipPath', { id: 'ckclip-marble' });
+  clip.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50' }));
+  defs.appendChild(clip);
+  svg.appendChild(defs);
+  return svg;
+}
+
+/**
+ * 对照参考图的玻璃弹珠结构，从下到上八层：
+ * 底色渐变 → 密集斑纹（红=大小错落的深红斑块群 / 蓝=小圆环+碎点）→ 暗侧收影 → 球面边缘渐暗 → 底缘透光 → 主高光 + 次高光 → 阵营深色描边。
+ * 真实感来自三点：斑点数量多且半径 1.9~5.2 错落（大斑太稀会像贴纸）；
+ * 整组斑纹套一层轻微高斯模糊（stdDeviation .9），看起来是"嵌在玻璃里"而不是印在表面；
+ * 边缘 vignette 模拟球面曲率——靠轮廓处的斑纹和底色一起变暗收进球里。
+ * 花纹用实色加透明度，暗侧压在花纹之上让背光处的斑点一起变暗。内层按 0..100 设计，整体缩到 94%。
+ */
+function buildPieceNode(owner, doc) {
+  const tint = owner === 'blue' ? 'blue' : 'red';
+  const svg = svgEl(doc, 'svg', { 'class': 'ck-piece__svg', viewBox: '0 0 100 100', 'aria-hidden': 'true' });
+  const g = svgEl(doc, 'g', { 'clip-path': 'url(#ckclip-marble)', transform: 'translate(3 3) scale(.94)' });
+  g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-base)' }));
+  const pattern = svgEl(doc, 'g', { filter: 'url(#ckg-soft)' });
+  if (tint === 'blue') {
+    [[36, 50, 8], [60, 40, 7], [52, 68, 6.5], [28, 34, 6], [70, 60, 6], [42, 82, 5], [74, 32, 4.5]].forEach(function (ring) {
+      pattern.appendChild(svgEl(doc, 'circle', {
+        cx: String(ring[0]), cy: String(ring[1]), r: String(ring[2]),
+        fill: 'none', stroke: '#0f6bb0', 'stroke-width': '3', 'stroke-opacity': '.8'
+      }));
+    });
+    [[46, 30, 3], [64, 54, 3.2], [34, 64, 3], [24, 50, 2.6], [56, 52, 2.2], [70, 74, 2.6]].forEach(function (dot) {
+      pattern.appendChild(svgEl(doc, 'circle', {
+        cx: String(dot[0]), cy: String(dot[1]), r: String(dot[2]), fill: '#0f6bb0', 'fill-opacity': '.8'
+      }));
+    });
+  } else {
+    [[26, 42, 4.8], [38, 58, 3.6], [52, 40, 5.2], [64, 52, 4.4], [46, 70, 4.9], [30, 26, 3.4], [58, 26, 3.8],
+     [72, 40, 3.3], [70, 66, 4.6], [36, 80, 3.7], [22, 58, 3.5], [54, 84, 3]].forEach(function (spot) {
+      pattern.appendChild(svgEl(doc, 'circle', {
+        cx: String(spot[0]), cy: String(spot[1]), r: String(spot[2]), fill: '#a51228', 'fill-opacity': '.85'
+      }));
+    });
+    [[44, 50, 2.4], [62, 72, 2.4], [28, 70, 2.2], [80, 54, 2.6], [50, 62, 1.9], [66, 32, 2.2], [34, 66, 2]].forEach(function (fleck) {
+      pattern.appendChild(svgEl(doc, 'circle', {
+        cx: String(fleck[0]), cy: String(fleck[1]), r: String(fleck[2]), fill: '#a51228', 'fill-opacity': '.55'
+      }));
+    });
+  }
+  g.appendChild(pattern);
+  g.appendChild(svgEl(doc, 'ellipse', { cx: '67', cy: '72', rx: '31', ry: '27', fill: 'url(#ckg-' + tint + '-shade)' }));
+  g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-vig)' }));
+  g.appendChild(svgEl(doc, 'ellipse', { cx: '50', cy: '98', rx: '42', ry: '20', fill: 'url(#ckg-' + tint + '-rim)' }));
+  g.appendChild(svgEl(doc, 'ellipse', { cx: '35', cy: '31', rx: '19', ry: '12', transform: 'rotate(-26 35 31)', fill: 'url(#ckg-hi)' }));
+  g.appendChild(svgEl(doc, 'ellipse', { cx: '66', cy: '23', rx: '7', ry: '4.5', transform: 'rotate(-20 66 23)', fill: 'url(#ckg-hi2)' }));
+  g.appendChild(svgEl(doc, 'circle', {
+    cx: '50', cy: '50', r: '49.2', fill: 'none',
+    stroke: tint === 'blue' ? 'rgba(10,58,100,.55)' : 'rgba(112,8,24,.55)', 'stroke-width': '1.6'
+  }));
+  svg.appendChild(g);
+  return svg;
+}
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
 function playerLabel(player) { return player === 'red' ? '红方' : '蓝方'; }
 function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
 function normalizeRoom(value) { return String(value || '').toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 5); }
+function normalizeBoardView(value) { return value === '2d' ? '2d' : '3d'; }
 function getViewPlayerForMode(currentMode, assignedColor) {
   return currentMode === 'online' && (assignedColor === 'red' || assignedColor === 'blue') ? assignedColor : 'red';
 }
@@ -139,48 +244,18 @@ function playTone(kind) {
   } catch (e) {}
 }
 
-function appendGradient(defs, id, light, dark) {
-  const gradient = svgElement('radialGradient'); gradient.id = id; gradient.setAttribute('cx', '35%'); gradient.setAttribute('cy', '28%'); gradient.setAttribute('r', '72%');
-  const first = svgElement('stop'); first.setAttribute('offset', '0%'); first.setAttribute('stop-color', light);
-  const second = svgElement('stop'); second.setAttribute('offset', '100%'); second.setAttribute('stop-color', dark);
-  gradient.append(first, second); defs.appendChild(gradient);
-}
-
+/**
+ * 棋盘纯数据模型。
+ * 渲染层与规则状态在这里解耦：模型输出归一化的 0~1 坐标与语义标记，
+ * DOM 渲染器只负责把它映射成样式，因此模型可以直接在 Node 下断言。
+ */
 function orientedPoint(key) {
   const cell = CELL_BY_KEY.get(key);
   return cell ? Core.orientPoint(cell, viewPlayer) : null;
 }
 
-function drawBoardZones(board) {
-  const zones = [
-    { className: 'red-goal-zone', keys: ['16:0', '13:-3', '13:3'] },
-    { className: 'blue-goal-zone', keys: ['0:0', '3:-3', '3:3'] }
-  ];
-  const group = svgElement('g'); group.classList.add('board-zones'); group.setAttribute('aria-hidden', 'true');
-  zones.forEach(function (zone) {
-    const points = zone.keys.map(orientedPoint).filter(Boolean);
-    if (points.length !== 3) return;
-    const shape = svgElement('polygon'); shape.classList.add('board-zone', zone.className);
-    shape.setAttribute('points', points.map(function (point) { return point.x + ',' + point.y; }).join(' '));
-    group.appendChild(shape);
-  });
-  board.appendChild(group);
-}
-
-function drawLastMove(board) {
-  if (!lastMove || !Array.isArray(lastMove.path)) return;
-  const points = lastMove.path.map(orientedPoint).filter(Boolean);
-  if (points.length < 2) return;
-  const group = svgElement('g'); group.classList.add('last-move-layer'); group.setAttribute('aria-hidden', 'true');
-  const colorClass = lastMove.player + '-path';
-  const route = svgElement('polyline'); route.classList.add('last-move-path', colorClass);
-  route.setAttribute('points', points.map(function (point) { return point.x + ',' + point.y; }).join(' '));
-  group.appendChild(route);
-  const origin = svgElement('circle'); origin.classList.add('move-origin', colorClass);
-  origin.setAttribute('cx', points[0].x); origin.setAttribute('cy', points[0].y); origin.setAttribute('r', '9.7'); group.appendChild(origin);
-  const destination = svgElement('circle'); destination.classList.add('move-destination', colorClass);
-  destination.setAttribute('cx', points[points.length - 1].x); destination.setAttribute('cy', points[points.length - 1].y); destination.setAttribute('r', '11'); group.appendChild(destination);
-  board.appendChild(group);
+function normalizeFraction(value) {
+  return Math.round((value / BOARD_SPAN) * 100000) / 100000;
 }
 
 function cellLabel(cell, owner, moveKind) {
@@ -190,36 +265,313 @@ function cellLabel(cell, owner, moveKind) {
   return base + '，空位';
 }
 
-function renderBoard() {
-  const board = $('board'); board.replaceChildren();
-  const defs = svgElement('defs'); appendGradient(defs, 'redPieceGradient', '#ff9a8f', '#c93648'); appendGradient(defs, 'bluePieceGradient', '#91adff', '#304bc9'); board.appendChild(defs);
-  drawBoardZones(board);
-  drawLastMove(board);
-  const stepSet = new Set(legalMoves.steps); const jumpSet = new Set(legalMoves.jumps);
-  const keyboardFocusKey = selectedKey || Object.keys(pieces).find(function (key) { return pieces[key] === turn; }) || BOARD_CELLS[0].key;
-  BOARD_CELLS.forEach(function (cell) {
-    const point = Core.orientPoint(cell, viewPlayer); const group = svgElement('g');
-    const owner = pieces[cell.key] || ''; const moveKind = jumpSet.has(cell.key) ? 'jump' : (stepSet.has(cell.key) ? 'step' : '');
-    group.classList.add('cell-node'); if (cell.camp) group.classList.add(cell.camp + '-camp');
-    if (selectedKey === cell.key) group.classList.add('selected'); if (moveKind) group.classList.add(moveKind + '-target');
-    if (lastMove && lastMove.target === cell.key) group.classList.add('last-destination');
-    group.dataset.key = cell.key; group.setAttribute('role', 'gridcell'); group.setAttribute('tabindex', keyboardFocusKey === cell.key ? '0' : '-1');
-    group.setAttribute('aria-label', cellLabel(cell, owner, moveKind));
+function buildRouteModels() {
+  if (!lastMove || !Array.isArray(lastMove.path) || lastMove.path.length < 2) return [];
+  const segments = [];
+  for (let i = 1; i < lastMove.path.length; i++) {
+    const fromCell = CELL_BY_KEY.get(lastMove.path[i - 1]);
+    const toCell = CELL_BY_KEY.get(lastMove.path[i]);
+    if (!fromCell || !toCell) continue;
+    const from = Core.orientPoint(fromCell, viewPlayer);
+    const to = Core.orientPoint(toCell, viewPlayer);
+    const x1 = normalizeFraction(from.x); const y1 = normalizeFraction(from.y);
+    const x2 = normalizeFraction(to.x); const y2 = normalizeFraction(to.y);
+    const dx = x2 - x1; const dy = y2 - y1;
+    segments.push({
+      x: x1, y: y1,
+      length: Math.sqrt(dx * dx + dy * dy),
+      angle: Math.atan2(dy, dx) * 180 / Math.PI,
+      jump: Math.abs(fromCell.row - toCell.row) + Math.abs(fromCell.unit - toCell.unit) > 2,
+      player: lastMove.player
+    });
+  }
+  return segments;
+}
 
-    const hit = svgElement('circle'); hit.classList.add('hit-area'); hit.setAttribute('cx', point.x); hit.setAttribute('cy', point.y); hit.setAttribute('r', '12'); group.appendChild(hit);
-    const hole = svgElement('circle'); hole.classList.add('hole'); hole.setAttribute('cx', point.x); hole.setAttribute('cy', point.y); hole.setAttribute('r', '6.2'); group.appendChild(hole);
-    if (moveKind) {
-      const halo = svgElement('circle'); halo.classList.add('target-halo'); halo.setAttribute('cx', point.x); halo.setAttribute('cy', point.y); halo.setAttribute('r', '7.1'); group.appendChild(halo);
-      const dot = svgElement('circle'); dot.classList.add('target-dot'); dot.setAttribute('cx', point.x); dot.setAttribute('cy', point.y); dot.setAttribute('r', '3'); group.appendChild(dot);
-    }
-    if (selectedKey === cell.key) {
-      const halo = svgElement('circle'); halo.classList.add('selection-halo'); halo.setAttribute('cx', point.x); halo.setAttribute('cy', point.y); halo.setAttribute('r', '10.5'); group.appendChild(halo);
-    }
-    if (owner) {
-      const piece = svgElement('circle'); piece.classList.add('piece', owner + '-piece'); piece.setAttribute('cx', point.x); piece.setAttribute('cy', point.y); piece.setAttribute('r', '7.9'); group.appendChild(piece);
-    }
-    board.appendChild(group);
+function buildZoneModels() {
+  return [
+    { className: 'red-goal-zone', keys: ['16:0', '13:-3', '13:3'] },
+    { className: 'blue-goal-zone', keys: ['0:0', '3:-3', '3:3'] }
+  ].map(function (zone) {
+    const points = zone.keys.map(orientedPoint).filter(Boolean);
+    if (points.length !== 3) return null;
+    return {
+      className: zone.className,
+      points: points.map(function (point) { return { x: normalizeFraction(point.x), y: normalizeFraction(point.y) }; })
+    };
+  }).filter(Boolean);
+}
+
+function buildBoardModel() {
+  const stepSet = new Set(legalMoves.steps);
+  const jumpSet = new Set(legalMoves.jumps);
+  const focusKey = selectedKey || Object.keys(pieces).find(function (key) { return pieces[key] === turn; }) || BOARD_CELLS[0].key;
+  const cells = BOARD_CELLS.map(function (cell) {
+    const point = Core.orientPoint(cell, viewPlayer);
+    const owner = pieces[cell.key] || '';
+    const moveKind = jumpSet.has(cell.key) ? 'jump' : (stepSet.has(cell.key) ? 'step' : '');
+    return {
+      key: cell.key,
+      x: normalizeFraction(point.x),
+      y: normalizeFraction(point.y),
+      camp: cell.camp || '',
+      owner: owner,
+      moveKind: moveKind,
+      selected: selectedKey === cell.key,
+      lastOrigin: !!lastMove && lastMove.from === cell.key,
+      lastDestination: !!lastMove && lastMove.target === cell.key,
+      focus: focusKey === cell.key,
+      label: cellLabel(cell, owner, moveKind)
+    };
   });
+  return {
+    view: boardView,
+    focusKey: focusKey,
+    cells: cells,
+    pieces: cells.filter(function (cell) { return !!cell.owner; }),
+    routes: buildRouteModels(),
+    zones: buildZoneModels(),
+    move: lastMove ? {
+      from: lastMove.from, target: lastMove.target, kind: lastMove.kind,
+      id: [lastMove.player, lastMove.from, lastMove.target, lastMove.moveNumber].join('|')
+    } : null
+  };
+}
+
+/* ---------- 单一 DOM 渲染层：节点常驻，只同步状态，走子因此可以做位移动画 ---------- */
+const dom = {
+  root: null, plane: null, zoneLayer: null, routeLayer: null, holeLayer: null, shadowLayer: null, pieceLayer: null,
+  originNode: null, destinationNode: null, zoneNodes: null,
+  cells: new Map(), pieceNodes: new Map(), shadowNodes: new Map(), built: false, moveId: ''
+};
+
+function percent(value) { return (value * 100).toFixed(3) + '%'; }
+
+function ensureBoard() {
+  if (dom.built) return true;
+  const root = $('board');
+  if (!root || typeof root.appendChild !== 'function') return false;
+  root.replaceChildren();
+  const plane = document.createElement('div'); plane.className = 'board-plane';
+  const zoneLayer = document.createElement('div'); zoneLayer.className = 'board-layer board-zones'; zoneLayer.setAttribute('aria-hidden', 'true');
+  const routeLayer = document.createElement('div'); routeLayer.className = 'board-layer board-routes'; routeLayer.setAttribute('aria-hidden', 'true');
+  const holeLayer = document.createElement('div'); holeLayer.className = 'board-layer board-holes';
+  const shadowLayer = document.createElement('div'); shadowLayer.className = 'board-layer board-shadows'; shadowLayer.setAttribute('aria-hidden', 'true');
+  const pieceLayer = document.createElement('div'); pieceLayer.className = 'board-layer board-pieces'; pieceLayer.setAttribute('aria-hidden', 'true');
+  pieceLayer.appendChild(buildPieceDefs(document));
+  const originNode = document.createElement('span'); originNode.className = 'move-origin'; originNode.hidden = true;
+  const destinationNode = document.createElement('span'); destinationNode.className = 'move-destination'; destinationNode.hidden = true;
+  routeLayer.appendChild(originNode); routeLayer.appendChild(destinationNode);
+  plane.appendChild(zoneLayer); plane.appendChild(routeLayer); plane.appendChild(holeLayer); plane.appendChild(shadowLayer); plane.appendChild(pieceLayer);
+  root.appendChild(plane);
+  BOARD_CELLS.forEach(function (cell) {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'ck-cell';
+    node.dataset.key = cell.key;
+    const hole = document.createElement('span');
+    hole.className = 'ck-hole';
+    node.appendChild(hole);
+    holeLayer.appendChild(node);
+    dom.cells.set(cell.key, node);
+  });
+  dom.root = root; dom.plane = plane;
+  dom.zoneLayer = zoneLayer; dom.routeLayer = routeLayer; dom.holeLayer = holeLayer; dom.shadowLayer = shadowLayer; dom.pieceLayer = pieceLayer;
+  dom.originNode = originNode; dom.destinationNode = destinationNode;
+  dom.zoneNodes = new Map();
+  dom.built = true;
+  bindBoardInput();
+  return true;
+}
+
+function syncZones(model) {
+  model.zones.forEach(function (zone) {
+    let node = dom.zoneNodes.get(zone.className);
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'board-zone ' + zone.className;
+      dom.zoneLayer.appendChild(node);
+      dom.zoneNodes.set(zone.className, node);
+    }
+    node.style.clipPath = 'polygon(' + zone.points.map(function (point) {
+      return percent(point.x) + ' ' + percent(point.y);
+    }).join(',') + ')';
+  });
+}
+
+function syncRoutes(model) {
+  const stale = dom.routeLayer.querySelectorAll('.last-move-path');
+  for (let i = 0; i < stale.length; i++) stale[i].remove();
+  model.routes.forEach(function (segment) {
+    const node = document.createElement('span');
+    node.className = 'last-move-path ' + segment.player + '-path' + (segment.jump ? ' route-jump' : '');
+    node.style.left = percent(segment.x);
+    node.style.top = percent(segment.y);
+    node.style.width = percent(segment.length);
+    node.style.transform = 'translateY(-50%) rotate(' + segment.angle.toFixed(2) + 'deg)';
+    dom.routeLayer.appendChild(node);
+  });
+  if (!model.routes.length || !lastMove) {
+    dom.originNode.hidden = true;
+    dom.destinationNode.hidden = true;
+    return;
+  }
+  const first = model.routes[0];
+  const endPoint = orientedPoint(lastMove.path[lastMove.path.length - 1]);
+  const marks = [
+    { node: dom.originNode, base: 'move-origin', x: first.x, y: first.y },
+    { node: dom.destinationNode, base: 'move-destination', x: normalizeFraction(endPoint.x), y: normalizeFraction(endPoint.y) }
+  ];
+  marks.forEach(function (mark) {
+    mark.node.className = mark.base + ' ' + lastMove.player + '-path';
+    mark.node.style.left = percent(mark.x);
+    mark.node.style.top = percent(mark.y);
+    mark.node.hidden = false;
+  });
+}
+
+function syncHoles(model, reorient) {
+  model.cells.forEach(function (cell) {
+    const node = dom.cells.get(cell.key);
+    if (!node) return;
+    if (reorient) placeNode(node, cell.x, cell.y);
+    node.classList.toggle('top-camp', cell.camp === 'top');
+    node.classList.toggle('bottom-camp', cell.camp === 'bottom');
+    node.classList.toggle('step-target', cell.moveKind === 'step');
+    node.classList.toggle('jump-target', cell.moveKind === 'jump');
+    node.classList.toggle('selected', cell.selected);
+    node.classList.toggle('last-origin', cell.lastOrigin);
+    node.classList.toggle('last-destination', cell.lastDestination);
+    node.setAttribute('tabindex', cell.focus ? '0' : '-1');
+    node.setAttribute('aria-label', cell.label);
+  });
+}
+
+/** 孔位与棋子共用一种定位方式：归一化坐标 × 100%，再靠 transform 自身居中。 */
+function placeNode(node, x, y) {
+  node.style.left = percent(x);
+  node.style.top = percent(y);
+}
+
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+/** 走子落位后补一段抬起动画；跳跃抬得更高，用来区分「移动」与「跳」。 */
+function animateHop(node, kind) {
+  if (!node || typeof node.animate !== 'function' || prefersReducedMotion()) return;
+  // 用独立的 translate 属性（而非 transform）做 Z 向位移：
+  // transform 已被用来抵消棋盘倾斜让球保持正圆，两者叠加才不会互相覆盖。
+  node.animate(
+    [{ translate: '0 0 0px' }, { translate: '0 0 28px', offset: .45 }, { translate: '0 0 0px' }],
+    { duration: kind === 'jump' ? 380 : 240, easing: 'cubic-bezier(.35,.9,.4,1)' }
+  );
+}
+
+/** 阴影与棋子同键、同步位移动画，但始终留在地面，棋子抬起时它才负责「分离」。 */
+function syncShadows(model, reorient) {
+  const desired = new Map();
+  model.pieces.forEach(function (piece) { desired.set(piece.key, true); });
+
+  Array.from(dom.shadowNodes.keys()).forEach(function (key) {
+    if (desired.has(key)) return;
+    const node = dom.shadowNodes.get(key);
+    dom.shadowNodes.delete(key);
+    if (node && typeof node.remove === 'function') node.remove();
+  });
+
+  model.pieces.forEach(function (piece) {
+    let node = dom.shadowNodes.get(piece.key);
+    if (!node) {
+      node = document.createElement('span');
+      node.className = 'ck-shadow';
+      dom.shadowLayer.appendChild(node);
+      dom.shadowNodes.set(piece.key, node);
+      placeNode(node, piece.x, piece.y);
+    } else if (reorient) {
+      placeNode(node, piece.x, piece.y);
+    }
+    node.dataset.key = piece.key;
+    node.classList.toggle('is-lifted', !!selectedKey && selectedKey === piece.key);
+  });
+}
+
+function syncPieces(model, reorient) {
+  const desired = new Map();
+  model.pieces.forEach(function (piece) { desired.set(piece.key, piece.owner); });
+  const positionOf = new Map();
+  model.cells.forEach(function (cell) { positionOf.set(cell.key, cell); });
+
+  // 复用上一步起点的节点并改键到落点，配合 left/top 过渡就是一次真实位移。
+  if (model.move && model.move.id !== dom.moveId) {
+    const moving = dom.pieceNodes.get(model.move.from);
+    if (moving && !desired.has(model.move.from) && desired.has(model.move.target) && !dom.pieceNodes.has(model.move.target)) {
+      dom.pieceNodes.delete(model.move.from);
+      dom.pieceNodes.set(model.move.target, moving);
+      const spot = positionOf.get(model.move.target);
+      placeNode(moving, spot.x, spot.y);
+      animateHop(moving, model.move.kind);
+      // 阴影跟着改键，否则它会被当成「消失的棋子」删掉重建，接不住位移动画。
+      const shadow = dom.shadowNodes.get(model.move.from);
+      if (shadow && !dom.shadowNodes.has(model.move.target)) {
+        dom.shadowNodes.delete(model.move.from);
+        dom.shadowNodes.set(model.move.target, shadow);
+        placeNode(shadow, spot.x, spot.y);
+      }
+    }
+  }
+  dom.moveId = model.move ? model.move.id : '';
+
+  Array.from(dom.pieceNodes.keys()).forEach(function (key) {
+    if (desired.has(key)) return;
+    const node = dom.pieceNodes.get(key);
+    dom.pieceNodes.delete(key);
+    if (node && typeof node.remove === 'function') node.remove();
+  });
+
+  model.pieces.forEach(function (piece) {
+    let node = dom.pieceNodes.get(piece.key);
+    if (!node) {
+      node = document.createElement('span');
+      node.className = 'ck-piece';
+      node.appendChild(buildPieceNode(piece.owner, document));
+      dom.pieceLayer.appendChild(node);
+      dom.pieceNodes.set(piece.key, node);
+      placeNode(node, piece.x, piece.y);
+    } else if (reorient) {
+      placeNode(node, piece.x, piece.y);
+    }
+    node.dataset.key = piece.key;
+    node.classList.toggle('red-piece', piece.owner === 'red');
+    node.classList.toggle('blue-piece', piece.owner === 'blue');
+    node.classList.toggle('is-selected', !!selectedKey && selectedKey === piece.key);
+    node.classList.toggle('is-last', !!model.move && model.move.target === piece.key);
+  });
+}
+
+function renderBoard() {
+  if (!ensureBoard()) return;
+  const model = buildBoardModel();
+  // 联机被分配到蓝方时视角会翻转，此时才需要整体重新定位，避免每次渲染都写坐标。
+  const reorient = dom.viewPlayer !== viewPlayer;
+  dom.viewPlayer = viewPlayer;
+  dom.root.dataset.view = model.view;
+  dom.plane.dataset.view = model.view;
+  syncZones(model);
+  syncRoutes(model);
+  syncHoles(model, reorient);
+  syncShadows(model, reorient);
+  syncPieces(model, reorient);
+}
+
+function applyBoardModeLayout(view) {
+  boardView = normalizeBoardView(view);
+  safeSet(CONFIG.BOARD_VIEW_KEY, boardView);
+  const select = $('boardModeSelect');
+  if (select) select.value = boardView;
+  const board = $('board');
+  if (board) board.dataset.view = boardView;
+  renderBoard();
 }
 
 function onlinePlayer(color) { return online.players.find(function (player) { return player.color === color; }); }
@@ -264,7 +616,7 @@ function updateLastMoveBar() {
 
 function updateStatus() {
   const isRed = turn === 'red'; const selfTurn = mode === 'online' && online.color === turn;
-  $('board').setAttribute('aria-label', '中国跳棋棋盘，' + playerLabel(viewPlayer) + '固定视角，己方位于下方');
+  if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，' + playerLabel(viewPlayer) + '固定视角，己方位于下方');
   $('turnPiece').className = 'turn-piece ' + turn;
   let title = playerLabel(turn) + '回合'; let kicker = playerLabel(viewPlayer) + '固定视角 · 己方在下';
   if (gameOver) { title = playerLabel(gameOver) + '获胜'; kicker = '本局已经结束'; }
@@ -515,11 +867,68 @@ function exitToLobby() {
   location.href = 'index.html';
 }
 
+const ARROW_STEPS = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+
+/** 方向键在六角星棋盘上找“视觉上最贴近该方向”的孔位，让 roving tabindex 真正可用。 */
+function findNeighborKey(fromKey, dirX, dirY) {
+  const origin = orientedPoint(fromKey);
+  if (!origin) return '';
+  let best = ''; let bestScore = Infinity;
+  BOARD_CELLS.forEach(function (cell) {
+    if (cell.key === fromKey) return;
+    const point = Core.orientPoint(cell, viewPlayer);
+    const dx = point.x - origin.x; const dy = point.y - origin.y;
+    const along = dx * dirX + dy * dirY;
+    if (along <= 1) return;
+    const across = Math.abs(dx * dirY - dy * dirX);
+    const score = along + across * 2.2;
+    if (score < bestScore) { bestScore = score; best = cell.key; }
+  });
+  return best;
+}
+
+function onBoardKeydown(event) {
+  const node = event.target && event.target.closest ? event.target.closest('[data-key]') : null;
+  if (!node || !node.dataset || !node.dataset.key) return;
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    handleCell(node.dataset.key);
+    return;
+  }
+  const step = ARROW_STEPS[event.key];
+  if (!step) return;
+  event.preventDefault();
+  const nextKey = findNeighborKey(node.dataset.key, step[0], step[1]);
+  const nextNode = nextKey ? dom.cells.get(nextKey) : null;
+  if (nextNode && typeof nextNode.focus === 'function') nextNode.focus();
+}
+
+function onBoardClick(event) {
+  const node = event.target && event.target.closest ? event.target.closest('[data-key]') : null;
+  if (node && node.dataset && node.dataset.key) handleCell(node.dataset.key);
+}
+
+function bindBoardInput() {
+  const board = $('board');
+  const select = $('boardModeSelect');
+  if (board && !board.__checkersListenerBound) {
+    board.addEventListener('click', onBoardClick);
+    board.addEventListener('keydown', onBoardKeydown);
+    board.__checkersListenerBound = true;
+  }
+  if (select && !select.__checkersListenerBound) {
+    select.addEventListener('change', function () { applyBoardModeLayout(select.value); });
+    select.__checkersListenerBound = true;
+  }
+}
+
 function init() {
   soundEnabled = safeGet(CONFIG.SOUND_KEY) !== '0';
   const requestedLevel = launchParams.get('level'); aiLevel = AI_LEVELS.includes(requestedLevel) ? requestedLevel : (AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel); viewPlayer = 'red';
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
+  boardView = normalizeBoardView(safeGet(CONFIG.BOARD_VIEW_KEY));
+  const boardModeSelect = $('boardModeSelect'); if (boardModeSelect) boardModeSelect.value = boardView;
   var soundBtnEl = $('soundBtn');
   if (soundBtnEl) { soundBtnEl.innerHTML = '<i class="ui-icon ' + (soundEnabled ? 'ui-icon--volume-high' : 'ui-icon--volume-xmark') + '" aria-hidden="true"></i>'; soundBtnEl.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); }
   $('onlineRoomBar').hidden = mode !== 'online';
@@ -527,8 +936,8 @@ function init() {
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 
-  $('board').addEventListener('click', function (event) { const node = event.target.closest('[data-key]'); if (node) handleCell(node.dataset.key); });
-  $('board').addEventListener('keydown', function (event) { const node = event.target.closest('[data-key]'); if (node && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); handleCell(node.dataset.key); } });
+  bindBoardInput();
+  applyBoardModeLayout(boardView);
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(); if (online.active) sendOnline({ t: 'ping' }); });
@@ -538,6 +947,8 @@ function init() {
 window.__checkersTest = {
   CONFIG: CONFIG, Core: Core, mode: mode, getViewPlayerForMode: getViewPlayerForMode,
   normalizeRoom: normalizeRoom, sanitizeLocalState: sanitizeLocalState, websocketUrl: websocketUrl,
-  reconnectDelayForAttempt: reconnectDelayForAttempt
+  reconnectDelayForAttempt: reconnectDelayForAttempt, normalizeBoardView: normalizeBoardView,
+  applyBoardModeLayout: applyBoardModeLayout, buildBoardModel: buildBoardModel,
+  findNeighborKey: findNeighborKey, BOARD_SPAN: BOARD_SPAN
 };
 window.addEventListener('DOMContentLoaded', init);

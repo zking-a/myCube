@@ -1,90 +1,90 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#eef3ff">
-  <meta name="description" content="查看中国跳棋 AI 的训练指标、自我博弈与竞技场回放。">
-  <meta name="robots" content="noindex,nofollow">
+<html lang="zh-CN" data-page-node-id="65FnXz3bUZu2B8tooiv0Wl">
+<head data-page-node-id="vVTnODhw20FOPInn98749F">
+  <meta charset="utf-8" data-page-node-id="pPoIVSn3wtKvWpfAeei4Tp">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" data-page-node-id="AIFhTijosjILI7vhl3n1ib">
+  <meta name="theme-color" content="#eef3ff" data-page-node-id="MG0hKEiSw24xOVxC0InfKS">
+  <meta name="description" content="查看中国跳棋 AI 的训练指标、自我博弈与竞技场回放。" data-page-node-id="U1prO4pxAojcBCmB6pkRBX">
+  <meta name="robots" content="noindex,nofollow" data-page-node-id="8AxfFDEaXeestYdYai8aWW">
   <title>中国跳棋 · AI 训练实验室</title>
-  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="lab.css?v=20260822a">
+  <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" data-page-node-id="2D53vS2x8inV62ZY8zwFem">
+  <link rel="stylesheet" href="lab.css?v=20260822a" data-page-node-id="jWAbkmgtkvut8Xso4zc2BP">
   <script src="checkers_core.js?v=20260822g" defer></script>
   <script src="lab.js?v=20260822d" defer></script>
 </head>
-<body>
-  <main class="lab-shell">
-    <nav class="lab-nav">
-      <a class="nav-back ui-button ui-button--secondary" href="index.html">← 跳棋首页</a>
-      <span>AI TRAINING LAB</span>
-      <span class="run-status" id="runStatus">读取实验…</span>
+<body data-page-node-id="JR2IyBdVlBfFQFnV5Ujv3v">
+  <main class="lab-shell" data-page-node-id="SUxq1Og5AxDkEajWWyKwYf">
+    <nav class="lab-nav" data-page-node-id="mXqPFq0RE9xXwK0TdtlRsv">
+      <a class="nav-back ui-button ui-button--secondary" href="index.html" data-page-node-id="fUULsNxP8hUMNBjCMKH8gT">← 跳棋首页</a>
+      <span data-page-node-id="dIZlvfNGdntIP9ZIQrPZpI">AI TRAINING LAB</span>
+      <span class="run-status" id="runStatus" data-page-node-id="AFIKgTZtTSDqOS6QH4O193">读取实验…</span>
     </nav>
 
-    <header class="lab-hero">
-      <div>
-        <span class="eyebrow">Policy · Value · PUCT</span>
-        <h1>看见 AI 的每一次进化</h1>
-        <p>这里展示真实的本地训练结果。候选机器人先学习 V0，再进入跨代对手池联赛，最后与线上基准换边对战。</p>
+    <header class="lab-hero" data-page-node-id="0lJMt1AZoDq8WvOSWAGzo0">
+      <div data-page-node-id="19gZwSPeT7Ngv6DnClqjg6">
+        <span class="eyebrow" data-page-node-id="prdrFSd8WqmPGJf1lKKA4e">Policy · Value · PUCT</span>
+        <h1 data-page-node-id="cmFdRBr398lqkE92J7VK9Q">看见 AI 的每一次进化</h1>
+        <p data-page-node-id="DVuBle5sim05vIj2FWd12G">这里展示真实的本地训练结果。候选机器人先学习 V0，再进入跨代对手池联赛，最后与线上基准换边对战。</p>
       </div>
-      <div class="run-meta">
-        <span>当前实验</span>
-        <strong id="runName">等待训练日志</strong>
-        <small id="runTime">—</small>
+      <div class="run-meta" data-page-node-id="dAeQfSSHvLwErGFp228uQA">
+        <span data-page-node-id="gniukmMBD4NPGPmNYQoYfv">当前实验</span>
+        <strong id="runName" data-page-node-id="C05pk08GvZy77awR11tOdl">等待训练日志</strong>
+        <small id="runTime" data-page-node-id="gsYKhyEXVpg1Bdnn71t6xw">—</small>
       </div>
     </header>
 
-    <section class="metric-grid" aria-label="训练摘要">
-      <article><span>训练样本</span><strong id="sampleMetric">—</strong><small>教师 + 对手池联赛</small></article>
-      <article><span>策略命中</span><strong id="policyMetric">—</strong><small>验证集 Top-1</small></article>
-      <article><span>竞技场</span><strong id="arenaMetric">—</strong><small>候选 : 基准 V0</small></article>
-      <article><span>平均手数</span><strong id="movesMetric">—</strong><small>换边竞技场</small></article>
+    <section class="metric-grid" aria-label="训练摘要" data-page-node-id="7yl7ePqeB2bsqD3VTbNspO">
+      <article data-page-node-id="Wbppj2hP6yLRJ5iGjaKNPn"><span data-page-node-id="11ti10fsGGmRL5XtfoBtgI">训练样本</span><strong id="sampleMetric" data-page-node-id="JszddbYUQkopEMNongMfyU">—</strong><small data-page-node-id="Jh9RZPOBnqyRgBdkzU6foF">教师 + 对手池联赛</small></article>
+      <article data-page-node-id="VJJE3Far22eeJnA0UkTr0L"><span data-page-node-id="84ii8gfpMiggJXpCJ8Fdhn">策略命中</span><strong id="policyMetric" data-page-node-id="pbrmypdtVfZRgUjyAx9LwP">—</strong><small data-page-node-id="2bOViXeUIMNAuG3YSMoa5W">验证集 Top-1</small></article>
+      <article data-page-node-id="XC5ytCd37B0sLPc8se3l6H"><span data-page-node-id="aAnXSGNhxrxxf1ZaFVYgeT">竞技场</span><strong id="arenaMetric" data-page-node-id="CgUmKPkhDXkAmsINI8a88X">—</strong><small data-page-node-id="HPHYaun7oGfjJb9DbZDNUh">候选 : 基准 V0</small></article>
+      <article data-page-node-id="HXyDabEk1mZnVOVnOQBr17"><span data-page-node-id="Ak7KvpjXVn0Yu6EtBUHVoM">平均手数</span><strong id="movesMetric" data-page-node-id="4uaKDjV5klkQXgssHuWvlm">—</strong><small data-page-node-id="0dtvPneTkdhahAD3blSpMN">换边竞技场</small></article>
     </section>
 
-    <section class="lab-grid">
-      <article class="replay-card ui-panel">
-        <div class="card-heading">
-          <div><span>LIVE TRAINING</span><h2>训练实时对局</h2></div>
-          <select id="replaySelect" aria-label="选择回放"></select>
+    <section class="lab-grid" data-page-node-id="KADPZHOoGf36ox8RyvuFOE">
+      <article class="replay-card ui-panel" data-page-node-id="cgWsLEIvwlzfQtrnPjj4Bo">
+        <div class="card-heading" data-page-node-id="4A4ZE0mctz7cML3pu2DzJI">
+          <div data-page-node-id="k2xFb1o6b8QZtwyEcHAOzM"><span data-page-node-id="KwVoAOETLxe18TU89AU0HG">LIVE TRAINING</span><h2 data-page-node-id="DkFB01BS0xix7wG8v1PCh5">训练实时对局</h2></div>
+          <select id="replaySelect" aria-label="选择回放" data-page-node-id="GdNmtrMGQvFk7TAqnLHFZt"></select>
         </div>
-        <div class="replay-state">
-          <span class="phase-pill" id="phasePill">等待数据</span>
-          <div><strong id="replayTitle">训练日志载入中</strong><small id="replayDetail">—</small></div>
-          <b id="plyText">0 / 0 手</b>
+        <div class="replay-state" data-page-node-id="y12JQ4CCgJl7M04NjHSySr">
+          <span class="phase-pill" id="phasePill" data-page-node-id="G8eR3vGoR7hyAl0hQFMaDv">等待数据</span>
+          <div data-page-node-id="FA7DpY98YfEHftSSvB9nbB"><strong id="replayTitle" data-page-node-id="TM8Wr7R49L9441JG53Q6kN">训练日志载入中</strong><small id="replayDetail" data-page-node-id="tYbeKGCs5ZWkgSXL0HDJIz">—</small></div>
+          <b id="plyText" data-page-node-id="tmYFO6XJ4OFxS7VdzNGK8g">0 / 0 手</b>
         </div>
-        <div class="lab-board-wrap">
-          <svg id="labBoard" viewBox="0 0 320 320" role="img" aria-label="AI 训练对局棋盘"></svg>
-          <div class="board-loading" id="boardLoading">正在读取本地训练记录…</div>
+        <div class="lab-board-wrap" data-page-node-id="9mKiB521CmXyMhB91EWpzw">
+          <svg id="labBoard" viewBox="0 0 320 320" role="img" aria-label="AI 训练对局棋盘" data-page-node-id="C7JjngiDlx6QD2vSeW0ZLn"></svg>
+          <div class="board-loading" id="boardLoading" data-page-node-id="U4CXHnzW3X4TQImIwgBn3M">正在读取本地训练记录…</div>
         </div>
-        <div class="replay-controls">
-          <button type="button" id="prevBtn" aria-label="上一步">←</button>
-          <button type="button" class="play-button" id="playBtn">播放</button>
-          <button type="button" id="nextBtn" aria-label="下一步">→</button>
-          <label><span>进度</span><input id="replayRange" type="range" min="0" max="0" value="0"></label>
-          <select id="speedSelect" aria-label="回放速度"><option value="900">1×</option><option value="520" selected>1.5×</option><option value="260">3×</option></select>
+        <div class="replay-controls" data-page-node-id="u98T49FuOXUj7ACBeSt6Lu">
+          <button type="button" id="prevBtn" aria-label="上一步" data-page-node-id="qSZtkd9cj7VZPsNiP8ZQlT">←</button>
+          <button type="button" class="play-button" id="playBtn" data-page-node-id="6nbfP2ZMcEBSSMFZEZlYYH">播放</button>
+          <button type="button" id="nextBtn" aria-label="下一步" data-page-node-id="G2GIL9U1VnCr4MROUz5bYD">→</button>
+          <label data-page-node-id="6vPydqSDGsT7JNA1atI8dY"><span data-page-node-id="jmQvH5QftGseBDLkKhjkpQ">进度</span><input id="replayRange" type="range" min="0" max="0" value="0" data-page-node-id="0GyEPbFsoEbwEpNPqjheLx"></label>
+          <select id="speedSelect" aria-label="回放速度" data-page-node-id="IzaOALXhxHbRnJhqSFtuB1"><option value="900" data-page-node-id="oTn2LbxZbmrx1C7oe4AxPA">1×</option><option value="520" selected data-page-node-id="LUbm6saOHkQAk4c7eVSRWc">1.5×</option><option value="260" data-page-node-id="DLIzd4HTJvLuC7wvA7Yekg">3×</option></select>
         </div>
       </article>
 
-      <aside class="insight-column">
-        <article class="timeline-card ui-panel">
-          <div class="card-heading"><div><span>EVOLUTION</span><h2>训练阶段</h2></div></div>
-          <ol class="phase-list">
-            <li><i>01</i><div><strong>教师模仿</strong><small id="teacherStage">读取中</small></div><b>V0</b></li>
-            <li><i>02</i><div><strong>对手池联赛</strong><small id="selfStage">读取中</small></div><b>PUCT</b></li>
-            <li><i>03</i><div><strong>向量化训练</strong><small id="numpyStage">等候 Python 结果</small></div><b>NumPy</b></li>
-            <li><i>04</i><div><strong>竞技场门禁</strong><small id="arenaStage">读取中</small></div><b id="gateBadge">—</b></li>
+      <aside class="insight-column" data-page-node-id="CCdrMf0HXe4iFLUuLlYSVi">
+        <article class="timeline-card ui-panel" data-page-node-id="gtvvzySrQhte2k3Coo0cV1">
+          <div class="card-heading" data-page-node-id="a5PWVppoPie5YbwM9amS1x"><div data-page-node-id="P2Qy2OvEJTg2eJkSPDaeTG"><span data-page-node-id="iMBppw4E9GT4J7RkcKHjwH">EVOLUTION</span><h2 data-page-node-id="KkgKRSC6OOJVoeHzKd6r7w">训练阶段</h2></div></div>
+          <ol class="phase-list" data-page-node-id="4CtIhuu7DiWqOrhDoT2iAT">
+            <li data-page-node-id="hrYfxlkF1bmpi7Vy71xeWI"><i data-page-node-id="PU9QLFQGWwYd8JCgYK6KRA">01</i><div data-page-node-id="JicyCri8cRR8NyVtYvqf0t"><strong data-page-node-id="WiESc4s2NAKWcODuneMx8a">教师模仿</strong><small id="teacherStage" data-page-node-id="ZHaKAGo5SVxMYZiTizO0Wf">读取中</small></div><b data-page-node-id="7VVmqcyMk0aX1CnVrk5wF8">V0</b></li>
+            <li data-page-node-id="SQAshz0JJ2pt55EcxMocL5"><i data-page-node-id="R78AxcjVR3uqzW94a3vMtG">02</i><div data-page-node-id="NKXUDw3kmaH3UeToiDjYij"><strong data-page-node-id="uzwQKCqW1EelGIdP3OCppC">对手池联赛</strong><small id="selfStage" data-page-node-id="WF0OdjcvKD6GTtBxJUgf9s">读取中</small></div><b data-page-node-id="0JYw0fVIY2XKLYg3YVmLUa">PUCT</b></li>
+            <li data-page-node-id="XlOPgSqaR7BOOeRXWfiwGy"><i data-page-node-id="SATZEvteGAuivnaWK90B1u">03</i><div data-page-node-id="H1b39UxYT77lurWpAEIzWB"><strong data-page-node-id="IacY8vQs8zc3URhqXD8hqG">向量化训练</strong><small id="numpyStage" data-page-node-id="Umy3QeZ5ln9IDhFin7sUlj">等候 Python 结果</small></div><b data-page-node-id="zUgDJPBO9SNgbbohu4USYP">NumPy</b></li>
+            <li data-page-node-id="YnbDVUAnj6wLcLd1JCOBZv"><i data-page-node-id="IwYRCUVhPT3Bh2bQ2m5t0G">04</i><div data-page-node-id="Ehu4lTmm9VdIYqCpCbnQt8"><strong data-page-node-id="ZW67sbHugHwaIQxrgqpTuJ">竞技场门禁</strong><small id="arenaStage" data-page-node-id="VWX6r6b7qUpqK6gcKoy91Y">读取中</small></div><b id="gateBadge" data-page-node-id="bbCoOCE1M6XyRVNsOj6QDC">—</b></li>
           </ol>
         </article>
 
-        <article class="chart-card ui-panel">
-          <div class="card-heading"><div><span>LEARNING CURVE</span><h2>损失变化</h2></div><div class="legend"><span class="policy-key">策略</span><span class="value-key">价值</span></div></div>
-          <svg id="lossChart" viewBox="0 0 420 180" role="img" aria-label="训练损失曲线"></svg>
-          <p id="chartCaption">每个点代表一个训练 epoch，越低通常越稳定。</p>
+        <article class="chart-card ui-panel" data-page-node-id="9F0bo7LKreqXq5W7vZIjyS">
+          <div class="card-heading" data-page-node-id="g39pLpseJr5rwpWMb7H25k"><div data-page-node-id="8eSBcLvYTUMDtIRBdhOOrT"><span data-page-node-id="XQZHZCPDGS3Wga7Dc3TrPY">LEARNING CURVE</span><h2 data-page-node-id="r9LvvK4LMPYZhvcAX1tTEu">损失变化</h2></div><div class="legend" data-page-node-id="XODT32vZhZ07hnGM209TRa"><span class="policy-key" data-page-node-id="42jPQqi9nnpp2wfAJ8VBgn">策略</span><span class="value-key" data-page-node-id="jBJ1RqH81zoH6qkBHFXAFa">价值</span></div></div>
+          <svg id="lossChart" viewBox="0 0 420 180" role="img" aria-label="训练损失曲线" data-page-node-id="qUePOZwDpfeTpeTaAp8oYH"></svg>
+          <p id="chartCaption" data-page-node-id="qyl5qEfTgCnGFzYgZRubvr">每个点代表一个训练 epoch，越低通常越稳定。</p>
         </article>
 
-        <article class="decision-card ui-panel" id="decisionCard">
-          <span>MODEL GATE</span>
-          <h2 id="decisionTitle">等待门禁结果</h2>
-          <p id="decisionText">实验模型必须真正击败线上 V0，才会进入高难度接入评审。</p>
+        <article class="decision-card ui-panel" id="decisionCard" data-page-node-id="RN1A2GYr4IVJuSPUT4mGOi">
+          <span data-page-node-id="F1cm7kA0JCS39kZ8xaKUc1">MODEL GATE</span>
+          <h2 id="decisionTitle" data-page-node-id="EcORVUZXgZSh0czEepycPl">等待门禁结果</h2>
+          <p id="decisionText" data-page-node-id="P10jKOUUe5wYdyBAaSbygw">实验模型必须真正击败线上 V0，才会进入高难度接入评审。</p>
         </article>
       </aside>
     </section>

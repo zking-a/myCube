@@ -7,17 +7,24 @@
   <meta name="description" content="沉浸式中国跳棋棋局。">
   <title>中国跳棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="checkers.css?v=20260822e">
+  <link rel="stylesheet" href="checkers.css?v=20260906h">
   <script src="checkers_core.js?v=20260822g" defer></script>
   <script src="checkers_ai_model.js?v=20260822b" defer></script>
-  <script src="checkers.js?v=20260822g" defer></script>
+  <script src="checkers.js?v=20260906h" defer></script>
 </head>
 <body class="play-page">
   <main class="game-shell">
     <header class="game-topbar">
       <button type="button" class="nav-back ui-button ui-button--secondary" id="exitBtn" aria-label="返回跳棋首页">← 跳棋首页</button>
       <div class="game-title"><span>Chinese Checkers</span><strong>中国跳棋</strong></div>
-      <div class="top-actions"><span class="mode-badge" id="modeBadge">人机对战</span><button type="button" class="sound-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效"><i class="ui-icon ui-icon--volume-high" aria-hidden="true"></i></button></div>
+      <div class="top-actions">
+        <span class="mode-badge" id="modeBadge">人机对战</span>
+        <select class="board-mode-select ui-input" id="boardModeSelect" aria-label="棋盘显示模式">
+          <option value="2d">2D 棋盘</option>
+          <option value="3d">3D 棋盘</option>
+        </select>
+        <button type="button" class="sound-button" id="soundBtn" aria-pressed="true" aria-label="关闭音效"><i class="ui-icon ui-icon--volume-high" aria-hidden="true"></i></button>
+      </div>
     </header>
 
     <section class="online-room-bar" id="onlineRoomBar" hidden aria-label="好友对战房间">
@@ -42,7 +49,7 @@
         </div>
 
         <div class="board-frame">
-          <svg id="board" class="checker-board" viewBox="0 0 320 320" role="grid" aria-label="中国跳棋棋盘，红方视角"></svg>
+          <div class="ck-board" id="board" data-view="3d" role="group" aria-label="中国跳棋棋盘，红方视角"></div>
           <div class="board-wait" id="boardWait" hidden><span><i class="ui-icon ui-icon--earth-asia" aria-hidden="true"></i></span><strong>等待对手加入</strong><small>复制邀请链接发给朋友即可开始</small></div>
         </div>
         <div class="board-legend"><span><i class="step-dot"></i>相邻移动</span><span><i class="jump-dot"></i>跳跃落点</span><span><i class="route-line"></i>上一步路线</span></div>
