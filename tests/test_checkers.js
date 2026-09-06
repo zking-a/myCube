@@ -336,33 +336,13 @@ const chainPath = C.findMovePath(chainPieces, '8:0', '8:8');
 ok('连续跳跃会保留每一段经过的孔位',
   chainPath && chainPath.join(',') === '8:0,8:4,8:8');
 
-const symmetricPieces = { '8:0': 'red', '8:4': 'blue' };
-const symmetricPath = C.findMovePath(symmetricPieces, '8:0', '8:8');
-ok('对称跳跃默认开启：隔一个空位也能越过并落在对称位置',
-  C.getLegalMoves(symmetricPieces, '8:0').jumps.includes('8:8') &&
-  symmetricPath && symmetricPath.join(',') === '8:0,8:8');
-const blockedPieces = { '8:0': 'red', '8:4': 'blue', '8:6': 'blue' };
-ok('对称跳跃要求被跳子另一侧空位对称，否则拒绝起跳',
-  !C.getLegalMoves(blockedPieces, '8:0').jumps.includes('8:8'));
-
-ok('对称跳跃提供开关：经典模式只允许跳相邻棋子并拒绝远跳落子',
-  (function () {
-    const farTarget = { '8:0': 'red', '8:4': 'blue' };
-    const nearTarget = { '8:0': 'red', '8:2': 'blue' };
-    try {
-      C.setRules({ symmetricJump: false });
-      const classicMoves = C.getLegalMoves(farTarget, '8:0');
-      const classicNear = C.getLegalMoves(nearTarget, '8:0');
-      if (classicMoves.jumps.includes('8:8')) return false;
-      if (!classicNear.jumps.includes('8:4')) return false;
-      if (C.applyMove(farTarget, 'red', '8:0', '8:8') !== null) return false;
-      if (!C.applyMove(nearTarget, 'red', '8:0', '8:4')) return false;
-      if (C.getRules().symmetricJump !== false) return false;
-      return true;
-    } finally {
-      C.setRules({ symmetricJump: true });
-    }
-  })());
+const farPieces = { '8:0': 'red', '8:4': 'blue' };
+const nearPieces = { '8:0': 'red', '8:2': 'blue' };
+ok('经典相邻跳：只能越过紧邻棋子，隔空远跳与远距落点都被拒绝',
+  !C.getLegalMoves(farPieces, '8:0').jumps.includes('8:8') &&
+  C.getLegalMoves(nearPieces, '8:0').jumps.includes('8:4') &&
+  C.applyMove(farPieces, 'red', '8:0', '8:8') === null &&
+  !!C.applyMove(nearPieces, 'red', '8:0', '8:4'));
 
 const twoSeatPieces = C.createInitialPiecesForSeats(['top', 'bottom']);
 const classicPieces = C.createInitialPieces();
@@ -506,29 +486,19 @@ ok('服务器托管电脑走子：join 解析 bots/level，落子与真人共用
   /function runCheckersBotMove/.test(serverSource) &&
   /CheckersCore\.chooseAiMove\(room\.pieces, seat\.color, room\.botLevel/.test(serverSource) &&
   /clearCheckersBotTimer\(room\)/.test(serverSource));
-ok('联机房间支持经典/对称规则切换：建房解析 jump，广播携带，校验与电脑走子前按房间设置规则',
-  /symmetricJump: jump !== 'classic'/.test(serverSource) &&
-  /typeof m\.jump === 'string' \? m\.jump : ''/.test(serverSource) &&
-  /symmetricJump: jump !== 'classic',\n    pieces:/.test(serverSource.replace(/\r\n/g, '\n')) &&
-  /symmetricJump: room\.symmetricJump !== false,\n    seats: checkersSeatList/.test(serverSource.replace(/\r\n/g, '\n')) &&
-  /function applyCheckersRules/.test(serverSource) &&
-  (serverSource.match(/applyCheckersRules\(room\);/g) || []).length >= 3);
-ok('客户端读取 jump 参数、存档与联机广播同步规则，Worker 搜索同规则',
-  /launchParams\.get\('jump'\) !== 'classic'/.test(source) &&
-  /Core\.setRules\(\{ symmetricJump: symmetricJump \}\)/.test(source) &&
-  /symmetricJump: symmetricJump \}\);/.test(source) &&
-  /message\.symmetricJump !== false/.test(source) &&
-  /symmetricJump: symmetricJump,/.test(source) &&
-  /function updateRulesCard/.test(source) &&
-  /ruleSymJump/.test(playHtml));
-ok('三处玩法配置都能切换跳跃规则，选择随启动参数传递',
-  (lobbyHtml.match(/data-jump="classic"/g) || []).length === 3 &&
-  (lobbyHtml.match(/data-jump="symmetric"/g) || []).length === 3 &&
-  /function selectJump/.test(lobbySource) &&
-  /JUMP_KEY/.test(lobbySource) &&
-  /params\.jump = 'classic'/.test(lobbySource) &&
-  /checkers_core\.js\?v=20260906b/.test(playHtml) &&
-  /checkers\.js\?v=20260906k/.test(playHtml));
+ok('对称长跳已整体移除：服务器、客户端与 Worker 均无规则开关残留',
+  !/symmetricJump/.test(serverSource) && !/applyCheckersRules/.test(serverSource) &&
+  !/setRules|getRules/.test(source) && !/ruleSymJump/.test(playHtml) &&
+  !/对称长跳/.test(playHtml) && !/symmetricJump/.test(workerSource) &&
+  !/setRules/.test(workerSource));
+ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
+  !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
+  !/JUMP_KEY/.test(lobbySource) &&
+  /checkers_core\.js\?v=20260906c/.test(playHtml) &&
+  /checkers\.js\?v=20260906l/.test(playHtml) &&
+  /checkers\.css\?v=20260906k/.test(playHtml) &&
+  /checkers\.css\?v=20260906k/.test(lobbyHtml) &&
+  /lobby\.js\?v=20260906l/.test(lobbyHtml));
 ok('联机状态广播携带席位列表，电脑席位由服务端直发',
   /seats: checkersSeatList\(room\)/.test(serverSource) &&
   /nick: seat\.isBot \? '电脑'/.test(serverSource) &&
@@ -557,11 +527,11 @@ ok('游戏页提供上一步说明，棋盘能绘制来源、落点和完整路�
 ok('相邻落点与跳跃落点使用不同提示，不再共用简陋圆点',
   /step-target/.test(css) && /jump-target/.test(css) && /step-dot/.test(playHtml) && /jump-dot/.test(playHtml));
 ok('手机布局保持单列与正方形棋盘', /@media\s*\(max-width:\s*820px\)/.test(css) && /aspect-ratio:\s*1(?:\s*\/\s*1)?/.test(css));
-ok('六色目标营地与多席位面板样式就位，规则卡写明对称长跳规则',
+ok('六色目标营地与多席位面板样式就位',
   /\.green-goal-zone/.test(css) && /\.yellow-goal-zone/.test(css) &&
   /\.purple-goal-zone/.test(css) && /\.orange-goal-zone/.test(css) &&
   /\.players-card\.multi/.test(css) && /\.difficulty-picker button:disabled/.test(css) &&
-  /\.field-note\{/.test(css) && /对称长跳/.test(playHtml));
+  /\.field-note\{/.test(css));
 ok('邀请链接和联机地址使用跳棋专属入口',
   /new URL\('index\.html'/.test(source) && /searchParams\.set\('room'/.test(source) &&
   T.websocketUrl() === 'wss://game.test/checkers-ws');

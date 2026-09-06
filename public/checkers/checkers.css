@@ -92,11 +92,12 @@ button,a,input,summary{font:inherit}button{touch-action:manipulation}.red{backgr
 .board-mode-select:focus-visible,
 .sound-button:focus-visible{outline:2px solid #90a3ff;outline-offset:2px}
 
-.ck-shadow{position:absolute;width:6.4%;height:2.8%;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);transition:left .26s cubic-bezier(.33,.9,.4,1),top .26s cubic-bezier(.33,.9,.4,1),transform .2s ease,opacity .2s ease;background:radial-gradient(ellipse at 50% 50%,rgba(46,22,4,.56) 0%,rgba(46,22,4,.3) 46%,rgba(46,22,4,0) 74%)}
+/* left/top 不参与过渡：位移动画由 animateSlide 的合成器关键帧负责，过渡它们会逐帧重排整块木纹棋盘。 */
+.ck-shadow{position:absolute;width:6.4%;height:2.8%;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);transition:transform .2s ease,opacity .2s ease;background:radial-gradient(ellipse at 50% 50%,rgba(46,22,4,.56) 0%,rgba(46,22,4,.3) 46%,rgba(46,22,4,0) 74%)}
 .ck-shadow.is-lifted{transform:translate(-50%,-72%) scale(.72,.6);opacity:.42}
 
 /* 棋子壳只负责定位与外环；球体本身由内嵌 SVG 绘制（渐变/花纹/高光/描边）， defs 全局共享一份。 */
-.ck-piece{position:absolute;width:4.94%;aspect-ratio:1;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) rotateX(calc(var(--board-tilt,0deg) * -1));transition:left .26s cubic-bezier(.33,.9,.4,1),top .26s cubic-bezier(.33,.9,.4,1),translate .2s ease}
+.ck-piece{position:absolute;width:4.94%;aspect-ratio:1;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) rotateX(calc(var(--board-tilt,0deg) * -1));transition:translate .2s ease}
 .ck-piece__svg{display:block;width:100%;height:100%;pointer-events:none}
 .ck-defs{position:absolute;width:0;height:0;overflow:hidden}
 .ck-piece.is-selected{translate:0 0 18px;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(86,104,245,.62)}

@@ -3,7 +3,6 @@
 const CONFIG = {
   AI_LEVEL_KEY: 'chinese_checkers_ai_level',
   BOT_LEVEL_KEY: 'chinese_checkers_online_bot_level',
-  JUMP_KEY: 'chinese_checkers_jump_rule',
   NICK_KEY: 'light_games_nickname',
   SAVE_PREFIX: 'chinese_checkers_save_v2_',
   ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
@@ -16,7 +15,6 @@ let localPlayers = 2;
 let localAi = 0;
 let onlineBots = 0;
 let onlineBotLevel = 'normal';
-let jumpMode = 'symmetric';
 function $(id) { return document.getElementById(id); }
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
@@ -132,20 +130,6 @@ function selectOnlineBotLevel(level) {
   refreshOnlineBotUi();
 }
 
-function refreshJumpUi() {
-  document.querySelectorAll('[data-jump]').forEach(function (button) {
-    const active = button.dataset.jump === jumpMode;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-checked', active ? 'true' : 'false');
-  });
-}
-
-function selectJump(mode) {
-  jumpMode = mode === 'classic' ? 'classic' : 'symmetric';
-  safeSet(CONFIG.JUMP_KEY, jumpMode);
-  refreshJumpUi();
-}
-
 function goToGame(params) {
   const query = new URLSearchParams(params);
   location.href = 'play.html?' + query.toString();
@@ -212,16 +196,11 @@ function init() {
   selectLocalAi(localAi);
   onlineBotLevel = AI_LEVELS.includes(safeGet(CONFIG.BOT_LEVEL_KEY)) ? safeGet(CONFIG.BOT_LEVEL_KEY) : 'normal';
   refreshOnlineBotUi();
-  jumpMode = safeGet(CONFIG.JUMP_KEY) === 'classic' ? 'classic' : 'symmetric';
-  refreshJumpUi();
   document.querySelectorAll('[data-bots]').forEach(function (button) {
     button.addEventListener('click', function () { selectOnlineBots(button.dataset.bots); });
   });
   document.querySelectorAll('[data-bot-level]').forEach(function (button) {
     button.addEventListener('click', function () { selectOnlineBotLevel(button.dataset.botLevel); });
-  });
-  document.querySelectorAll('[data-jump]').forEach(function (button) {
-    button.addEventListener('click', function () { selectJump(button.dataset.jump); });
   });
   $('selectAiBtn').addEventListener('click', function () { toggleModeConfig('ai'); });
   $('selectLocalBtn').addEventListener('click', function () { toggleModeConfig('local'); });
@@ -237,19 +216,16 @@ function init() {
   });
   $('startAiBtn').addEventListener('click', function () {
     const params = { mode: 'ai', level: aiLevel };
-    if (jumpMode === 'classic') params.jump = 'classic';
     goToGame(params);
   });
   $('startLocalBtn').addEventListener('click', function () {
     const params = localPlayers === 2 && localAi === 0 ? { mode: 'local' } : { mode: 'local', players: localPlayers, ai: localAi };
-    if (jumpMode === 'classic') params.jump = 'classic';
     goToGame(params);
   });
   $('createRoomBtn').addEventListener('click', function () {
     saveNickname();
     const params = { mode: 'online', intent: 'create', room: randomRoom() };
     if (onlineBots) { params.bots = onlineBots; params.level = onlineBotLevel; }
-    if (jumpMode === 'classic') params.jump = 'classic';
     goToGame(params);
   });
   $('joinRoomBtn').addEventListener('click', function () {

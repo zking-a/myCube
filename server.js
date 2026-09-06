@@ -153,14 +153,13 @@ function planCheckersSeats(botCount) {
   });
 }
 
-function createCheckersRoom(code, creatorIp, botCount, botLevel, jump) {
+function createCheckersRoom(code, creatorIp, botCount, botLevel) {
   const seats = planCheckersSeats(botCount);
   const room = {
     code: code,
     phase: 'waiting',       // waiting | playing | done
     seats: seats,
     botLevel: ['easy', 'normal', 'hard'].indexOf(botLevel) >= 0 ? botLevel : 'normal',
-    symmetricJump: jump !== 'classic',
     pieces: CheckersCore.createInitialPiecesForSeats(seats.map(function (seat) { return seat.camp; })),
     turn: seats[0].color,
     moveNumber: 1,
@@ -204,14 +203,8 @@ function checkersSeatForColor(room, color) {
   return room.seats.find(function (seat) { return seat.color === color; }) || null;
 }
 
-/** 房间规则落到核心（当前仅对称跳跃）：每次同步校验/走子前设置，Node 单线程块内生效，多房间互不串扰。 */
-function applyCheckersRules(room) {
-  CheckersCore.setRules({ symmetricJump: room.symmetricJump !== false });
-}
-
 /** 与客户端 advanceTurn 同语义：从当前行动方之后找第一个有棋可走的席位，全员卡死则顺延下一位。 */
 function nextCheckersTurn(room, fromColor) {
-  applyCheckersRules(room);
   const colors = room.seats.map(function (seat) { return seat.color; });
   const start = Math.max(0, colors.indexOf(fromColor));
   for (let i = 1; i < colors.length; i++) {
@@ -223,7 +216,6 @@ function nextCheckersTurn(room, fromColor) {
 
 /** 真人与电脑共用同一套权威走子校验与状态推进。 */
 function checkersApplyMove(room, color, from, target) {
-  applyCheckersRules(room);
   const applied = CheckersCore.applyMove(room.pieces, color, from, target);
   if (!applied) return null;
   room.lastActivityAt = Date.now();
@@ -260,7 +252,6 @@ function runCheckersBotMove(room) {
   if (room.phase !== 'playing' || room.winner) return;
   const seat = checkersSeatForColor(room, room.turn);
   if (!seat || !seat.isBot) return;
-  applyCheckersRules(room);
   const move = CheckersCore.chooseAiMove(room.pieces, seat.color, room.botLevel, function () { return 0; });
   if (!move) {
     room.turn = nextCheckersTurn(room, seat.color);
@@ -624,7 +615,6 @@ function broadcastCheckersState(room) {
     lastMove: room.lastMove,
     host: room.hostCid,
     botLevel: room.botLevel,
-    symmetricJump: room.symmetricJump !== false,
     seats: checkersSeatList(room),
     players: checkersPlayerList(room)
   });
@@ -1540,7 +1530,7 @@ checkersWss.on('connection', function (ws, req) {
         if (!checkRoomCreateLimit(clientIp)) { fail('CREATE_RATE_LIMIT', '建房过于频繁，请稍后再试'); return; }
         if (countRooms() >= MAX_ROOMS) { fail('SERVER_FULL', '服务器房间已满，请稍后再试'); return; }
         const botCount = Math.max(0, Math.min(4, Math.floor(Number(m.bots)) || 0));
-        room = createCheckersRoom(code, clientIp, botCount, typeof m.level === 'string' ? m.level : '', typeof m.jump === 'string' ? m.jump : '');
+        room = createCheckersRoom(code, clientIp, botCount, typeof m.level === 'string' ? m.level : '');
       } else if (intent === 'create') {
         const ownSeat = room.players.get(cid);
         if (!ownSeat) { fail('ROOM_EXISTS', '房间码碰巧重复，请重新创建'); return; }

@@ -91,26 +91,12 @@
   }
 
   /**
-   * 对局级规则（当前仅对称跳跃开关）。客户端每局开始设置一次；
-   * 服务器按房间在每次校验/走子前设置——同步调用块内生效，多房间互不串扰。
-   */
-  const RULES = { symmetricJump: true };
-  function setRules(partial) {
-    if (!partial || typeof partial !== 'object') return Object.assign({}, RULES);
-    if (typeof partial.symmetricJump === 'boolean') RULES.symmetricJump = partial.symmetricJump;
-    return Object.assign({}, RULES);
-  }
-  function getRules() { return Object.assign({}, RULES); }
-
-  /**
    * 从 fromKey 出发的全部跳跃落点（BFS 链跳）。
-   * 对称跳跃（默认开启）：沿任一直线方向，与被跳子之间隔 k≥0 个空位，
-   * 被跳子对称另一侧也有 k 个空位、落点为空即可跳；k=0 即经典相邻跳。
-   * 关闭对称跳跃（经典规则）时只允许跳相邻棋子（k=0）。
+   * 经典相邻跳：被跳棋子必须紧邻（相邻格有子，己方或对方均可），
+   * 落点在其正后方（距离 2）且为空，可连续跳跃一气呵成。
    * 返回 Map(落点 → 链上前一位置)，getLegalMoves 与 findMovePath 共用，避免两份逻辑漂移。
    */
   function collectJumps(pieces, fromKey) {
-    const allowLongJump = RULES.symmetricJump !== false;
     const parents = new Map();
     const visited = new Set([fromKey]);
     const queue = [fromKey];
@@ -119,28 +105,14 @@
       const currentKey = queue.shift();
       const current = CELL_MAP.get(currentKey);
       DIRECTIONS.forEach(function (direction) {
-        let step = 1;
-        while (true) {
-          const probeKey = keyOf(current.row + direction[0] * step, current.unit + direction[1] * step);
-          if (!CELL_MAP.has(probeKey)) return;
-          if (!empty(probeKey)) {
-            if (step > 1 && !allowLongJump) return; // 经典规则：被跳子必须相邻
-            // 探到的第一颗棋子就是被跳子；落点在它的对称位置（距离 2*step）。
-            const landingKey = keyOf(current.row + direction[0] * step * 2, current.unit + direction[1] * step * 2);
-            if (CELL_MAP.has(landingKey) && empty(landingKey) && !visited.has(landingKey)) {
-              let blocked = false;
-              for (let far = step + 1; far < step * 2; far++) {
-                if (!empty(keyOf(current.row + direction[0] * far, current.unit + direction[1] * far))) { blocked = true; break; }
-              }
-              if (!blocked) {
-                visited.add(landingKey);
-                parents.set(landingKey, currentKey);
-                queue.push(landingKey);
-              }
-            }
-            return;
-          }
-          step++;
+        // 经典相邻跳：被跳棋子必须紧邻（相邻格有子，己方或对方均可），落点在其正后方且为空。
+        const probeKey = keyOf(current.row + direction[0], current.unit + direction[1]);
+        if (!CELL_MAP.has(probeKey) || !pieces[probeKey]) return;
+        const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
+        if (CELL_MAP.has(landingKey) && empty(landingKey) && !visited.has(landingKey)) {
+          visited.add(landingKey);
+          parents.set(landingKey, currentKey);
+          queue.push(landingKey);
         }
       });
     }
@@ -829,7 +801,6 @@
     extractValueFeatures: extractValueFeatures, predictValueModel: predictValueModel,
     evaluateHybridPosition: evaluateHybridPosition, positionKey: positionKey,
     transpositionKey: transpositionKey,
-    setRules: setRules, getRules: getRules,
     analyzeAiMoves: analyzeAiMoves, chooseAiMove: chooseAiMove
   };
 });

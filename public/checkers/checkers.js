@@ -46,8 +46,6 @@ let aiWorker = null;
 let aiRequestId = 0;
 let toastTimer = null;
 let boardView = '3d';
-/** 对局级规则：对称跳跃开关（经典模式只允许跳相邻棋子）。 */
-let symmetricJump = true;
 /** 对局席位：本地多人与 AI 补位共用。2 人默认红蓝双人/人机，行为与旧版完全一致。 */
 let seats = [{ color: 'red', isAI: false }, { color: 'blue', isAI: false }];
 
@@ -264,7 +262,7 @@ function sanitizeLocalState(raw) {
 
 function saveGame() {
   if (mode === 'online') return;
-  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove, seats: seats, symmetricJump: symmetricJump }));
+  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove, seats: seats }));
 }
 
 /** 校验存档里的席位表：每个席位颜色都在盘面上且恰好 10 枚，盘面上也没有席位之外的颜色。 */
@@ -299,11 +297,6 @@ function loadGame() {
     pieces = saved.pieces; turn = saved.turn; moveNumber = saved.moveNumber;
     gameOver = saved.gameOver; lastMove = saved.lastMove;
     if (!seats.some(function (seat) { return seat.color === turn; })) turn = seats[0].color;
-    // 续局沿用开局时的规则，避免中途改规则造成棋谱矛盾
-    if (parsed && typeof parsed.symmetricJump === 'boolean') {
-      symmetricJump = parsed.symmetricJump;
-      Core.setRules({ symmetricJump: symmetricJump });
-    }
     return true;
   } catch (e) { return false; }
 }
@@ -574,14 +567,27 @@ function prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
 
-/** 走子落位后补一段抬起动画；跳跃抬得更高，用来区分「移动」与「跳」。 */
-function animateHop(node, kind) {
-  if (!node || typeof node.animate !== 'function' || prefersReducedMotion()) return;
-  // 用独立的 translate 属性（而非 transform）做 Z 向位移：
-  // transform 已被用来抵消棋盘倾斜让球保持正圆，两者叠加才不会互相覆盖。
+/**
+ * FLIP 位移动画：节点已直接落到终点，这里从终点向起点回放一段合成器关键帧。
+ * 只动 translate 属性（transform 被 -50% 居中 + 抵消棋盘倾斜占用），位移全程走合成器，
+ * 不会逐帧重排/重绘整块木纹棋盘——left/top 过渡正是之前走棋卡顿的元凶。
+ */
+function animateSlide(node, from, to, kind, isShadow) {
+  if (!node || !from || !to || typeof node.animate !== 'function' || prefersReducedMotion()) return;
+  const width = dom.pieceLayer.offsetWidth;
+  const height = dom.pieceLayer.offsetHeight;
+  if (!width || !height) return;
+  const dx = (from.x - to.x) / 100 * width;
+  const dy = (from.y - to.y) / 100 * height;
+  if (!dx && !dy) return;
+  const lift = isShadow ? 0 : (kind === 'jump' ? 26 : 12);
   node.animate(
-    [{ translate: '0 0 0px' }, { translate: '0 0 28px', offset: .45 }, { translate: '0 0 0px' }],
-    { duration: kind === 'jump' ? 380 : 240, easing: 'cubic-bezier(.35,.9,.4,1)' }
+    [
+      { translate: dx.toFixed(2) + 'px ' + dy.toFixed(2) + 'px 0px' },
+      { translate: (dx * .45).toFixed(2) + 'px ' + (dy * .45).toFixed(2) + 'px ' + (lift * .9).toFixed(2) + 'px', offset: .5 },
+      { translate: '0px 0px 0px' }
+    ],
+    { duration: kind === 'jump' ? 360 : 240, easing: 'cubic-bezier(.3,.9,.35,1)' }
   );
 }
 
@@ -619,21 +625,23 @@ function syncPieces(model, reorient) {
   const positionOf = new Map();
   model.cells.forEach(function (cell) { positionOf.set(cell.key, cell); });
 
-  // 复用上一步起点的节点并改键到落点，配合 left/top 过渡就是一次真实位移。
+  // 复用上一步起点的节点并改键到落点：先落位，再用 animateSlide 做合成器位移动画。
   if (model.move && model.move.id !== dom.moveId) {
     const moving = dom.pieceNodes.get(model.move.from);
     if (moving && !desired.has(model.move.from) && desired.has(model.move.target) && !dom.pieceNodes.has(model.move.target)) {
       dom.pieceNodes.delete(model.move.from);
       dom.pieceNodes.set(model.move.target, moving);
       const spot = positionOf.get(model.move.target);
+      const fromSpot = positionOf.get(model.move.from);
       placeNode(moving, spot.x, spot.y);
-      animateHop(moving, model.move.kind);
+      animateSlide(moving, fromSpot, spot, model.move.kind, false);
       // 阴影跟着改键，否则它会被当成「消失的棋子」删掉重建，接不住位移动画。
       const shadow = dom.shadowNodes.get(model.move.from);
       if (shadow && !dom.shadowNodes.has(model.move.target)) {
         dom.shadowNodes.delete(model.move.from);
         dom.shadowNodes.set(model.move.target, shadow);
         placeNode(shadow, spot.x, spot.y);
+        animateSlide(shadow, fromSpot, spot, model.move.kind, true);
       }
     }
   }
@@ -757,15 +765,6 @@ function updateLastMoveBar() {
   $('lastMoveKind').textContent = lastMove.kind === 'jump' ? (jumps > 1 ? '连续跳跃' : '跳跃') : '相邻移动';
 }
 
-/** 规则卡动态行：向玩家明示本局使用的跳跃规则。 */
-function updateRulesCard() {
-  const node = $('ruleSymJump');
-  if (!node) return;
-  node.textContent = symmetricJump
-    ? '对称长跳（本局启用）：与被跳棋子之间的空位对称即可越过，间隔不限，连续跳跃一气呵成。'
-    : '经典跳跃（本局启用）：只能跳过紧邻的棋子，落点须为空，可连续跳。';
-}
-
 function updateStatus() {
   const selfTurn = mode === 'online' && online.color === turn;
   if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，固定视角');
@@ -878,7 +877,6 @@ function requestAiMove(player, recentPositions, callback) {
       pieces: snapshot,
       player: player,
       level: aiLevel,
-      symmetricJump: symmetricJump,
       recentPositions: recentPositions
     });
   } catch (error) {
@@ -1043,9 +1041,6 @@ function connectOnline(intent) {
       viewPlayer = getViewPlayerForMode('online', online.color); selectedKey = ''; legalMoves = emptyMoves(); history = [];
       seats = online.seats.map(function (seat) { return { color: seat.color, isAI: seat.isBot }; });
       ensurePlayerRows();
-      symmetricJump = message.symmetricJump !== false;
-      Core.setRules({ symmetricJump: symmetricJump });
-      updateRulesCard();
       const botCount = online.seats.filter(function (seat) { return seat.isBot; }).length;
       const badge = $('modeBadge'); if (badge) badge.textContent = '好友对战' + (botCount ? ' · ' + botCount + ' 电脑' : '');
       online.retryAttempt = 0; online.retryDelay = 0; online.intent = 'join';
@@ -1166,8 +1161,6 @@ function ensurePlayerRows() {
 function init() {
   soundEnabled = safeGet(CONFIG.SOUND_KEY) !== '0';
   const requestedLevel = launchParams.get('level'); aiLevel = AI_LEVELS.includes(requestedLevel) ? requestedLevel : (AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
-  symmetricJump = launchParams.get('jump') !== 'classic';
-  Core.setRules({ symmetricJump: symmetricJump });
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel); viewPlayer = 'red';
   if (mode === 'local') {
     const requestedPlayers = Math.floor(Number(launchParams.get('players')) || 2);
@@ -1198,7 +1191,7 @@ function init() {
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(); if (online.active) sendOnline({ t: 'ping' }); });
-  render(); updateRulesCard(); scheduleAiMove();
+  render(); scheduleAiMove();
   if (gameOver) showWinner(gameOver); if (mode === 'online') connectOnline(launchIntent);
 }
 
