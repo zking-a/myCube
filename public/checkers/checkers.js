@@ -46,10 +46,15 @@ let aiWorker = null;
 let aiRequestId = 0;
 let toastTimer = null;
 let boardView = '3d';
+/** 对局级规则：对称跳跃开关（经典模式只允许跳相邻棋子）。 */
+let symmetricJump = true;
+/** 对局席位：本地多人与 AI 补位共用。2 人默认红蓝双人/人机，行为与旧版完全一致。 */
+let seats = [{ color: 'red', isAI: false }, { color: 'blue', isAI: false }];
 
 const online = {
   active: false, ws: null, room: '', cid: '', token: '', color: '', phase: 'idle',
-  host: '', players: [], intent: 'join', nick: '', intentionalClose: false,
+  host: '', seats: [], players: [], intent: 'join', nick: '', intentionalClose: false,
+  bots: 0, botLevel: 'normal',
   reconnectTimer: null, retryAttempt: 0, retryDelay: 0
 };
 
@@ -65,7 +70,63 @@ function svgEl(doc, name, attrs) {
 }
 
 /**
- * 棋子的渐变与裁剪全站只注入一份（放在棋子层首位），20 颗棋子按阵营引用。
+ * 六色玻璃珠的渐变参数表。红/蓝两色的渐变数据与旧版逐字节一致（测试钉住），
+ * 其余四色按同一结构推导：base 四段、暗侧收影、底缘透光、边缘暗角、描边与花纹实色。
+ * rings=true 的阵营画圆环纹理（蓝/绿/紫），false 的画斑块纹理（红/黄/橙）。
+ */
+const PIECE_TINTS = {
+  red: {
+    base: [['0%', '#f2606c'], ['38%', '#d02138'], ['74%', '#9c1124'], ['100%', '#6e0a19']],
+    shade: [['0%', 'rgba(90,6,20,.46)'], ['100%', 'rgba(90,6,20,0)']],
+    rim: [['0%', 'rgba(255,172,152,.96)'], ['45%', 'rgba(255,142,120,.55)'], ['100%', 'rgba(255,142,120,0)']],
+    vig: [['0%', 'rgba(70,4,14,0)'], ['60%', 'rgba(70,4,14,0)'], ['100%', 'rgba(70,4,14,.4)']],
+    outline: 'rgba(112,8,24,.42)', pattern: '#a51228', rings: false
+  },
+  blue: {
+    base: [['0%', '#63c3f0'], ['38%', '#2b93d6'], ['74%', '#1867a8'], ['100%', '#0d4a80']],
+    shade: [['0%', 'rgba(8,48,88,.46)'], ['100%', 'rgba(8,48,88,0)']],
+    rim: [['0%', 'rgba(152,224,255,.96)'], ['45%', 'rgba(122,206,250,.55)'], ['100%', 'rgba(122,206,250,0)']],
+    vig: [['0%', 'rgba(4,32,60,0)'], ['60%', 'rgba(4,32,60,0)'], ['100%', 'rgba(4,32,60,.4)']],
+    outline: 'rgba(10,58,100,.42)', pattern: '#0f6bb0', rings: true
+  },
+  green: {
+    base: [['0%', '#8fd98a'], ['38%', '#3fae4a'], ['74%', '#1f7a34'], ['100%', '#0f5220']],
+    shade: [['0%', 'rgba(10,60,24,.46)'], ['100%', 'rgba(10,60,24,0)']],
+    rim: [['0%', 'rgba(190,244,180,.96)'], ['45%', 'rgba(150,232,150,.55)'], ['100%', 'rgba(150,232,150,0)']],
+    vig: [['0%', 'rgba(8,52,24,0)'], ['60%', 'rgba(8,52,24,0)'], ['100%', 'rgba(8,52,24,.4)']],
+    outline: 'rgba(16,80,36,.42)', pattern: '#166534', rings: true
+  },
+  yellow: {
+    base: [['0%', '#ffe08a'], ['38%', '#f4c542'], ['74%', '#d19a1e'], ['100%', '#8f660c']],
+    shade: [['0%', 'rgba(120,84,8,.42)'], ['100%', 'rgba(120,84,8,0)']],
+    rim: [['0%', 'rgba(255,240,190,.96)'], ['45%', 'rgba(255,224,150,.55)'], ['100%', 'rgba(255,224,150,0)']],
+    vig: [['0%', 'rgba(96,66,6,0)'], ['60%', 'rgba(96,66,6,0)'], ['100%', 'rgba(96,66,6,.4)']],
+    outline: 'rgba(122,86,10,.42)', pattern: '#a87708', rings: false
+  },
+  purple: {
+    base: [['0%', '#c8a2f2'], ['38%', '#8f5bd6'], ['74%', '#6a3aa8'], ['100%', '#3f1f6e']],
+    shade: [['0%', 'rgba(52,24,96,.46)'], ['100%', 'rgba(52,24,96,0)']],
+    rim: [['0%', 'rgba(226,200,255,.96)'], ['45%', 'rgba(196,160,250,.55)'], ['100%', 'rgba(196,160,250,0)']],
+    vig: [['0%', 'rgba(40,18,76,0)'], ['60%', 'rgba(40,18,76,0)'], ['100%', 'rgba(40,18,76,.4)']],
+    outline: 'rgba(58,30,110,.42)', pattern: '#4c2a8f', rings: true
+  },
+  orange: {
+    base: [['0%', '#ffb87e'], ['38%', '#f08030'], ['74%', '#c85a14'], ['100%', '#7e3406']],
+    shade: [['0%', 'rgba(120,48,6,.46)'], ['100%', 'rgba(120,48,6,0)']],
+    rim: [['0%', 'rgba(255,214,170,.96)'], ['45%', 'rgba(250,180,120,.55)'], ['100%', 'rgba(250,180,120,0)']],
+    vig: [['0%', 'rgba(88,34,4,0)'], ['60%', 'rgba(88,34,4,0)'], ['100%', 'rgba(88,34,4,.4)']],
+    outline: 'rgba(124,50,8,.42)', pattern: '#a34708', rings: false
+  }
+};
+
+/** 斑纹几何全色共用：只换颜色，保证每个阵营的珠子密度一致（真实感来自密集错落）。 */
+const MARBLE_SPOTS = [[26, 42, 4.8], [38, 58, 3.6], [52, 40, 5.2], [64, 52, 4.4], [46, 70, 4.9], [30, 26, 3.4], [58, 26, 3.8], [72, 40, 3.3], [70, 66, 4.6], [36, 80, 3.7], [22, 58, 3.5], [54, 84, 3]];
+const MARBLE_FLECKS = [[44, 50, 2.4], [62, 72, 2.4], [28, 70, 2.2], [80, 54, 2.6], [50, 62, 1.9], [66, 32, 2.2], [34, 66, 2]];
+const MARBLE_RINGS = [[36, 50, 8], [60, 40, 7], [52, 68, 6.5], [28, 34, 6], [70, 60, 6], [42, 82, 5], [74, 32, 4.5]];
+const MARBLE_RING_DOTS = [[46, 30, 3], [64, 54, 3.2], [34, 64, 3], [24, 50, 2.6], [56, 52, 2.2], [70, 74, 2.6]];
+
+/**
+ * 棋子的渐变与裁剪全站只注入一份（放在棋子层首位），各色棋子按阵营引用。
  * 如果每颗棋子各自带 defs，重复的 id 会让 url(#...) 全部解析到第一个，颜色就串了。
  */
 function buildPieceDefs(doc) {
@@ -84,16 +145,15 @@ function buildPieceDefs(doc) {
     });
     defs.appendChild(grad);
   };
-  mkGrad('ckg-red-base', '34%', '26%', '76%', [['0%', '#f2606c'], ['38%', '#d02138'], ['74%', '#9c1124'], ['100%', '#6e0a19']]);
-  mkGrad('ckg-blue-base', '34%', '26%', '76%', [['0%', '#63c3f0'], ['38%', '#2b93d6'], ['74%', '#1867a8'], ['100%', '#0d4a80']]);
-  mkGrad('ckg-red-shade', '50%', '50%', '50%', [['0%', 'rgba(90,6,20,.46)'], ['100%', 'rgba(90,6,20,0)']]);
-  mkGrad('ckg-blue-shade', '50%', '50%', '50%', [['0%', 'rgba(8,48,88,.46)'], ['100%', 'rgba(8,48,88,0)']]);
-  mkGrad('ckg-red-rim', '50%', '112%', '58%', [['0%', 'rgba(255,172,152,.96)'], ['45%', 'rgba(255,142,120,.55)'], ['100%', 'rgba(255,142,120,0)']]);
-  mkGrad('ckg-blue-rim', '50%', '112%', '58%', [['0%', 'rgba(152,224,255,.96)'], ['45%', 'rgba(122,206,250,.55)'], ['100%', 'rgba(122,206,250,0)']]);
+  Object.keys(PIECE_TINTS).forEach(function (tint) {
+    const meta = PIECE_TINTS[tint];
+    mkGrad('ckg-' + tint + '-base', '34%', '26%', '76%', meta.base);
+    mkGrad('ckg-' + tint + '-shade', '50%', '50%', '50%', meta.shade);
+    mkGrad('ckg-' + tint + '-rim', '50%', '112%', '58%', meta.rim);
+    mkGrad('ckg-' + tint + '-vig', '50%', '50%', '50%', meta.vig);
+  });
   mkGrad('ckg-hi', '40%', '38%', '64%', [['0%', 'rgba(255,255,255,1)'], ['46%', 'rgba(255,255,255,.72)'], ['100%', 'rgba(255,255,255,0)']]);
   mkGrad('ckg-hi2', '50%', '50%', '50%', [['0%', 'rgba(255,255,255,.88)'], ['100%', 'rgba(255,255,255,0)']]);
-  mkGrad('ckg-red-vig', '50%', '50%', '50%', [['0%', 'rgba(70,4,14,0)'], ['60%', 'rgba(70,4,14,0)'], ['100%', 'rgba(70,4,14,.4)']]);
-  mkGrad('ckg-blue-vig', '50%', '50%', '50%', [['0%', 'rgba(4,32,60,0)'], ['60%', 'rgba(4,32,60,0)'], ['100%', 'rgba(4,32,60,.4)']]);
   const soft = svgEl(doc, 'filter', { id: 'ckg-soft', x: '-20%', y: '-20%', width: '140%', height: '140%' });
   soft.appendChild(svgEl(doc, 'feGaussianBlur', { stdDeviation: '0.9' }));
   defs.appendChild(soft);
@@ -106,40 +166,38 @@ function buildPieceDefs(doc) {
 
 /**
  * 对照参考图的玻璃弹珠结构，从下到上八层：
- * 底色渐变 → 密集斑纹（红=大小错落的深红斑块群 / 蓝=小圆环+碎点）→ 暗侧收影 → 球面边缘渐暗 → 底缘透光 → 主高光 + 次高光 → 阵营深色描边。
- * 真实感来自三点：斑点数量多且半径 1.9~5.2 错落（大斑太稀会像贴纸）；
- * 整组斑纹套一层轻微高斯模糊（stdDeviation .9），看起来是"嵌在玻璃里"而不是印在表面；
- * 边缘 vignette 模拟球面曲率——靠轮廓处的斑纹和底色一起变暗收进球里。
- * 花纹用实色加透明度，暗侧压在花纹之上让背光处的斑点一起变暗。内层按 0..100 设计，整体缩到 94%。
+ * 底色渐变 → 密集斑纹（实色斑块/圆环按阵营区分）→ 暗侧收影 → 球面边缘渐暗 → 底缘透光 → 弱反射 → 主高光 + 次高光 → 阵营深色描边。
+ * 真实感三件套全色共用：斑点数量多且半径错落；整组斑纹套轻微高斯模糊像"嵌在玻璃里"；
+ * 边缘 vignette 模拟球面曲率。暗侧压在花纹之上，背光处的斑点一起变暗。内层按 0..100 设计，整体缩到 94%。
  */
 function buildPieceNode(owner, doc) {
-  const tint = owner === 'blue' ? 'blue' : 'red';
+  const tint = PIECE_TINTS[owner] ? owner : 'red';
+  const meta = PIECE_TINTS[tint];
   const svg = svgEl(doc, 'svg', { 'class': 'ck-piece__svg', viewBox: '0 0 100 100', 'aria-hidden': 'true' });
   const g = svgEl(doc, 'g', { 'clip-path': 'url(#ckclip-marble)', transform: 'translate(3 3) scale(.94)' });
   g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-base)' }));
   const pattern = svgEl(doc, 'g', { filter: 'url(#ckg-soft)' });
-  if (tint === 'blue') {
-    [[36, 50, 8], [60, 40, 7], [52, 68, 6.5], [28, 34, 6], [70, 60, 6], [42, 82, 5], [74, 32, 4.5]].forEach(function (ring) {
+  if (meta.rings) {
+    MARBLE_RINGS.forEach(function (ring) {
       pattern.appendChild(svgEl(doc, 'circle', {
         cx: String(ring[0]), cy: String(ring[1]), r: String(ring[2]),
-        fill: 'none', stroke: '#0f6bb0', 'stroke-width': '3', 'stroke-opacity': '.8'
+        fill: 'none', stroke: meta.pattern, 'stroke-width': '3', 'stroke-opacity': '.8'
       }));
     });
-    [[46, 30, 3], [64, 54, 3.2], [34, 64, 3], [24, 50, 2.6], [56, 52, 2.2], [70, 74, 2.6]].forEach(function (dot) {
+    MARBLE_RING_DOTS.forEach(function (dot) {
       pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(dot[0]), cy: String(dot[1]), r: String(dot[2]), fill: '#0f6bb0', 'fill-opacity': '.8'
+        cx: String(dot[0]), cy: String(dot[1]), r: String(dot[2]), fill: meta.pattern, 'fill-opacity': '.8'
       }));
     });
   } else {
-    [[26, 42, 4.8], [38, 58, 3.6], [52, 40, 5.2], [64, 52, 4.4], [46, 70, 4.9], [30, 26, 3.4], [58, 26, 3.8],
-     [72, 40, 3.3], [70, 66, 4.6], [36, 80, 3.7], [22, 58, 3.5], [54, 84, 3]].forEach(function (spot) {
+    MARBLE_SPOTS.forEach(function (spot) {
       pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(spot[0]), cy: String(spot[1]), r: String(spot[2]), fill: '#a51228', 'fill-opacity': '.85'
+        cx: String(spot[0]), cy: String(spot[1]), r: String(spot[2]), fill: meta.pattern, 'fill-opacity': '.85'
       }));
     });
-    [[44, 50, 2.4], [62, 72, 2.4], [28, 70, 2.2], [80, 54, 2.6], [50, 62, 1.9], [66, 32, 2.2], [34, 66, 2]].forEach(function (fleck) {
+    MARBLE_FLECKS.forEach(function (fleck) {
       pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(fleck[0]), cy: String(fleck[1]), r: String(fleck[2]), fill: '#a51228', 'fill-opacity': '.55'
+        cx: String(fleck[0]), cy: String(fleck[1]), r: String(fleck[2]), fill: meta.pattern, 'fill-opacity': '.55'
       }));
     });
   }
@@ -147,19 +205,33 @@ function buildPieceNode(owner, doc) {
   g.appendChild(svgEl(doc, 'ellipse', { cx: '67', cy: '72', rx: '31', ry: '27', fill: 'url(#ckg-' + tint + '-shade)' }));
   g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-vig)' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '50', cy: '98', rx: '42', ry: '20', fill: 'url(#ckg-' + tint + '-rim)' }));
+  g.appendChild(svgEl(doc, 'ellipse', { cx: '30', cy: '48', rx: '24', ry: '13', transform: 'rotate(-38 30 48)', fill: 'url(#ckg-hi2)', opacity: '.3' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '35', cy: '31', rx: '19', ry: '12', transform: 'rotate(-26 35 31)', fill: 'url(#ckg-hi)' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '66', cy: '23', rx: '7', ry: '4.5', transform: 'rotate(-20 66 23)', fill: 'url(#ckg-hi2)' }));
   g.appendChild(svgEl(doc, 'circle', {
     cx: '50', cy: '50', r: '49.2', fill: 'none',
-    stroke: tint === 'blue' ? 'rgba(10,58,100,.55)' : 'rgba(112,8,24,.55)', 'stroke-width': '1.6'
+    stroke: meta.outline, 'stroke-width': '1.5'
   }));
   svg.appendChild(g);
   return svg;
 }
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
-function playerLabel(player) { return player === 'red' ? '红方' : '蓝方'; }
+const COLOR_LABELS = { red: '红方', blue: '蓝方', green: '绿方', yellow: '黄方', purple: '紫方', orange: '橙方' };
+function playerLabel(player) { return COLOR_LABELS[player] || '玩家'; }
 function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
+function seatByColor(color) { return seats.find(function (seat) { return seat.color === color; }) || null; }
+function seatAiCount() { return seats.filter(function (seat) { return seat.isAI; }).length; }
+/** 回合顺延到下一位“仍有棋可走”的席位；全员无棋可走的极端僵局保持原序。 */
+function advanceTurn(fromColor) {
+  const index = seats.findIndex(function (seat) { return seat.color === fromColor; });
+  const start = index >= 0 ? index : 0;
+  for (let offset = 1; offset <= seats.length; offset++) {
+    const candidate = seats[(start + offset) % seats.length];
+    if (Core.listMoves(pieces, candidate.color).length) { turn = candidate.color; return; }
+  }
+  turn = seats[(start + 1) % seats.length].color;
+}
 function normalizeRoom(value) { return String(value || '').toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '').slice(0, 5); }
 function normalizeBoardView(value) { return value === '2d' ? '2d' : '3d'; }
 function getViewPlayerForMode(currentMode, assignedColor) {
@@ -192,22 +264,54 @@ function sanitizeLocalState(raw) {
 
 function saveGame() {
   if (mode === 'online') return;
-  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove }));
+  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove, seats: seats, symmetricJump: symmetricJump }));
+}
+
+/** 校验存档里的席位表：每个席位颜色都在盘面上且恰好 10 枚，盘面上也没有席位之外的颜色。 */
+function seatsFromSave(savedPieces, rawSeats) {
+  if (!Array.isArray(rawSeats) || rawSeats.length < 2) return null;
+  const counts = {};
+  Object.keys(savedPieces).forEach(function (key) {
+    const color = savedPieces[key];
+    counts[color] = (counts[color] || 0) + 1;
+  });
+  const clean = rawSeats.map(function (seat) {
+    return seat && Core.COLORS.indexOf(seat.color) >= 0 ? { color: seat.color, isAI: !!seat.isAI } : null;
+  }).filter(Boolean);
+  if (clean.length !== rawSeats.length) return null;
+  const seatColors = clean.map(function (seat) { return seat.color; });
+  const presentColors = Object.keys(counts);
+  if (presentColors.length !== clean.length) return null;
+  const allMatch = presentColors.every(function (color) {
+    return seatColors.indexOf(color) >= 0 && counts[color] === 10;
+  });
+  return allMatch ? clean : null;
 }
 
 function loadGame() {
   try {
     const raw = safeGet(CONFIG.SAVE_PREFIX + mode);
-    const saved = raw ? sanitizeLocalState(JSON.parse(raw)) : null;
+    const parsed = raw ? JSON.parse(raw) : null;
+    const saved = sanitizeLocalState(parsed);
     if (!saved) return false;
+    const restoredSeats = seatsFromSave(saved.pieces, parsed ? parsed.seats : null);
+    if (restoredSeats) seats = restoredSeats;
     pieces = saved.pieces; turn = saved.turn; moveNumber = saved.moveNumber;
     gameOver = saved.gameOver; lastMove = saved.lastMove;
+    if (!seats.some(function (seat) { return seat.color === turn; })) turn = seats[0].color;
+    // 续局沿用开局时的规则，避免中途改规则造成棋谱矛盾
+    if (parsed && typeof parsed.symmetricJump === 'boolean') {
+      symmetricJump = parsed.symmetricJump;
+      Core.setRules({ symmetricJump: symmetricJump });
+    }
     return true;
   } catch (e) { return false; }
 }
 
 function resetState() {
-  pieces = Core.createInitialPieces(); turn = 'red'; selectedKey = ''; legalMoves = emptyMoves();
+  pieces = Core.createInitialPiecesForSeats(seats.map(function (seat) { return seat.color; }));
+  turn = seats.length ? seats[0].color : 'red';
+  selectedKey = ''; legalMoves = emptyMoves();
   history = []; moveNumber = 1; gameOver = ''; lastMove = null; aiThinking = false;
   clearTimeout(aiTimer); aiTimer = null; cancelAiSearch(); closeWinner();
 }
@@ -288,15 +392,24 @@ function buildRouteModels() {
   return segments;
 }
 
+/** 各营地目标三角的三个顶点（尖端 + 底边两角），2 人局输出与旧版逐字节一致。 */
+const ZONE_TRIANGLE_KEYS = {
+  top: ['0:0', '3:-3', '3:3'],
+  bottom: ['16:0', '13:-3', '13:3'],
+  ul: ['7:-9', '4:-12', '4:-6'],
+  ur: ['7:9', '4:12', '4:6'],
+  ll: ['9:-9', '12:-12', '12:-6'],
+  lr: ['9:9', '12:12', '12:6']
+};
+
 function buildZoneModels() {
-  return [
-    { className: 'red-goal-zone', keys: ['16:0', '13:-3', '13:3'] },
-    { className: 'blue-goal-zone', keys: ['0:0', '3:-3', '3:3'] }
-  ].map(function (zone) {
-    const points = zone.keys.map(orientedPoint).filter(Boolean);
+  return seats.map(function (seat) {
+    const goalCamp = Core.CAMP_OPPOSITE[Core.campOfColor(seat.color)] || 'bottom';
+    const keys = ZONE_TRIANGLE_KEYS[goalCamp] || [];
+    const points = keys.map(orientedPoint).filter(Boolean);
     if (points.length !== 3) return null;
     return {
-      className: zone.className,
+      className: seat.color + '-goal-zone',
       points: points.map(function (point) { return { x: normalizeFraction(point.x), y: normalizeFraction(point.y) }; })
     };
   }).filter(Boolean);
@@ -437,6 +550,10 @@ function syncHoles(model, reorient) {
     if (reorient) placeNode(node, cell.x, cell.y);
     node.classList.toggle('top-camp', cell.camp === 'top');
     node.classList.toggle('bottom-camp', cell.camp === 'bottom');
+    node.classList.toggle('ul-camp', cell.camp === 'ul');
+    node.classList.toggle('ur-camp', cell.camp === 'ur');
+    node.classList.toggle('ll-camp', cell.camp === 'll');
+    node.classList.toggle('lr-camp', cell.camp === 'lr');
     node.classList.toggle('step-target', cell.moveKind === 'step');
     node.classList.toggle('jump-target', cell.moveKind === 'jump');
     node.classList.toggle('selected', cell.selected);
@@ -574,29 +691,55 @@ function applyBoardModeLayout(view) {
   renderBoard();
 }
 
-function onlinePlayer(color) { return online.players.find(function (player) { return player.color === color; }); }
+function onlinePlayer(color) { return online.seats.find(function (seat) { return seat.color === color; }) || null; }
+function localSeatLabel(index, seat) {
+  const humanNames = ['玩家 A', '玩家 B', '玩家 C', '玩家 D', '玩家 E', '玩家 F'];
+  return (seat.isAI ? '电脑' : (humanNames[index] || '玩家')) + ' · ' + playerLabel(seat.color);
+}
+
 function updatePlayerNames() {
   if (mode === 'ai') { $('redName').textContent = '你 · 红方'; $('blueName').textContent = '电脑 · 蓝方'; return; }
-  if (mode === 'local') { $('redName').textContent = '玩家 A · 红方'; $('blueName').textContent = '玩家 B · 蓝方'; return; }
-  const red = onlinePlayer('red'); const blue = onlinePlayer('blue');
-  $('redName').textContent = (red ? red.nick : '等待玩家') + ' · 红方' + (online.color === 'red' ? '（你）' : '');
-  $('blueName').textContent = (blue ? blue.nick : '等待玩家') + ' · 蓝方' + (online.color === 'blue' ? '（你）' : '');
+  if (mode === 'local') {
+    seats.forEach(function (seat, index) {
+      const nameNode = $(seat.color + 'Name');
+      if (nameNode) nameNode.textContent = localSeatLabel(index, seat);
+    });
+    return;
+  }
+  online.seats.forEach(function (seat) {
+    const nameNode = $(seat.color + 'Name');
+    if (!nameNode) return;
+    if (seat.isBot) { nameNode.textContent = '电脑 · ' + playerLabel(seat.color); return; }
+    nameNode.textContent = (seat.nick || '等待玩家') + ' · ' + playerLabel(seat.color) + (seat.cid === online.cid ? '（你）' : '');
+  });
+  return;
 }
 
 function canAct() {
   if (gameOver || aiThinking) return false;
   if (mode === 'ai') return turn === 'red';
-  if (mode === 'local') return true;
-  return online.phase === 'playing' && online.players.length === 2 && online.players.every(function (player) { return player.online; }) && online.color === turn && online.ws && online.ws.readyState === WebSocket.OPEN;
+  if (mode === 'local') { const seat = seatByColor(turn); return !!seat && !seat.isAI; }
+  return online.phase === 'playing' && online.seats.length > 0 &&
+    online.seats.every(function (seat) { return seat.isBot || seat.online; }) &&
+    online.color === turn && online.ws && online.ws.readyState === WebSocket.OPEN;
 }
 
 function onlineStatusText() {
   if (!online.active) return '尚未连接房间';
   if (online.phase === 'connecting') return '正在连接服务器…';
   if (online.phase === 'reconnecting') return '连接中断，' + Math.max(1, Math.ceil(online.retryDelay / 1000)) + ' 秒后重连';
-  if (online.phase === 'waiting') return online.players.length < 2 ? '等待另一位玩家加入' : '正在准备开局';
+  if (online.phase === 'waiting') {
+    const humans = online.seats.filter(function (seat) { return !seat.isBot; });
+    if (humans.length > 1) {
+      const seated = humans.filter(function (seat) { return seat.online; }).length;
+      return seated < humans.length ? '等待好友加入（' + seated + '/' + humans.length + '）' : '正在准备开局';
+    }
+    return '等待另一位玩家加入';
+  }
   if (online.phase === 'playing') {
-    if (online.players.some(function (player) { return !player.online; })) return '对手已离线，等待其自动重连';
+    if (online.seats.some(function (seat) { return !seat.isBot && !seat.online; })) return '对手已离线，等待其自动重连';
+    const actor = onlinePlayer(turn);
+    if (actor && actor.isBot) return '等待电脑走棋';
     return online.color === turn ? '轮到你走' : '等待对手走棋';
   }
   if (online.phase === 'done') return '本局已结束';
@@ -614,31 +757,48 @@ function updateLastMoveBar() {
   $('lastMoveKind').textContent = lastMove.kind === 'jump' ? (jumps > 1 ? '连续跳跃' : '跳跃') : '相邻移动';
 }
 
+/** 规则卡动态行：向玩家明示本局使用的跳跃规则。 */
+function updateRulesCard() {
+  const node = $('ruleSymJump');
+  if (!node) return;
+  node.textContent = symmetricJump
+    ? '对称长跳（本局启用）：与被跳棋子之间的空位对称即可越过，间隔不限，连续跳跃一气呵成。'
+    : '经典跳跃（本局启用）：只能跳过紧邻的棋子，落点须为空，可连续跳。';
+}
+
 function updateStatus() {
-  const isRed = turn === 'red'; const selfTurn = mode === 'online' && online.color === turn;
-  if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，' + playerLabel(viewPlayer) + '固定视角，己方位于下方');
+  const selfTurn = mode === 'online' && online.color === turn;
+  if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，固定视角');
   $('turnPiece').className = 'turn-piece ' + turn;
   let title = playerLabel(turn) + '回合'; let kicker = playerLabel(viewPlayer) + '固定视角 · 己方在下';
   if (gameOver) { title = playerLabel(gameOver) + '获胜'; kicker = '本局已经结束'; }
   else if (mode === 'ai') { title = aiThinking || turn === 'blue' ? '电脑思考中…' : '你的回合'; kicker = '你的视角 · 红方始终在下'; }
-  else if (mode === 'local') kicker = '红方固定视角 · 换手不翻转棋盘';
+  else if (mode === 'local') kicker = '固定视角 · 换手不翻转棋盘';
   else if (!online.color) { title = onlineStatusText(); kicker = '加入房间后由服务器分配阵营'; }
-  else { title = online.phase === 'playing' ? (selfTurn ? '轮到你走' : '对手回合') : onlineStatusText(); kicker = '你的视角 · ' + playerLabel(online.color) + '始终在下'; }
+  else {
+    const actor = onlinePlayer(turn);
+    title = online.phase === 'playing' ? (selfTurn ? '轮到你走' : (actor && actor.isBot ? '电脑回合' : '对手回合')) : onlineStatusText();
+    kicker = '你的视角 · ' + playerLabel(online.color) + (online.color === 'red' ? '始终在下' : (online.color === 'blue' ? '营地已在下' : '营地位置固定'));
+  }
   $('turnText').textContent = title; $('turnKicker').textContent = kicker; $('moveCount').textContent = '第 ' + moveNumber + ' 手';
-  $('redProgress').textContent = Core.countInGoal(pieces, 'red') + '/10'; $('blueProgress').textContent = Core.countInGoal(pieces, 'blue') + '/10';
-  $('redPlayer').classList.toggle('active', !gameOver && isRed); $('bluePlayer').classList.toggle('active', !gameOver && !isRed);
+  seats.forEach(function (seat) {
+    const progress = $(seat.color + 'Progress');
+    if (progress) progress.textContent = Core.countInGoal(pieces, seat.color) + '/10';
+    const row = $(seat.color + 'Player');
+    if (row) row.classList.toggle('active', !gameOver && turn === seat.color);
+  });
   updatePlayerNames(); updateLastMoveBar();
   $('undoBtn').disabled = mode === 'online' || history.length === 0 || aiThinking; $('undoBtn').title = mode === 'online' ? '联机棋局不能撤销' : '';
   if (mode === 'online') {
     const mayRestart = online.phase === 'done' && online.host === online.cid;
     $('newGameBtn').disabled = !mayRestart; $('newGameBtn').innerHTML = mayRestart ? '<span>↻</span> 再来一局' : '<span>↻</span> 房主可重开';
   } else { $('newGameBtn').disabled = false; $('newGameBtn').innerHTML = '<span>↻</span> 重新开局'; }
-  const opponentOffline = online.phase === 'playing' && online.players.some(function (player) { return !player.online; });
+  const opponentOffline = online.phase === 'playing' && online.seats.some(function (seat) { return !seat.isBot && !seat.online; });
   const showWait = mode === 'online' && online.active && ['connecting','reconnecting','waiting'].includes(online.phase) || (mode === 'online' && opponentOffline);
   $('boardWait').hidden = !showWait;
   if (showWait) {
     const reconnecting = online.phase === 'connecting' || online.phase === 'reconnecting';
-    $('boardWait').querySelector('strong').textContent = reconnecting ? '正在恢复联机' : (opponentOffline ? '对手暂时离线' : '等待对手加入');
+    $('boardWait').querySelector('strong').textContent = reconnecting ? '正在恢复联机' : (opponentOffline ? '对手暂时离线' : '等待好友加入');
     $('boardWait').querySelector('small').textContent = reconnecting ? onlineStatusText() : (opponentOffline ? '已保留其阵营，重连后继续当前棋局' : '复制邀请链接发给朋友即可开始');
   }
   if (mode === 'online') $('onlineStatus').textContent = onlineStatusText();
@@ -667,8 +827,9 @@ function applyLocalMove(fromKey, targetKey, actor) {
   lastMove = { player: actor, from: fromKey, target: targetKey, kind: result.kind, path: result.path.slice(), moveNumber: moveNumber };
   selectedKey = ''; legalMoves = emptyMoves();
   if (result.winner) { gameOver = result.winner; playTone('win'); showWinner(result.winner); }
-  else { turn = opposite(actor); moveNumber++; playTone(result.kind); }
-  saveGame(); render(); return true;
+  else { advanceTurn(actor); moveNumber++; playTone(result.kind); }
+  saveGame(); render(); scheduleAiMove();
+  return true;
 }
 
 /** 取消过期计算；终止 Worker 才能真正释放正在执行的深层搜索。 */
@@ -680,8 +841,9 @@ function cancelAiSearch() {
 /**
  * 优先在 Worker 中运行搜索。旧浏览器或 Worker 加载失败时回退到同步核心，
  * 保证离线文件部署和历史环境仍然能够完成人机对局。
+ * player 已参数化；当前仅人机模式（蓝方）走 Worker，本地多席位 AI 用贪心（见 scheduleAiMove）。
  */
-function requestAiMove(recentPositions, callback) {
+function requestAiMove(player, recentPositions, callback) {
   const requestId = ++aiRequestId;
   const snapshot = { ...pieces };
   const finish = function (move, error) {
@@ -694,7 +856,7 @@ function requestAiMove(recentPositions, callback) {
       model: window.CheckersAiModel || null,
       recentPositions: recentPositions
     } : null;
-    finish(Core.chooseAiMove(snapshot, 'blue', aiLevel, null, searchOptions), error);
+    finish(Core.chooseAiMove(snapshot, player, aiLevel, null, searchOptions), error);
   };
 
   if (typeof window.Worker !== 'function') { fallback(null); return; }
@@ -714,8 +876,9 @@ function requestAiMove(recentPositions, callback) {
     aiWorker.postMessage({
       requestId: requestId,
       pieces: snapshot,
-      player: 'blue',
+      player: player,
       level: aiLevel,
+      symmetricJump: symmetricJump,
       recentPositions: recentPositions
     });
   } catch (error) {
@@ -724,19 +887,42 @@ function requestAiMove(recentPositions, callback) {
   }
 }
 
+/** 本地多席位 AI（非人机模式的电脑座位）使用轻量贪心：按 moveScore 排序，难度决定头部窗口内随机。 */
+function chooseSeatMove(color) {
+  const moves = Core.listMoves(pieces, color);
+  if (!moves.length) return null;
+  const scored = moves.map(function (move) {
+    return { move: move, score: Core.moveScore(pieces, color, move) };
+  }).sort(function (a, b) { return b.score - a.score; });
+  const windowSize = aiLevel === 'easy' ? Math.min(scored.length, 6) : (aiLevel === 'normal' ? Math.min(scored.length, 3) : 1);
+  return scored[Math.floor(Math.random() * windowSize)].move;
+}
+
 function scheduleAiMove() {
-  if (mode !== 'ai' || turn !== 'blue' || gameOver) return;
+  if (mode === 'online' || gameOver) return;
+  const seat = seatByColor(turn);
+  if (!seat || !seat.isAI) return;
   clearTimeout(aiTimer); cancelAiSearch(); aiThinking = true; render();
   aiTimer = setTimeout(function () {
     aiTimer = null;
-    if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
-    const recentPositions = history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); });
-    requestAiMove(recentPositions, function (move) {
-      if (mode !== 'ai' || turn !== 'blue' || gameOver) { aiThinking = false; render(); return; }
+    const current = seatByColor(turn);
+    if (mode === 'online' || gameOver || !current || !current.isAI || current.color !== seat.color) { aiThinking = false; render(); return; }
+    const finish = function (move) {
+      if (gameOver || seatByColor(turn) !== current) { aiThinking = false; render(); return; }
       aiThinking = false;
-      if (!move) { showToast('电脑当前没有可走位置'); render(); return; }
-      applyLocalMove(move.from, move.target, 'blue');
-    });
+      if (!move) {
+        // 该电脑席位无棋可走：顺延回合，避免整局卡死。
+        advanceTurn(seat.color); moveNumber++; saveGame(); render(); scheduleAiMove();
+        return;
+      }
+      applyLocalMove(move.from, move.target, seat.color);
+    };
+    if (mode === 'ai') {
+      const recentPositions = history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); });
+      requestAiMove(seat.color, recentPositions, finish);
+    } else {
+      finish(chooseSeatMove(seat.color));
+    }
   }, CONFIG.AI_DELAY);
 }
 
@@ -746,7 +932,7 @@ function movePiece(targetKey) {
     else { selectedKey = ''; legalMoves = emptyMoves(); render(); }
     return;
   }
-  const actor = turn; if (applyLocalMove(selectedKey, targetKey, actor) && mode === 'ai') scheduleAiMove();
+  applyLocalMove(selectedKey, targetKey, turn);
 }
 
 function handleCell(key) {
@@ -766,7 +952,11 @@ function undoMove() {
   clearTimeout(aiTimer); aiTimer = null; cancelAiSearch(); aiThinking = false;
   let previous = history.pop(); if (!previous) return;
   if (mode === 'ai' && previous.turn === 'blue' && history.length) previous = history.pop();
-  restoreHistory(previous); saveGame(); render();
+  else if (mode === 'local') {
+    // 本地多人：连着撤销电脑席位的着法，一直退回到人类席位的回合。
+    while (previous && seatByColor(previous.turn) && seatByColor(previous.turn).isAI && history.length) previous = history.pop();
+  }
+  restoreHistory(previous); saveGame(); render(); scheduleAiMove();
 }
 
 function resetGame(skipConfirm) {
@@ -808,7 +998,13 @@ function connectOnline(intent) {
   if (firstConnection) {
     if (!CONFIG.ROOM_RE.test(launchRoom)) { showToast('房间码无效，请返回跳棋首页'); return; }
     online.active = true; online.room = launchRoom; online.cid = getClientId(); online.token = safeGet(CONFIG.TOKEN_PREFIX + launchRoom) || '';
-    online.color = ''; online.players = []; online.host = ''; online.nick = safeGet(CONFIG.NICK_KEY) || '玩家'; online.intent = intent;
+    online.color = ''; online.seats = []; online.players = []; online.host = ''; online.nick = safeGet(CONFIG.NICK_KEY) || '玩家'; online.intent = intent;
+    if (intent === 'create') {
+      const requestedBots = Math.floor(Number(launchParams.get('bots')) || 0);
+      online.bots = Math.max(0, Math.min(4, requestedBots));
+      const requestedBotLevel = launchParams.get('level');
+      online.botLevel = AI_LEVELS.includes(requestedBotLevel) ? requestedBotLevel : 'normal';
+    }
   }
   clearTimeout(online.reconnectTimer); online.reconnectTimer = null;
   if (online.ws) { online.intentionalClose = true; try { online.ws.close(1000, 'replace'); } catch (e) {} }
@@ -816,7 +1012,12 @@ function connectOnline(intent) {
   let ws;
   try { ws = new WebSocket(websocketUrl()); } catch (e) { showToast('无法创建联机连接'); scheduleReconnect(); return; }
   online.ws = ws;
-  ws.addEventListener('open', function () { if (online.ws === ws) sendOnline({ t: 'join', room: online.room, nick: online.nick, cid: online.cid, token: online.token, intent: online.intent }); });
+  ws.addEventListener('open', function () {
+    if (online.ws !== ws) return;
+    const payload = { t: 'join', room: online.room, nick: online.nick, cid: online.cid, token: online.token, intent: online.intent };
+    if (online.intent === 'create' && online.bots > 0) { payload.bots = online.bots; payload.level = online.botLevel; }
+    sendOnline(payload);
+  });
   ws.addEventListener('message', function (event) {
     if (online.ws !== ws) return;
     let message; try { message = JSON.parse(event.data); } catch (e) { return; }
@@ -825,12 +1026,28 @@ function connectOnline(intent) {
       return;
     }
     if (message.t === 'state') {
-      const clean = Core.sanitizeState(message); if (!clean || message.room !== online.room || !Array.isArray(message.players)) return;
+      const clean = Core.sanitizeState(message);
+      const rawSeats = Array.isArray(message.seats) && message.seats.length ? message.seats
+        : (Array.isArray(message.players) ? message.players : null);
+      if (!clean || message.room !== online.room || !rawSeats) return;
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
       online.phase = ['waiting','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
-      online.players = message.players.slice(0, 2).map(function (player) { return { cid: String(player.cid || '').slice(0, 32), nick: String(player.nick || '玩家').slice(0, 16), color: player.color === 'blue' ? 'blue' : 'red', online: !!player.online }; });
-      const self = online.players.find(function (player) { return player.cid === online.cid; }); if (self) online.color = self.color;
+      online.seats = rawSeats.map(function (seat) {
+        const color = Core.COLORS.indexOf(seat.color) >= 0 ? seat.color : 'red';
+        return { cid: String(seat.cid || '').slice(0, 32), nick: String(seat.nick || '').slice(0, 16), color: color, online: !!seat.online, isBot: !!seat.isBot };
+      });
+      online.players = online.seats.filter(function (seat) { return !seat.isBot; }).map(function (seat) {
+        return { cid: seat.cid, nick: seat.nick, color: seat.color, online: seat.online };
+      });
+      const self = online.seats.find(function (seat) { return seat.cid === online.cid; }); if (self) online.color = self.color;
       viewPlayer = getViewPlayerForMode('online', online.color); selectedKey = ''; legalMoves = emptyMoves(); history = [];
+      seats = online.seats.map(function (seat) { return { color: seat.color, isAI: seat.isBot }; });
+      ensurePlayerRows();
+      symmetricJump = message.symmetricJump !== false;
+      Core.setRules({ symmetricJump: symmetricJump });
+      updateRulesCard();
+      const botCount = online.seats.filter(function (seat) { return seat.isBot; }).length;
+      const badge = $('modeBadge'); if (badge) badge.textContent = '好友对战' + (botCount ? ' · ' + botCount + ' 电脑' : '');
       online.retryAttempt = 0; online.retryDelay = 0; online.intent = 'join';
       if (gameOver) showWinner(gameOver); else closeWinner(); render(); return;
     }
@@ -850,7 +1067,7 @@ function connectOnline(intent) {
 function leaveOnline(notifyServer) {
   clearTimeout(online.reconnectTimer); online.reconnectTimer = null; online.intentionalClose = true;
   if (notifyServer !== false) sendOnline({ t: 'leave' }); if (online.ws) { try { online.ws.close(1000, 'left room'); } catch (e) {} }
-  online.active = false; online.ws = null; online.room = ''; online.color = ''; online.players = []; online.host = ''; online.phase = 'idle'; online.retryAttempt = 0; online.retryDelay = 0;
+  online.active = false; online.ws = null; online.room = ''; online.color = ''; online.seats = []; online.players = []; online.host = ''; online.phase = 'idle'; online.retryAttempt = 0; online.retryDelay = 0;
 }
 
 function copyInvite() {
@@ -922,17 +1139,57 @@ function bindBoardInput() {
   }
 }
 
+/** 多于 2 席时补齐玩家面板行并把面板切成纵向布局；2 席保持旧版结构。 */
+function ensurePlayerRows() {
+  const card = document.querySelector('.players-card');
+  if (!card || typeof card.appendChild !== 'function') return;
+  Array.prototype.slice.call(card.querySelectorAll('[data-dynamic-seat]')).forEach(function (node) { node.remove(); });
+  const versus = card.querySelector('.versus');
+  if (versus) versus.hidden = seats.length > 2;
+  if (seats.length <= 2) { card.classList.remove('multi'); return; }
+  card.classList.add('multi');
+  seats.slice(2).forEach(function (seat) {
+    const row = document.createElement('div');
+    row.className = 'player-row'; row.id = seat.color + 'Player'; row.setAttribute('data-dynamic-seat', '1');
+    const piece = document.createElement('span');
+    piece.className = 'player-piece ' + seat.color; piece.setAttribute('aria-hidden', 'true');
+    const info = document.createElement('div');
+    const name = document.createElement('strong'); name.id = seat.color + 'Name';
+    const small = document.createElement('small'); small.textContent = '目标：对家营地';
+    info.appendChild(name); info.appendChild(small);
+    const progress = document.createElement('b'); progress.id = seat.color + 'Progress'; progress.textContent = '0/10';
+    row.appendChild(piece); row.appendChild(info); row.appendChild(progress);
+    card.appendChild(row);
+  });
+}
+
 function init() {
   soundEnabled = safeGet(CONFIG.SOUND_KEY) !== '0';
   const requestedLevel = launchParams.get('level'); aiLevel = AI_LEVELS.includes(requestedLevel) ? requestedLevel : (AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal');
+  symmetricJump = launchParams.get('jump') !== 'classic';
+  Core.setRules({ symmetricJump: symmetricJump });
   safeSet(CONFIG.AI_LEVEL_KEY, aiLevel); viewPlayer = 'red';
+  if (mode === 'local') {
+    const requestedPlayers = Math.floor(Number(launchParams.get('players')) || 2);
+    const requestedAi = Math.floor(Number(launchParams.get('ai')) || 0);
+    const playerCount = Math.max(2, Math.min(6, requestedPlayers));
+    const aiCount = Math.max(0, Math.min(4, Math.min(playerCount - 1, requestedAi)));
+    seats = Core.seatColorsFor(Core.SEAT_LAYOUTS[playerCount] || Core.SEAT_LAYOUTS[2])
+      .map(function (color, index) { return { color: color, isAI: index >= playerCount - aiCount }; });
+  } else if (mode === 'ai') {
+    seats = [{ color: 'red', isAI: false }, { color: 'blue', isAI: true }];
+  } else {
+    seats = [{ color: 'red', isAI: false }, { color: 'blue', isAI: false }];
+  }
+  ensurePlayerRows();
   if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
   boardView = normalizeBoardView(safeGet(CONFIG.BOARD_VIEW_KEY));
   const boardModeSelect = $('boardModeSelect'); if (boardModeSelect) boardModeSelect.value = boardView;
   var soundBtnEl = $('soundBtn');
   if (soundBtnEl) { soundBtnEl.innerHTML = '<i class="ui-icon ' + (soundEnabled ? 'ui-icon--volume-high' : 'ui-icon--volume-xmark') + '" aria-hidden="true"></i>'; soundBtnEl.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); }
   $('onlineRoomBar').hidden = mode !== 'online';
-  $('modeBadge').textContent = mode === 'ai' ? '人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '本地双人' : '好友对战');
+  const aiSeatCount = seatAiCount();
+  $('modeBadge').textContent = mode === 'ai' ? '人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '本地 ' + seats.length + ' 人' + (aiSeatCount ? ' · ' + aiSeatCount + ' 电脑' : '') : (mode === 'online' && online.bots ? '好友对战 · ' + online.bots + ' 电脑' : '好友对战'));
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 
@@ -941,7 +1198,8 @@ function init() {
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(); if (online.active) sendOnline({ t: 'ping' }); });
-  render(); if (mode === 'ai' && turn === 'blue' && !gameOver) scheduleAiMove(); if (gameOver) showWinner(gameOver); if (mode === 'online') connectOnline(launchIntent);
+  render(); updateRulesCard(); scheduleAiMove();
+  if (gameOver) showWinner(gameOver); if (mode === 'online') connectOnline(launchIntent);
 }
 
 window.__checkersTest = {

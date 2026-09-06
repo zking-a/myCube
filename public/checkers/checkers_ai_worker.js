@@ -16,6 +16,8 @@ self.onmessage = function (event) {
   try {
     const player = message.player === 'red' ? 'red' : 'blue';
     const level = LEVELS.includes(message.level) ? message.level : 'normal';
+    // 与发起方棋局同规则搜索（当前仅对称跳跃开关）
+    Core.setRules({ symmetricJump: message.symmetricJump !== false });
     const clean = Core.sanitizeState({
       pieces: message.pieces,
       turn: player,

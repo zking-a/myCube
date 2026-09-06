@@ -7,10 +7,10 @@
   <meta name="description" content="沉浸式中国跳棋棋局。">
   <title>中国跳棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="checkers.css?v=20260906h">
-  <script src="checkers_core.js?v=20260822g" defer></script>
+  <link rel="stylesheet" href="checkers.css?v=20260906j">
+  <script src="checkers_core.js?v=20260906b" defer></script>
   <script src="checkers_ai_model.js?v=20260822b" defer></script>
-  <script src="checkers.js?v=20260906h" defer></script>
+  <script src="checkers.js?v=20260906k" defer></script>
 </head>
 <body class="play-page">
   <main class="game-shell">
@@ -85,11 +85,12 @@
         <details class="rules-card">
           <summary>玩法与视角说明 <span>⌄</span></summary>
           <ol>
-            <li>红方先走，双方轮流移动一枚自己的棋子。</li>
-            <li>联机双方都看到己方位于屏幕下方，换手时棋盘不会翻转。</li>
+            <li>红方先行，各席位按顺序轮流移动一枚自己的棋子（2-6 人同屏或电脑补位均可）。</li>
+            <li>联机对战双方都看到己方位于屏幕下方，换手时棋盘不会翻转。</li>
             <li>绿色落点表示相邻移动，橙色落点表示可以跳跃。</li>
+            <li id="ruleSymJump">对称长跳（本局启用）：与被跳棋子之间的空位对称即可越过，间隔不限，连续跳跃一气呵成。</li>
             <li>连续跳跃会绘制完整路线，上一步的起点和终点会持续标记。</li>
-            <li>先把 10 枚棋子全部移入对面营地即可获胜。</li>
+            <li>每方目标是对面的营地，先把 10 枚棋子全部移入目标营地即获胜。</li>
           </ol>
         </details>
         <p class="save-note" id="saveNote">棋局会自动保存在当前浏览器中。</p>

@@ -7,8 +7,8 @@
   <meta name="description" content="中国跳棋玩法大厅，支持人机对战、本地双人和好友对战。" data-page-node-id="LoJf6GCD3QXy2x0s2D0pUb">
   <title>中国跳棋 · 选择玩法</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=20260822a" data-page-node-id="XaHYAnzLGKSORDMCBkMK86">
-  <link rel="stylesheet" href="checkers.css?v=20260822b" data-page-node-id="NnJVbwTarznYnDvDCIoal7">
-  <script src="lobby.js?v=20260822c" defer></script>
+  <link rel="stylesheet" href="checkers.css?v=20260906j" data-page-node-id="NnJVbwTarznYnDvDCIoal7">
+  <script src="lobby.js?v=20260906k" defer></script>
 </head>
 <body class="lobby-page" data-page-node-id="2MSluERdhP75349mnfiEoj">
   <main class="lobby-shell" data-page-node-id="z35on5sJD9it5MADuaX8EX">
@@ -50,14 +50,44 @@
             <button type="button" class="active" data-level="normal" role="radio" aria-checked="true" data-page-node-id="gt4aXfmuIOi7JIFZw7Tl2P">标准</button>
             <button type="button" data-level="hard" role="radio" aria-checked="false" data-page-node-id="MzDRMaVB1gAaU2HwRboLm7">困难</button>
           </div>
+          <span class="config-label">跳跃规则</span>
+          <div class="difficulty-picker" role="radiogroup" aria-label="选择跳跃规则">
+            <button type="button" data-jump="symmetric" role="radio" aria-checked="true" class="active">对称长跳</button>
+            <button type="button" data-jump="classic" role="radio" aria-checked="false">经典跳跃</button>
+          </div>
           <button type="button" class="mode-start primary ui-button ui-button--primary" id="startAiBtn" data-page-node-id="GWrLBNzCyVelbL9lfKmJn7"><span id="startAiLabel" data-page-node-id="ZCI0Qw48IujJRTMBZZ2yFe">开始人机对战</span> <span aria-hidden="true" data-page-node-id="HQlIX2qVaDGtpYKo7Oqddp">→</span></button>
         </section>
 
-        <button type="button" class="mode-entry local-entry ui-button" id="startLocalBtn" data-page-node-id="EudPHiRCGRgedeAmAlpOvP">
+        <button type="button" class="mode-entry local-entry ui-button" id="selectLocalBtn" aria-expanded="false" aria-controls="localConfig" data-page-node-id="EudPHiRCGRgedeAmAlpOvP">
           <span class="mode-icon" aria-hidden="true" data-page-node-id="3Lh0nx9pJeF1OpgsREMbNy"><i class="ui-icon ui-icon--users" aria-hidden="true" data-page-node-id="ROHsXqVChr5B8WehukWsxq"></i></span>
-          <span class="mode-copy" data-page-node-id="HkPJKEjqCBa8vwzPCH0J2J"><span class="mode-kicker" data-page-node-id="h4yPykiaNcvFmeGXIIrCbb">TOGETHER</span><span class="mode-entry-title" id="startLocalLabel" data-page-node-id="53dsC6cdgWg2Dl0OuHlqHp">本地双人</span><span class="mode-entry-desc" data-page-node-id="5wZAgDkKFm7xFFDnBrZMEq">一台设备，固定红方视角</span></span>
+          <span class="mode-copy" data-page-node-id="HkPJKEjqCBa8vwzPCH0J2J"><span class="mode-kicker" data-page-node-id="h4yPykiaNcvFmeGXIIrCbb">TOGETHER</span><span class="mode-entry-title" id="startLocalLabel" data-page-node-id="53dsC6cdgWg2Dl0OuHlqHp">本地对战</span><span class="mode-entry-desc" data-page-node-id="5wZAgDkKFm7xFFDnBrZMEq">2-6 人同屏，电脑可补位</span></span>
           <span class="mode-arrow" aria-hidden="true" data-page-node-id="BBPEAkCXCJyPtkCJfDZsQd">→</span>
         </button>
+        <section class="mode-config local-config" id="localConfig" hidden aria-label="本地对战设置">
+          <span class="config-label">选择席位数</span>
+          <div class="difficulty-picker" role="radiogroup" aria-label="选择席位数">
+            <button type="button" data-players="2" role="radio" aria-checked="true" class="active">2 人</button>
+            <button type="button" data-players="3" role="radio" aria-checked="false">3 人</button>
+            <button type="button" data-players="4" role="radio" aria-checked="false">4 人</button>
+            <button type="button" data-players="5" role="radio" aria-checked="false">5 人</button>
+            <button type="button" data-players="6" role="radio" aria-checked="false">6 人</button>
+          </div>
+          <span class="config-label">电脑玩家数</span>
+          <div class="difficulty-picker" role="radiogroup" aria-label="选择电脑玩家数量">
+            <button type="button" data-ai="0" role="radio" aria-checked="true" class="active">0</button>
+            <button type="button" data-ai="1" role="radio" aria-checked="false">1</button>
+            <button type="button" data-ai="2" role="radio" aria-checked="false">2</button>
+            <button type="button" data-ai="3" role="radio" aria-checked="false">3</button>
+            <button type="button" data-ai="4" role="radio" aria-checked="false">4</button>
+          </div>
+          <span class="config-label">跳跃规则</span>
+          <div class="difficulty-picker" role="radiogroup" aria-label="选择跳跃规则">
+            <button type="button" data-jump="symmetric" role="radio" aria-checked="true" class="active">对称长跳</button>
+            <button type="button" data-jump="classic" role="radio" aria-checked="false">经典跳跃</button>
+          </div>
+          <p class="field-note" id="localSeatHint">共 2 个席位，全部由玩家同屏轮流。</p>
+          <button type="button" class="mode-start primary ui-button ui-button--primary" id="startLocalBtn">开始对局 <span aria-hidden="true">→</span></button>
+        </section>
 
         <button type="button" class="mode-entry online-entry ui-button" id="selectOnlineBtn" aria-expanded="false" aria-controls="onlineCard" data-page-node-id="rFvtujRyzNVAniYxCsFPMN">
           <span class="mode-icon" aria-hidden="true" data-page-node-id="B2J59yHoFSTvH36QtkDpDX"><i class="ui-icon ui-icon--earth-asia" aria-hidden="true" data-page-node-id="ky54bYWhMEvLIii7UZipHu"></i></span>
@@ -69,6 +99,25 @@
           <div class="online-fields" data-page-node-id="XbAK9mB6Y5kC3BGVNomP9Z">
             <label data-page-node-id="yQxlixDKmR0lDmSm8XElC4"><span data-page-node-id="JE0TMUokKLLQZBvkKxq2vA">显示昵称</span><input class="ui-input" id="nickInput" type="text" maxlength="16" autocomplete="nickname" placeholder="朋友会看到这个名字" data-page-node-id="nOoCY7Bh7AzAXL04go8xBw"></label>
           </div>
+          <span class="config-label" aria-hidden="true">房主可选：电脑补位（创建房间时生效）</span>
+          <div class="difficulty-picker cols5" role="radiogroup" aria-label="电脑补位个数" data-page-node-id="onlineBotPicker">
+            <button type="button" data-bots="0" role="radio" aria-checked="true" class="active">0</button>
+            <button type="button" data-bots="1" role="radio" aria-checked="false">1</button>
+            <button type="button" data-bots="2" role="radio" aria-checked="false">2</button>
+            <button type="button" data-bots="3" role="radio" aria-checked="false">3</button>
+            <button type="button" data-bots="4" role="radio" aria-checked="false">4</button>
+          </div>
+          <div class="difficulty-picker" role="radiogroup" aria-label="电脑强度" data-page-node-id="onlineBotLevelPicker">
+            <button type="button" data-bot-level="easy" role="radio" aria-checked="false">轻松</button>
+            <button type="button" data-bot-level="normal" role="radio" aria-checked="true" class="active">标准</button>
+            <button type="button" data-bot-level="hard" role="radio" aria-checked="false">困难</button>
+          </div>
+          <span class="config-label">跳跃规则</span>
+          <div class="difficulty-picker" role="radiogroup" aria-label="选择跳跃规则">
+            <button type="button" data-jump="symmetric" role="radio" aria-checked="true" class="active">对称长跳</button>
+            <button type="button" data-jump="classic" role="radio" aria-checked="false">经典跳跃</button>
+          </div>
+          <p class="field-note" id="onlineBotHint">不加电脑则为经典双人房，好友加入后开局。</p>
           <div class="online-intents" role="group" aria-label="选择联机方式" data-page-node-id="UShHD6c4IqC6KkkOm1ujCG">
             <button type="button" class="online-intent create-intent ui-button" id="createRoomBtn" data-page-node-id="MpwsnEAHhGZwqkyokVwNpo"><strong data-page-node-id="S1zxBHOKqEeo8bGW9rNoKQ">创建房间</strong><span data-page-node-id="UXEdXERzFopWmGEj7B9zWF">生成邀请，等朋友加入</span></button>
             <button type="button" class="online-intent join-intent ui-button" id="openJoinRoomBtn" aria-expanded="false" aria-controls="joinRoomConfig" data-page-node-id="KdoZcZbrAEFHbJCumY5W8X"><strong data-page-node-id="q8DyQGYlYnJCUsl5evohJD">加入朋友房间</strong><span data-page-node-id="DHQD7XJYGbegF31GceNvbn">输入收到的房间码</span></button>
@@ -87,7 +136,7 @@
     <div class="feature-strip" aria-label="跳棋功能" data-page-node-id="nse9ltT8HhdfuC3YZzgtbN">
       <span data-page-node-id="Q1YSCgTgLTSUVDE9fqHp3I"><b data-page-node-id="nlUZrn7M2xpl5igfBKbtfa">⌁</b> 连跳路线</span><span data-page-node-id="MHmIcq4Pe0oBikwTiY7hMc"><b data-page-node-id="UFI9083WjJTbyF2d81Ygky">◎</b> 上一步标记</span><span data-page-node-id="iW6KKswiJdoVNGHGOTkXKH"><b data-page-node-id="rhm0fPhI4aCFM3kC7Wpm20">↻</b> 断线重连</span><span data-page-node-id="JGyyZ5SV8MKsOxJOMvB9Bj"><b data-page-node-id="h2XQ6w6Wn5HAHLbHnQln2v">✓</b> 服务端判定</span>
     </div>
-    <p class="lobby-tip" data-page-node-id="CadvhqdBQUF15ElH2NNv7s">玩法：移动到相邻空位，或隔着任意棋子连续跳跃；率先将 10 枚棋子全部移入对面营地获胜。</p>
+    <p class="lobby-tip" data-page-node-id="CadvhqdBQUF15ElH2NNv7s">玩法：移动到相邻空位，或隔着棋子连续跳跃；与棋子之间隔有相同空位时还可对称长跳。率先将 10 枚棋子全部移入对面营地获胜。</p>
   </main>
 </body>
 </html>

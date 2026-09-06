@@ -10,6 +10,35 @@
   const VALUE_FEATURE_VERSION = 'cc-value-v2';
   function keyOf(row, unit) { return row + ':' + unit; }
 
+  /** 星盘六营地（顺时针 top → ur → lr → bottom → ll → ul）；对家营地即目标营地。 */
+  const CAMP_IDS = ['top', 'ur', 'lr', 'bottom', 'll', 'ul'];
+  const CAMP_OPPOSITE = { top: 'bottom', bottom: 'top', ul: 'lr', lr: 'ul', ur: 'll', ll: 'ur' };
+  const CAMP_COLORS = { top: 'red', bottom: 'blue', ur: 'green', lr: 'yellow', ll: 'purple', ul: 'orange' };
+  const COLORS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+  const COLOR_LETTERS = { red: 'r', blue: 'b', green: 'g', yellow: 'y', purple: 'p', orange: 'o' };
+  /** 各人数的座位布局。3 人取相间营地，保证每家目标营地空闲；4 人取两对对家（经典十字）；5 人空出 ul。 */
+  const SEAT_LAYOUTS = {
+    2: ['top', 'bottom'],
+    3: ['top', 'lr', 'll'],
+    4: ['top', 'ur', 'bottom', 'll'],
+    5: ['top', 'ur', 'lr', 'bottom', 'll'],
+    6: CAMP_IDS
+  };
+
+  /** 营地归属：上下两个三角按行号；四个侧翼是 4/3/2/1 的斜三角，按 unit 越界判定。 */
+  function campOfCell(row, unit) {
+    if (row <= 3) return 'top';
+    if (row >= 13) return 'bottom';
+    if (row <= 7) {
+      if (unit < -row) return 'ul';
+      if (unit > row) return 'ur';
+    } else {
+      if (unit < row - 16) return 'll';
+      if (unit > 16 - row) return 'lr';
+    }
+    return '';
+  }
+
   function buildBoardCells() {
     const cells = [];
     ROW_COUNTS.forEach(function (count, row) {
@@ -18,7 +47,7 @@
         cells.push({
           key: keyOf(row, unit), row: row, unit: unit,
           x: 160 + unit * 10.8, y: 16 + row * 18,
-          camp: row <= 3 ? 'top' : (row >= 13 ? 'bottom' : '')
+          camp: campOfCell(row, unit)
         });
       }
     });
@@ -29,12 +58,93 @@
   const CELL_MAP = new Map(BOARD_CELLS.map(function (cell) { return [cell.key, cell]; }));
   const TOP_CAMP = new Set(BOARD_CELLS.filter(function (cell) { return cell.camp === 'top'; }).map(function (cell) { return cell.key; }));
   const BOTTOM_CAMP = new Set(BOARD_CELLS.filter(function (cell) { return cell.camp === 'bottom'; }).map(function (cell) { return cell.key; }));
+  const CAMP_KEYS = {};
+  CAMP_IDS.forEach(function (camp) {
+    CAMP_KEYS[camp] = BOARD_CELLS.filter(function (cell) { return cell.camp === camp; }).map(function (cell) { return cell.key; });
+  });
 
   function createInitialPieces() {
     const pieces = {};
     TOP_CAMP.forEach(function (key) { pieces[key] = 'red'; });
     BOTTOM_CAMP.forEach(function (key) { pieces[key] = 'blue'; });
     return pieces;
+  }
+
+  /** 按座位营地布置初始局面，每个营地 10 枚同色棋子；2 人布局与 createInitialPieces 等价。 */
+  function createInitialPiecesForSeats(seatCamps) {
+    const pieces = {};
+    (Array.isArray(seatCamps) ? seatCamps : []).forEach(function (camp) {
+      if (!CAMP_KEYS[camp]) return;
+      CAMP_KEYS[camp].forEach(function (key) { pieces[key] = CAMP_COLORS[camp]; });
+    });
+    return pieces;
+  }
+
+  function seatColorsFor(seatCamps) {
+    return (Array.isArray(seatCamps) ? seatCamps : [])
+      .map(function (camp) { return CAMP_COLORS[camp] || ''; })
+      .filter(Boolean);
+  }
+
+  function campOfColor(color) {
+    return CAMP_IDS.find(function (camp) { return CAMP_COLORS[camp] === color; }) || '';
+  }
+
+  /**
+   * 对局级规则（当前仅对称跳跃开关）。客户端每局开始设置一次；
+   * 服务器按房间在每次校验/走子前设置——同步调用块内生效，多房间互不串扰。
+   */
+  const RULES = { symmetricJump: true };
+  function setRules(partial) {
+    if (!partial || typeof partial !== 'object') return Object.assign({}, RULES);
+    if (typeof partial.symmetricJump === 'boolean') RULES.symmetricJump = partial.symmetricJump;
+    return Object.assign({}, RULES);
+  }
+  function getRules() { return Object.assign({}, RULES); }
+
+  /**
+   * 从 fromKey 出发的全部跳跃落点（BFS 链跳）。
+   * 对称跳跃（默认开启）：沿任一直线方向，与被跳子之间隔 k≥0 个空位，
+   * 被跳子对称另一侧也有 k 个空位、落点为空即可跳；k=0 即经典相邻跳。
+   * 关闭对称跳跃（经典规则）时只允许跳相邻棋子（k=0）。
+   * 返回 Map(落点 → 链上前一位置)，getLegalMoves 与 findMovePath 共用，避免两份逻辑漂移。
+   */
+  function collectJumps(pieces, fromKey) {
+    const allowLongJump = RULES.symmetricJump !== false;
+    const parents = new Map();
+    const visited = new Set([fromKey]);
+    const queue = [fromKey];
+    const empty = function (key) { return key !== fromKey && !pieces[key]; };
+    while (queue.length) {
+      const currentKey = queue.shift();
+      const current = CELL_MAP.get(currentKey);
+      DIRECTIONS.forEach(function (direction) {
+        let step = 1;
+        while (true) {
+          const probeKey = keyOf(current.row + direction[0] * step, current.unit + direction[1] * step);
+          if (!CELL_MAP.has(probeKey)) return;
+          if (!empty(probeKey)) {
+            if (step > 1 && !allowLongJump) return; // 经典规则：被跳子必须相邻
+            // 探到的第一颗棋子就是被跳子；落点在它的对称位置（距离 2*step）。
+            const landingKey = keyOf(current.row + direction[0] * step * 2, current.unit + direction[1] * step * 2);
+            if (CELL_MAP.has(landingKey) && empty(landingKey) && !visited.has(landingKey)) {
+              let blocked = false;
+              for (let far = step + 1; far < step * 2; far++) {
+                if (!empty(keyOf(current.row + direction[0] * far, current.unit + direction[1] * far))) { blocked = true; break; }
+              }
+              if (!blocked) {
+                visited.add(landingKey);
+                parents.set(landingKey, currentKey);
+                queue.push(landingKey);
+              }
+            }
+            return;
+          }
+          step++;
+        }
+      });
+    }
+    return parents;
   }
 
   function getLegalMoves(pieces, fromKey) {
@@ -46,25 +156,19 @@
       if (CELL_MAP.has(targetKey) && !pieces[targetKey]) steps.push(targetKey);
     });
 
-    const jumps = [];
-    const visited = new Set([fromKey]);
-    const queue = [fromKey];
-    const occupied = function (key) { return key !== fromKey && !!pieces[key]; };
-    while (queue.length) {
-      const current = CELL_MAP.get(queue.shift());
-      DIRECTIONS.forEach(function (direction) {
-        const overKey = keyOf(current.row + direction[0], current.unit + direction[1]);
-        const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
-        if (!CELL_MAP.has(landingKey) || !occupied(overKey) || occupied(landingKey) || visited.has(landingKey)) return;
-        visited.add(landingKey);
-        jumps.push(landingKey);
-        queue.push(landingKey);
-      });
-    }
+    const jumps = Array.from(collectJumps(pieces, fromKey).keys());
     return { steps: steps, jumps: jumps, all: steps.concat(jumps) };
   }
 
-  function goalFor(player) { return player === 'red' ? BOTTOM_CAMP : TOP_CAMP; }
+  /** 目标营地 = 本方营地的对家。红=bottom、蓝=top 与旧版完全一致，其余四色按对家推广。 */
+  const GOAL_CACHES = {};
+  function goalFor(player) {
+    if (GOAL_CACHES[player]) return GOAL_CACHES[player];
+    const goalCamp = CAMP_OPPOSITE[campOfColor(player)] || 'bottom';
+    const cached = new Set(CAMP_KEYS[goalCamp] || []);
+    GOAL_CACHES[player] = cached;
+    return cached;
+  }
   function countInGoal(pieces, player) {
     let count = 0;
     goalFor(player).forEach(function (key) { if (pieces[key] === player) count++; });
@@ -79,30 +183,12 @@
     if (legal.steps.includes(targetKey)) return [fromKey, targetKey];
     if (!legal.jumps.includes(targetKey)) return null;
 
-    const visited = new Set([fromKey]);
-    const parents = new Map();
-    const queue = [fromKey];
-    const occupied = function (key) { return key !== fromKey && !!pieces[key]; };
-    while (queue.length) {
-      const currentKey = queue.shift();
-      const current = CELL_MAP.get(currentKey);
-      for (let i = 0; i < DIRECTIONS.length; i++) {
-        const direction = DIRECTIONS[i];
-        const overKey = keyOf(current.row + direction[0], current.unit + direction[1]);
-        const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
-        if (!CELL_MAP.has(landingKey) || !occupied(overKey) || occupied(landingKey) || visited.has(landingKey)) continue;
-        visited.add(landingKey);
-        parents.set(landingKey, currentKey);
-        if (landingKey === targetKey) {
-          const path = [targetKey];
-          let cursor = targetKey;
-          while (cursor !== fromKey) { cursor = parents.get(cursor); path.push(cursor); }
-          return path.reverse();
-        }
-        queue.push(landingKey);
-      }
-    }
-    return null;
+    const parents = collectJumps(pieces, fromKey);
+    if (!parents.has(targetKey)) return null;
+    const path = [targetKey];
+    let cursor = targetKey;
+    while (cursor !== fromKey) { cursor = parents.get(cursor); path.push(cursor); }
+    return path.reverse();
   }
 
   function applyMove(pieces, player, fromKey, targetKey) {
@@ -133,34 +219,43 @@
   function sanitizePieces(raw) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     const pieces = {};
-    let red = 0, blue = 0;
+    const counts = {};
     Object.keys(raw).forEach(function (key) {
       const owner = raw[key];
-      if (!CELL_MAP.has(key) || (owner !== 'red' && owner !== 'blue') || pieces[key]) return;
+      if (!CELL_MAP.has(key) || COLORS.indexOf(owner) < 0 || pieces[key]) return;
       pieces[key] = owner;
-      if (owner === 'red') red++;
-      else blue++;
+      counts[owner] = (counts[owner] || 0) + 1;
     });
-    return red === 10 && blue === 10 ? pieces : null;
+    const seats = Object.keys(counts);
+    if (!seats.length) return null;
+    return seats.every(function (color) { return counts[color] === 10; }) ? pieces : null;
+  }
+
+  /** 该颜色必须真实在场（恰好 10 枚）才能作为 turn / winner。 */
+  function isLiveColor(pieces, color) {
+    if (!pieces || COLORS.indexOf(color) < 0) return false;
+    let count = 0;
+    Object.keys(pieces).forEach(function (key) { if (pieces[key] === color) count++; });
+    return count === 10;
   }
 
   function sanitizeState(raw) {
-    if (!raw || (raw.turn !== 'red' && raw.turn !== 'blue')) return null;
+    if (!raw || !isLiveColor(raw.pieces, raw.turn)) return null;
     const pieces = sanitizePieces(raw.pieces);
     if (!pieces) return null;
-    const claimedWinner = raw.winner === 'red' || raw.winner === 'blue' ? raw.winner : '';
+    const claimedWinner = isLiveColor(pieces, raw.winner) && hasWon(pieces, raw.winner) ? raw.winner : '';
     return {
       pieces: pieces,
       turn: raw.turn,
       moveNumber: Math.max(1, Math.min(9999, Math.floor(Number(raw.moveNumber) || 1))),
-      winner: claimedWinner && hasWon(pieces, claimedWinner) ? claimedWinner : '',
+      winner: claimedWinner,
       lastMove: sanitizeLastMove(raw.lastMove, pieces)
     };
   }
 
   function sanitizeLastMove(raw, pieces) {
     if (!raw) return null;
-    if (!raw || (raw.player !== 'red' && raw.player !== 'blue')) return null;
+    if (!raw || COLORS.indexOf(raw.player) < 0) return null;
     const from = typeof raw.from === 'string' && CELL_MAP.has(raw.from) ? raw.from : '';
     const target = typeof raw.target === 'string' && CELL_MAP.has(raw.target) ? raw.target : '';
     if (!from || !target || !pieces || pieces[target] !== raw.player || pieces[from]) return null;
@@ -399,7 +494,8 @@
 
   function positionKey(pieces) {
     return BOARD_CELLS.map(function (cell) {
-      return pieces[cell.key] === 'red' ? 'r' : (pieces[cell.key] === 'blue' ? 'b' : '.');
+      const owner = pieces[cell.key];
+      return owner ? (COLOR_LETTERS[owner] || '?') : '.';
     }).join('');
   }
 
@@ -719,8 +815,13 @@
     ROW_COUNTS: ROW_COUNTS.slice(), DIRECTIONS: DIRECTIONS.map(function (d) { return d.slice(); }),
     BOARD_CELLS: BOARD_CELLS.map(function (cell) { return Object.assign({}, cell); }),
     TOP_CAMP: Array.from(TOP_CAMP), BOTTOM_CAMP: Array.from(BOTTOM_CAMP),
+    CAMP_IDS: CAMP_IDS.slice(), CAMP_COLORS: Object.assign({}, CAMP_COLORS),
+    CAMP_OPPOSITE: Object.assign({}, CAMP_OPPOSITE), CAMP_KEYS: CAMP_KEYS,
+    SEAT_LAYOUTS: SEAT_LAYOUTS, COLORS: COLORS.slice(),
     VALUE_FEATURE_VERSION: VALUE_FEATURE_VERSION,
     keyOf: keyOf, buildBoardCells: buildBoardCells, createInitialPieces: createInitialPieces,
+    createInitialPiecesForSeats: createInitialPiecesForSeats, seatColorsFor: seatColorsFor,
+    campOfColor: campOfColor, collectJumps: collectJumps,
     getLegalMoves: getLegalMoves, findMovePath: findMovePath, applyMove: applyMove,
     countInGoal: countInGoal, hasWon: hasWon, orientPoint: orientPoint,
     sanitizePieces: sanitizePieces, sanitizeState: sanitizeState, sanitizeLastMove: sanitizeLastMove,
@@ -728,6 +829,7 @@
     extractValueFeatures: extractValueFeatures, predictValueModel: predictValueModel,
     evaluateHybridPosition: evaluateHybridPosition, positionKey: positionKey,
     transpositionKey: transpositionKey,
+    setRules: setRules, getRules: getRules,
     analyzeAiMoves: analyzeAiMoves, chooseAiMove: chooseAiMove
   };
 });

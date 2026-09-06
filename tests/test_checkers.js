@@ -39,6 +39,7 @@ const modelSource = fs.readFileSync('public/checkers/checkers_ai_model.js', 'utf
 const source = fs.readFileSync('public/checkers/checkers.js', 'utf8');
 const workerSource = fs.readFileSync('public/checkers/checkers_ai_worker.js', 'utf8');
 const lobbyHtml = fs.readFileSync('public/checkers/index.html', 'utf8');
+const lobbySource = fs.readFileSync('public/checkers/lobby.js', 'utf8');
 const playHtml = fs.readFileSync('public/checkers/play.html', 'utf8');
 const css = fs.readFileSync('public/checkers/checkers.css', 'utf8');
 const labHtml = fs.readFileSync('public/checkers/lab.html', 'utf8');
@@ -95,8 +96,10 @@ ok('棋盘模型输出 121 个孔位，并把坐标归一化到 0~1',
   baseModel.cells.every(function (cell) {
     return cell.x >= 0 && cell.x <= 1 && cell.y >= 0 && cell.y <= 1;
   }));
-ok('棋盘模型同时给出营地、选中、落点与键盘焦点标记',
-  campCells.length === 20 && campCells.every(function (cell) { return cell.camp === 'top' || cell.camp === 'bottom'; }) &&
+ok('棋盘模型同时给出六色营地、选中、落点与键盘焦点标记',
+  campCells.length === 60 && C.CAMP_IDS.every(function (camp) {
+    return campCells.filter(function (cell) { return cell.camp === camp; }).length === 10;
+  }) &&
   baseModel.cells.some(function (cell) { return cell.key === '3:-3' && cell.selected && !cell.moveKind; }) &&
   markedTargets.length === legalTargets &&
   markedTargets.every(function (cell) { return cell.moveKind === 'step' || cell.moveKind === 'jump'; }) &&
@@ -213,7 +216,8 @@ const boardSandbox = {
   document: {
     createElement: createNode,
     createElementNS: function (_ns, tag) { return createNode(tag); },
-    getElementById: function (id) { return boardNodes[id] || null; }
+    getElementById: function (id) { return boardNodes[id] || null; },
+    querySelector: function () { return null; }
   },
   location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai', search: '?mode=ai' },
   navigator: {},
@@ -285,8 +289,8 @@ const defNodes = pieceLayer.children.filter(function (node) { return hasClass(no
 const allIds = defNodes.length === 1 ? collectAttrs(defNodes[0], ['id']) : [];
 const pieceSample = pieceNodes.find(function (node) { return hasClass(node, 'red-piece'); });
 const pieceSvg = pieceSample ? pieceSample.children[0] : null;
-ok('棋子渐变、暗角与裁剪滤镜全站只注入一份 defs，20 颗棋子不会互相串色',
-  defNodes.length === 1 && allIds.length === 12 && new Set(allIds).size === allIds.length &&
+ok('六色棋子渐变、暗角与裁剪滤镜全站只注入一份 defs，棋子之间不会互相串色',
+  defNodes.length === 1 && allIds.length === 28 && new Set(allIds).size === allIds.length &&
   allIds.indexOf('ckclip-marble') >= 0 && allIds.indexOf('ckg-soft') >= 0);
 ok('棋子内嵌 SVG 正确创建，颜色写死在渐变里而不是依赖属性中的 var()',
   pieceSvg && pieceSvg.getAttribute('viewBox') === '0 0 100 100' &&
@@ -331,6 +335,53 @@ ok('连续跳跃会一次标出全部可达落点',
 const chainPath = C.findMovePath(chainPieces, '8:0', '8:8');
 ok('连续跳跃会保留每一段经过的孔位',
   chainPath && chainPath.join(',') === '8:0,8:4,8:8');
+
+const symmetricPieces = { '8:0': 'red', '8:4': 'blue' };
+const symmetricPath = C.findMovePath(symmetricPieces, '8:0', '8:8');
+ok('对称跳跃默认开启：隔一个空位也能越过并落在对称位置',
+  C.getLegalMoves(symmetricPieces, '8:0').jumps.includes('8:8') &&
+  symmetricPath && symmetricPath.join(',') === '8:0,8:8');
+const blockedPieces = { '8:0': 'red', '8:4': 'blue', '8:6': 'blue' };
+ok('对称跳跃要求被跳子另一侧空位对称，否则拒绝起跳',
+  !C.getLegalMoves(blockedPieces, '8:0').jumps.includes('8:8'));
+
+ok('对称跳跃提供开关：经典模式只允许跳相邻棋子并拒绝远跳落子',
+  (function () {
+    const farTarget = { '8:0': 'red', '8:4': 'blue' };
+    const nearTarget = { '8:0': 'red', '8:2': 'blue' };
+    try {
+      C.setRules({ symmetricJump: false });
+      const classicMoves = C.getLegalMoves(farTarget, '8:0');
+      const classicNear = C.getLegalMoves(nearTarget, '8:0');
+      if (classicMoves.jumps.includes('8:8')) return false;
+      if (!classicNear.jumps.includes('8:4')) return false;
+      if (C.applyMove(farTarget, 'red', '8:0', '8:8') !== null) return false;
+      if (!C.applyMove(nearTarget, 'red', '8:0', '8:4')) return false;
+      if (C.getRules().symmetricJump !== false) return false;
+      return true;
+    } finally {
+      C.setRules({ symmetricJump: true });
+    }
+  })());
+
+const twoSeatPieces = C.createInitialPiecesForSeats(['top', 'bottom']);
+const classicPieces = C.createInitialPieces();
+const seatPieces3 = C.createInitialPiecesForSeats(C.SEAT_LAYOUTS[3]);
+const seatPieces6 = C.createInitialPiecesForSeats(C.SEAT_LAYOUTS[6]);
+const seatColors6 = C.seatColorsFor(C.SEAT_LAYOUTS[6]);
+ok('多席位初始局面按营地铺子，2 人布局与经典红蓝完全等价',
+  Object.keys(twoSeatPieces).length === 20 &&
+  Object.keys(classicPieces).every(function (key) { return twoSeatPieces[key] === classicPieces[key]; }));
+ok('3-6 席位各领 10 枚同色棋子，目标营地互为对面',
+  Object.keys(seatPieces3).length === 30 && Object.keys(seatPieces6).length === 60 &&
+  seatColors6.length === 6 && new Set(seatColors6).size === 6 &&
+  C.CAMP_OPPOSITE[C.campOfColor('green')] === 'll' && C.campOfColor('orange') === 'ul' &&
+  C.seatColorsFor(C.SEAT_LAYOUTS[3]).length === 3);
+ok('状态净化接受 3 色棋局并保持回合与手数有效',
+  (function () {
+    const state = C.sanitizeState({ pieces: seatPieces3, turn: 'yellow', moveNumber: 5, winner: '' });
+    return !!state && state.turn === 'yellow' && state.moveNumber === 5;
+  })());
 
 const aiMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0);
 ok('电脑可以从初始棋局选择一条合法蓝方走法',
@@ -412,9 +463,77 @@ ok('上一步来源、落点和路线会随棋局状态安全恢复',
 ok('棋子数量不完整或位置越界的状态会被拒绝',
   C.sanitizeState({ pieces: { '99:99': 'red' }, turn: 'red' }) === null);
 
-ok('大厅提供人机、本地双人、联机三种入口且不再混放棋盘',
+ok('大厅提供人机、本地多人、联机三种入口且不再混放棋盘',
   /id="startAiBtn"/.test(lobbyHtml) && /id="startLocalBtn"/.test(lobbyHtml) &&
   /id="createRoomBtn"/.test(lobbyHtml) && !/id="checkerBoard"/.test(lobbyHtml));
+ok('本地对战支持 2-6 人选择与 0-4 电脑补位',
+  /data-players="6"/.test(lobbyHtml) && /data-ai="4"/.test(lobbyHtml) &&
+  /id="localSeatHint"/.test(lobbyHtml) &&
+  /SEAT_LAYOUTS\[playerCount\]/.test(source) && /chooseSeatMove/.test(source) &&
+  /ensurePlayerRows\(\)/.test(source) && /seatsFromSave/.test(source));
+ok('联机建房可选 0-4 个电脑并自选强度，好友加入即开局',
+  /data-bots="4"/.test(lobbyHtml) && /data-bot-level="hard"/.test(lobbyHtml) &&
+  /id="onlineBotHint"/.test(lobbyHtml) &&
+  /selectOnlineBots/.test(lobbySource) && /params\.bots = onlineBots/.test(lobbySource) &&
+  /BOT_LEVEL_KEY/.test(lobbySource));
+ok('联机建房把电脑个数与强度带到 join 消息，房间席位由服务器广播',
+  /payload\.bots = online\.bots/.test(source) && /launchParams\.get\('bots'\)/.test(source) &&
+  /message\.seats/.test(source) && /seats = online\.seats\.map/.test(source) &&
+  /function onlinePlayer\(color\) \{ return online\.seats\.find/.test(source) &&
+  /online\.seats\.every\(function \(seat\) \{ return seat\.isBot \|\| seat\.online; \}\)/.test(source));
+ok('服务器按 2 真人 + N 电脑规划席位，真人固定红蓝对家',
+  (function () {
+    const planMatch = serverSource.match(/function planCheckersSeats[\s\S]*?\n\}/);
+    if (!planMatch) return false;
+    const planFn = vm.runInNewContext('(' + planMatch[0] + ')', { CheckersCore: C, Math: Math });
+    for (let bots = 0; bots <= 4; bots++) {
+      const planned = planFn(bots);
+      if (planned.length !== 2 + bots) return false;
+      if (planned[0].isBot || planned[0].color !== 'red') return false;
+      const humans = planned.filter(function (seat) { return !seat.isBot; });
+      if (humans.length !== 2) return false;
+      if (bots !== 1 && humans[1].color !== 'blue') return false;
+    }
+    return planFn(1).every(function (seat) {
+      return !seat.isBot || (seat.color !== 'red' && seat.color !== 'blue');
+    });
+  })());
+ok('服务器托管电脑走子：join 解析 bots/level，落子与真人共用校验链并按席位轮转',
+  /createCheckersRoom\(code, clientIp, botCount, /.test(serverSource) &&
+  /Number\(m\.bots\)/.test(serverSource) &&
+  /function nextCheckersTurn/.test(serverSource) &&
+  /function scheduleCheckersBotMove/.test(serverSource) &&
+  /function runCheckersBotMove/.test(serverSource) &&
+  /CheckersCore\.chooseAiMove\(room\.pieces, seat\.color, room\.botLevel/.test(serverSource) &&
+  /clearCheckersBotTimer\(room\)/.test(serverSource));
+ok('联机房间支持经典/对称规则切换：建房解析 jump，广播携带，校验与电脑走子前按房间设置规则',
+  /symmetricJump: jump !== 'classic'/.test(serverSource) &&
+  /typeof m\.jump === 'string' \? m\.jump : ''/.test(serverSource) &&
+  /symmetricJump: jump !== 'classic',\n    pieces:/.test(serverSource.replace(/\r\n/g, '\n')) &&
+  /symmetricJump: room\.symmetricJump !== false,\n    seats: checkersSeatList/.test(serverSource.replace(/\r\n/g, '\n')) &&
+  /function applyCheckersRules/.test(serverSource) &&
+  (serverSource.match(/applyCheckersRules\(room\);/g) || []).length >= 3);
+ok('客户端读取 jump 参数、存档与联机广播同步规则，Worker 搜索同规则',
+  /launchParams\.get\('jump'\) !== 'classic'/.test(source) &&
+  /Core\.setRules\(\{ symmetricJump: symmetricJump \}\)/.test(source) &&
+  /symmetricJump: symmetricJump \}\);/.test(source) &&
+  /message\.symmetricJump !== false/.test(source) &&
+  /symmetricJump: symmetricJump,/.test(source) &&
+  /function updateRulesCard/.test(source) &&
+  /ruleSymJump/.test(playHtml));
+ok('三处玩法配置都能切换跳跃规则，选择随启动参数传递',
+  (lobbyHtml.match(/data-jump="classic"/g) || []).length === 3 &&
+  (lobbyHtml.match(/data-jump="symmetric"/g) || []).length === 3 &&
+  /function selectJump/.test(lobbySource) &&
+  /JUMP_KEY/.test(lobbySource) &&
+  /params\.jump = 'classic'/.test(lobbySource) &&
+  /checkers_core\.js\?v=20260906b/.test(playHtml) &&
+  /checkers\.js\?v=20260906k/.test(playHtml));
+ok('联机状态广播携带席位列表，电脑席位由服务端直发',
+  /seats: checkersSeatList\(room\)/.test(serverSource) &&
+  /nick: seat\.isBot \? '电脑'/.test(serverSource) &&
+  /online: seat\.isBot \? true/.test(serverSource) &&
+  /scheduleCheckersBotMove\(room\);\n\}/.test(serverSource.replace(/\r\n/g, '\n')));
 ok('AI 训练实验室保持为未展示的开发工具而不进入玩家大厅',
   !/href="lab\.html"/.test(lobbyHtml) && /id="labBoard"/.test(labHtml) &&
   /\/ai-lab\/live/.test(labSource) && /setInterval\(pollLiveTraining, 800\)/.test(labSource) &&
@@ -438,6 +557,11 @@ ok('游戏页提供上一步说明，棋盘能绘制来源、落点和完整路�
 ok('相邻落点与跳跃落点使用不同提示，不再共用简陋圆点',
   /step-target/.test(css) && /jump-target/.test(css) && /step-dot/.test(playHtml) && /jump-dot/.test(playHtml));
 ok('手机布局保持单列与正方形棋盘', /@media\s*\(max-width:\s*820px\)/.test(css) && /aspect-ratio:\s*1(?:\s*\/\s*1)?/.test(css));
+ok('六色目标营地与多席位面板样式就位，规则卡写明对称长跳规则',
+  /\.green-goal-zone/.test(css) && /\.yellow-goal-zone/.test(css) &&
+  /\.purple-goal-zone/.test(css) && /\.orange-goal-zone/.test(css) &&
+  /\.players-card\.multi/.test(css) && /\.difficulty-picker button:disabled/.test(css) &&
+  /\.field-note\{/.test(css) && /对称长跳/.test(playHtml));
 ok('邀请链接和联机地址使用跳棋专属入口',
   /new URL\('index\.html'/.test(source) && /searchParams\.set\('room'/.test(source) &&
   T.websocketUrl() === 'wss://game.test/checkers-ws');
