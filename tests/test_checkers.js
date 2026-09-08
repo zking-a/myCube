@@ -253,6 +253,11 @@ ok('孔位与棋子按归一化坐标定位，不会全部堆在棋盘角落',
   pieceNodes.every(function (node) { return /%$/.test(node.style.left) && /%$/.test(node.style.top); }));
 
 const pieceBefore = pieceNodes.find(function (node) { return node.dataset.key === '3:-3'; });
+const shadowBefore = shadowLayer.children.find(function (node) { return node.dataset.key === '3:-3'; });
+pieceLayer.offsetWidth = 640;
+pieceLayer.offsetHeight = 640;
+pieceBefore.animate = function (frames) { this.moveFrames = frames; };
+shadowBefore.animate = function (frames) { this.moveFrames = frames; };
 vm.runInContext(`
   const moved = Core.applyMove(pieces, 'red', '3:-3', '4:-4');
   pieces = moved.pieces;
@@ -262,6 +267,11 @@ vm.runInContext(`
 ok('走子复用棋子节点而不是重建，位移动画才有意义',
   pieceNodes.length === 20 && pieceNodes.indexOf(pieceBefore) >= 0 &&
   pieceBefore.dataset.key === '4:-4' && holeLayer.children.length === 121);
+ok('走子动画从原孔位开始，比例坐标直接换算为像素',
+  pieceBefore.moveFrames && pieceBefore.moveFrames[0].translate === '-21.60px 36.00px 0px');
+ok('移动阴影复用原节点并与棋子播放相同平面位移',
+  shadowLayer.children.includes(shadowBefore) && shadowBefore.dataset.key === '4:-4' &&
+  shadowBefore.moveFrames && shadowBefore.moveFrames[0].translate === '-21.60px 36.00px 0px');
 ok('接触阴影独立成层，与棋子同键同步且初始不抬起',
   shadowLayer && shadowLayer.children.length === 20 &&
   pieceNodes.every(function (node) {
@@ -495,7 +505,7 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
   /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20260906l/.test(playHtml) &&
+  /checkers\.js\?v=20260908a/.test(playHtml) &&
   /checkers\.css\?v=20260906k/.test(playHtml) &&
   /checkers\.css\?v=20260906k/.test(lobbyHtml) &&
   /lobby\.js\?v=20260906l/.test(lobbyHtml));
@@ -549,5 +559,17 @@ ok('服务器限制单一来源建房并为未匹配房间设置不可续期寿�
   /MAX_ROOMS_PER_IP/.test(serverSource) && /countRoomsForIp\(clientIp\)/.test(serverSource) &&
   /now - room\.createdAt > UNMATCHED_ROOM_TTL_MS/.test(serverSource));
 ok('服务器为无尾斜杠跳棋地址提供稳定重定向', /'\/checkers': '\/checkers\/'/.test(serverSource));
+
+const freshSeatCounts = vm.runInContext(`
+  [2, 3, 4, 5, 6].map(function (count) {
+    seats = Core.seatColorsFor(Core.SEAT_LAYOUTS[count]).map(function (color) {
+      return { color: color, isAI: false };
+    });
+    resetState();
+    return Object.keys(pieces).length;
+  });
+`, boardSandbox);
+ok('全新二至六人棋局按席位营地各放置十枚棋子',
+  JSON.stringify(freshSeatCounts) === '[20,30,40,50,60]');
 
 console.log('\n✅ 中国跳棋核心测试全部通过（' + passed + ' 项）');

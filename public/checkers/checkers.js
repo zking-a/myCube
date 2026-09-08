@@ -302,7 +302,7 @@ function loadGame() {
 }
 
 function resetState() {
-  pieces = Core.createInitialPiecesForSeats(seats.map(function (seat) { return seat.color; }));
+  pieces = Core.createInitialPiecesForSeats(seats.map(function (seat) { return Core.campOfColor(seat.color); }));
   turn = seats.length ? seats[0].color : 'red';
   selectedKey = ''; legalMoves = emptyMoves();
   history = []; moveNumber = 1; gameOver = ''; lastMove = null; aiThinking = false;
@@ -577,8 +577,9 @@ function animateSlide(node, from, to, kind, isShadow) {
   const width = dom.pieceLayer.offsetWidth;
   const height = dom.pieceLayer.offsetHeight;
   if (!width || !height) return;
-  const dx = (from.x - to.x) / 100 * width;
-  const dy = (from.y - to.y) / 100 * height;
+  // 模型坐标已归一化到 0..1，直接乘以棋盘尺寸得到完整位移。
+  const dx = (from.x - to.x) * width;
+  const dy = (from.y - to.y) * height;
   if (!dx && !dy) return;
   const lift = isShadow ? 0 : (kind === 'jump' ? 26 : 12);
   node.animate(
@@ -685,8 +686,9 @@ function renderBoard() {
   syncZones(model);
   syncRoutes(model);
   syncHoles(model, reorient);
-  syncShadows(model, reorient);
   syncPieces(model, reorient);
+  // 先让移动棋子及其阴影改键，再清理旧孔位，保留阴影节点和动画。
+  syncShadows(model, reorient);
 }
 
 function applyBoardModeLayout(view) {
