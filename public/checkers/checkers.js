@@ -439,6 +439,7 @@ function buildBoardModel() {
     zones: buildZoneModels(),
     move: lastMove ? {
       from: lastMove.from, target: lastMove.target, kind: lastMove.kind,
+      path: lastMove.path.slice(),
       id: [lastMove.player, lastMove.from, lastMove.target, lastMove.moveNumber].join('|')
     } : null
   };
@@ -572,7 +573,7 @@ function prefersReducedMotion() {
  * 只动 translate 属性（transform 被 -50% 居中 + 抵消棋盘倾斜占用），位移全程走合成器，
  * 不会逐帧重排/重绘整块木纹棋盘——left/top 过渡正是之前走棋卡顿的元凶。
  */
-function animateSlide(node, from, to, kind, isShadow) {
+function animateSlide(node, from, to, kind, isShadow, path) {
   if (!node || !from || !to || typeof node.animate !== 'function' || prefersReducedMotion()) return;
   const width = dom.pieceLayer.offsetWidth;
   const height = dom.pieceLayer.offsetHeight;
@@ -582,6 +583,23 @@ function animateSlide(node, from, to, kind, isShadow) {
   const dy = (from.y - to.y) * height;
   if (!dx && !dy) return;
   const lift = isShadow ? 0 : (kind === 'jump' ? 26 : 12);
+  if (kind === 'jump' && path && path.length >= 2 && path.every(Boolean)) {
+    const hops = path.length - 1;
+    const frame = function (x, y, z, offset) {
+      return { translate: x.toFixed(2) + 'px ' + y.toFixed(2) + 'px ' + z + 'px', offset: offset };
+    };
+    const frames = [frame(dx, dy, 0, 0)];
+    for (let i = 1; i < path.length; i++) {
+      const start = path[i - 1], end = path[i];
+      const midX = ((start.x + end.x) / 2 - to.x) * width;
+      const midY = ((start.y + end.y) / 2 - to.y) * height;
+      // 平面视角用向上位移表现腾空；3D 视角沿棋盘法线抬起。
+      frames.push(frame(midX, midY - (boardView === '2d' ? lift * .6 : 0), boardView === '2d' ? 0 : lift, (i - .5) / hops));
+      frames.push(frame((end.x - to.x) * width, (end.y - to.y) * height, 0, i / hops));
+    }
+    node.animate(frames, { duration: Math.min(1100, hops * 240), easing: 'linear' });
+    return;
+  }
   node.animate(
     [
       { translate: dx.toFixed(2) + 'px ' + dy.toFixed(2) + 'px 0px' },
@@ -634,15 +652,16 @@ function syncPieces(model, reorient) {
       dom.pieceNodes.set(model.move.target, moving);
       const spot = positionOf.get(model.move.target);
       const fromSpot = positionOf.get(model.move.from);
+      const path = model.move.path.map(function (key) { return positionOf.get(key); });
       placeNode(moving, spot.x, spot.y);
-      animateSlide(moving, fromSpot, spot, model.move.kind, false);
+      animateSlide(moving, fromSpot, spot, model.move.kind, false, path);
       // 阴影跟着改键，否则它会被当成「消失的棋子」删掉重建，接不住位移动画。
       const shadow = dom.shadowNodes.get(model.move.from);
       if (shadow && !dom.shadowNodes.has(model.move.target)) {
         dom.shadowNodes.delete(model.move.from);
         dom.shadowNodes.set(model.move.target, shadow);
         placeNode(shadow, spot.x, spot.y);
-        animateSlide(shadow, fromSpot, spot, model.move.kind, true);
+        animateSlide(shadow, fromSpot, spot, model.move.kind, true, path);
       }
     }
   }

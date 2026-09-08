@@ -505,7 +505,7 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
   /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20260908d/.test(playHtml) &&
+  /checkers\.js\?v=20260908e/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(lobbyHtml) &&
   /lobby\.js\?v=20260906l/.test(lobbyHtml));
@@ -657,5 +657,28 @@ ok('结束对局后重开，双人与六人球体颜色立即匹配新棋局且�
   restartColors.every(function (result, i) {
     return result.correct && result.count === (i === 0 ? 20 : 60) && result.reusedShells && result.stableSvg;
   }));
+
+const routeAnimation = vm.runInContext(`
+  (function () {
+    pieces = { '8:0': 'red', '7:1': 'blue', '6:4': 'blue' };
+    selectedKey = ''; lastMove = null; renderBoard();
+    const moving = dom.pieceNodes.get('8:0'), shadow = dom.shadowNodes.get('8:0');
+    const captured = {};
+    moving.animate = function (frames, options) { captured.piece = frames; captured.duration = options.duration; };
+    shadow.animate = function (frames) { captured.shadow = frames; };
+    const result = Core.applyMove(pieces, 'red', '8:0', '6:6');
+    pieces = result.pieces;
+    lastMove = { player: 'red', from: '8:0', target: '6:6', kind: result.kind, path: result.path, moveNumber: 1 };
+    renderBoard();
+    captured.path = result.path;
+    return captured;
+  })();
+`, boardSandbox);
+ok('连续跳跃动画经过转弯的中间落点，阴影逐段贴地跟随',
+  JSON.stringify(routeAnimation.path) === '["8:0","6:2","6:6"]' &&
+  routeAnimation.piece.length === 5 && routeAnimation.shadow.length === 5 &&
+  routeAnimation.piece[2].translate === '86.40px 0.00px 0px' &&
+  routeAnimation.shadow[2].translate === routeAnimation.piece[2].translate &&
+  routeAnimation.duration > 360 && routeAnimation.duration <= 1200);
 
 console.log('\n✅ 中国跳棋核心测试全部通过（' + passed + ' 项）');
