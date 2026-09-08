@@ -505,9 +505,9 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
   /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20260908a/.test(playHtml) &&
-  /checkers\.css\?v=20260906k/.test(playHtml) &&
-  /checkers\.css\?v=20260906k/.test(lobbyHtml) &&
+  /checkers\.js\?v=20260908c/.test(playHtml) &&
+  /checkers\.css\?v=20260908b/.test(playHtml) &&
+  /checkers\.css\?v=20260908b/.test(lobbyHtml) &&
   /lobby\.js\?v=20260906l/.test(lobbyHtml));
 ok('联机状态广播携带席位列表，电脑席位由服务端直发',
   /seats: checkersSeatList\(room\)/.test(serverSource) &&
@@ -559,6 +559,61 @@ ok('服务器限制单一来源建房并为未匹配房间设置不可续期寿�
   /MAX_ROOMS_PER_IP/.test(serverSource) && /countRoomsForIp\(clientIp\)/.test(serverSource) &&
   /now - room\.createdAt > UNMATCHED_ROOM_TTL_MS/.test(serverSource));
 ok('服务器为无尾斜杠跳棋地址提供稳定重定向', /'\/checkers': '\/checkers\/'/.test(serverSource));
+
+const hitResults = vm.runInContext(`
+  (function () {
+    const oldNodes = dom.pieceNodes; const oldHandler = handleCell;
+    const hits = [];
+    try {
+      handleCell = function (key) { hits.push(key); };
+      dom.pieceNodes = new Map([['2:-2', { getBoundingClientRect: function () {
+        return { left: 100, top: 100, width: 40, height: 40 };
+      } }]]);
+      const target = { closest: function () { return { dataset: { key: '3:-3' } }; } };
+      onBoardClick({ clientX: 120, clientY: 138, target: target });
+      onBoardClick({ clientX: 100, clientY: 100, target: target });
+      onBoardClick({ target: target });
+      dom.pieceNodes.get('2:-2').getBoundingClientRect = function () {
+        return { left: 100, top: 80, width: 40, height: 40 };
+      };
+      onBoardClick({ clientX: 120, clientY: 82, target: target });
+      return hits;
+    } finally { dom.pieceNodes = oldNodes; handleCell = oldHandler; }
+  })();
+`, boardSandbox);
+ok('球面边缘和浮起位置优先命中棋子，圆外与无坐标点击仍使用孔位',
+  JSON.stringify(hitResults) === '["2:-2","3:-3","3:-3","2:-2"]');
+
+const placementHits = vm.runInContext(`
+  (function () {
+    const oldCells = dom.cells; const oldPieces = dom.pieceNodes;
+    const oldHandler = handleCell; const oldSelected = selectedKey; const oldLegal = legalMoves;
+    const hits = [];
+    try {
+      handleCell = function (key) { hits.push(key); };
+      dom.pieceNodes = new Map();
+      dom.cells = new Map(['4:-4', '4:-2'].map(function (key, i) {
+        return [key, { getBoundingClientRect: function () {
+          return { left: 100 + i * 30, top: 100, width: 40, height: 40 };
+        } }];
+      }));
+      selectedKey = '3:-3'; legalMoves = { all: ['4:-4', '4:-2'] };
+      const target = { closest: function () { return null; } };
+      onBoardClick({ clientX: 120, clientY: 120, target: target });
+      onBoardClick({ clientX: 120, clientY: 138, target: target });
+      onBoardClick({ clientX: 138, clientY: 120, target: target });
+      onBoardClick({ clientX: 80, clientY: 120, target: target });
+      selectedKey = '';
+      onBoardClick({ clientX: 120, clientY: 120, target: target });
+      return hits;
+    } finally {
+      dom.cells = oldCells; dom.pieceNodes = oldPieces; handleCell = oldHandler;
+      selectedKey = oldSelected; legalMoves = oldLegal;
+    }
+  })();
+`, boardSandbox);
+ok('落点中心与边缘均可命中，重叠区域取最近落点，未选子和热区外不落子',
+  JSON.stringify(placementHits) === '["4:-4","4:-4","4:-2"]');
 
 const freshSeatCounts = vm.runInContext(`
   [2, 3, 4, 5, 6].map(function (count) {

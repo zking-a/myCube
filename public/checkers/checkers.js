@@ -1118,6 +1118,35 @@ function onBoardKeydown(event) {
 }
 
 function onBoardClick(event) {
+  // 3D 球体与孔位处于不同平面，浏览器可能把可见球面命中到后方孔位。
+  // 按球体当前屏幕位置选取最近的圆形热区，也覆盖选中后的浮起位置。
+  let pieceKey = ''; let nearest = Infinity;
+  if (Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+    dom.pieceNodes.forEach(function (piece, key) {
+      const rect = piece.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dx = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+      const dy = (event.clientY - rect.top - rect.height / 2) / (rect.height / 2);
+      const distance = dx * dx + dy * dy;
+      if (distance <= 1 && distance < nearest) { nearest = distance; pieceKey = key; }
+    });
+  }
+  if (pieceKey) { handleCell(pieceKey); return; }
+  // 落点使用同样的屏幕坐标命中，保留孔位的扩大热区，并取最近合法落点。
+  let targetKey = ''; let targetDistance = Infinity;
+  if (selectedKey && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+    legalMoves.all.forEach(function (key) {
+      const cell = dom.cells.get(key);
+      if (!cell) return;
+      const rect = cell.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const dx = (event.clientX - rect.left - rect.width / 2) / (rect.width / 2);
+      const dy = (event.clientY - rect.top - rect.height / 2) / (rect.height / 2);
+      const distance = dx * dx + dy * dy;
+      if (distance <= 1 && distance < targetDistance) { targetDistance = distance; targetKey = key; }
+    });
+  }
+  if (targetKey) { handleCell(targetKey); return; }
   const node = event.target && event.target.closest ? event.target.closest('[data-key]') : null;
   if (node && node.dataset && node.dataset.key) handleCell(node.dataset.key);
 }
