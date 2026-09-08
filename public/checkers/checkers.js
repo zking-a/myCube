@@ -660,12 +660,17 @@ function syncPieces(model, reorient) {
     if (!node) {
       node = document.createElement('span');
       node.className = 'ck-piece';
-      node.appendChild(buildPieceNode(piece.owner, document));
       dom.pieceLayer.appendChild(node);
       dom.pieceNodes.set(piece.key, node);
       placeNode(node, piece.x, piece.y);
     } else if (reorient) {
       placeNode(node, piece.x, piece.y);
+    }
+    // 重开或同步新棋局时，同一孔位可能换了阵营；SVG 的渐变颜色不会随 class 自动更新。
+    if (node.dataset.owner !== piece.owner) {
+      node.replaceChildren();
+      node.appendChild(buildPieceNode(piece.owner, document));
+      node.dataset.owner = piece.owner;
     }
     node.dataset.key = piece.key;
     node.classList.toggle('red-piece', piece.owner === 'red');

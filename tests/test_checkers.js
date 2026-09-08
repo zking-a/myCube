@@ -505,7 +505,7 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
   /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20260908c/.test(playHtml) &&
+  /checkers\.js\?v=20260908d/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(lobbyHtml) &&
   /lobby\.js\?v=20260906l/.test(lobbyHtml));
@@ -626,5 +626,36 @@ const freshSeatCounts = vm.runInContext(`
 `, boardSandbox);
 ok('全新二至六人棋局按席位营地各放置十枚棋子',
   JSON.stringify(freshSeatCounts) === '[20,30,40,50,60]');
+
+const restartColors = vm.runInContext(`
+  [2, 6].map(function (count) {
+    seats = Core.seatColorsFor(Core.SEAT_LAYOUTS[count]).map(function (color) {
+      return { color: color, isAI: false };
+    });
+    // 从已完成对局开始：每方棋子都位于对家营地，确保旧球体颜色真实存在。
+    pieces = {}; lastMove = null; renderBoard();
+    seats.forEach(function (seat) {
+      Core.CAMP_KEYS[Core.CAMP_OPPOSITE[Core.campOfColor(seat.color)]].forEach(function (key) {
+        pieces[key] = seat.color;
+      });
+    });
+    gameOver = 'red'; renderBoard();
+    const oldShells = new Map(dom.pieceNodes);
+    resetGame(true);
+    const correct = Array.from(dom.pieceNodes).every(function (entry) {
+      const key = entry[0], node = entry[1];
+      return node.children[0].children[0].children[0].getAttribute('fill') === 'url(#ckg-' + pieces[key] + '-base)';
+    });
+    const stable = new Map(Array.from(dom.pieceNodes, function (entry) { return [entry[0], entry[1].children[0]]; }));
+    renderBoard();
+    return { correct: correct, count: dom.pieceNodes.size,
+      reusedShells: Array.from(oldShells).every(function (entry) { return dom.pieceNodes.get(entry[0]) === entry[1]; }),
+      stableSvg: Array.from(stable).every(function (entry) { return dom.pieceNodes.get(entry[0]).children[0] === entry[1]; }) };
+  });
+`, boardSandbox);
+ok('结束对局后重开，双人与六人球体颜色立即匹配新棋局且普通重绘不重建球体',
+  restartColors.every(function (result, i) {
+    return result.correct && result.count === (i === 0 ? 20 : 60) && result.reusedShells && result.stableSvg;
+  }));
 
 console.log('\n✅ 中国跳棋核心测试全部通过（' + passed + ' 项）');
