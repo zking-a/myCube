@@ -505,7 +505,7 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
   /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20260908e/.test(playHtml) &&
+  /checkers\.js\?v=20261013a/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(playHtml) &&
   /checkers\.css\?v=20260908b/.test(lobbyHtml) &&
   /lobby\.js\?v=20260906l/.test(lobbyHtml));

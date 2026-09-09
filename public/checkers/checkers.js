@@ -327,18 +327,58 @@ function showToast(message) {
   toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2100);
 }
 
-function playTone(kind) {
+/* ---------- 音效：复用同一个 AudioContext，短促有层次的提示音 ---------- */
+let toneContext = null;
+function ensureToneContext() {
   const AudioEngine = window.AudioContext || window.webkitAudioContext;
-  if (!soundEnabled || !AudioEngine) return;
+  if (!soundEnabled || !AudioEngine) return null;
   try {
-    const context = new AudioEngine(); const oscillator = context.createOscillator(); const gain = context.createGain();
-    oscillator.type = 'sine'; oscillator.frequency.value = kind === 'jump' ? 620 : (kind === 'win' ? 760 : 470);
-    gain.gain.setValueAtTime(.045, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + (kind === 'win' ? .32 : .13));
-    oscillator.connect(gain); gain.connect(context.destination); oscillator.start();
-    oscillator.stop(context.currentTime + (kind === 'win' ? .32 : .13));
-    oscillator.onended = function () { context.close(); };
+    if (!toneContext) toneContext = new AudioEngine();
+    if (toneContext.state === 'suspended' && typeof toneContext.resume === 'function') toneContext.resume();
+    return toneContext;
+  } catch (e) { return null; }
+}
+/** 单条短音：可选上滑/下滑、三角波泛音，包络快速起音自然衰减。 */
+function scheduleTone(context, options) {
+  if (!context) return;
+  try {
+    const t0 = context.currentTime + (options.at || 0);
+    const dur = options.dur || 0.12;
+    const vol = options.vol || 0.045;
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = options.type || 'sine';
+    osc.frequency.setValueAtTime(options.f0, t0);
+    if (options.f1) osc.frequency.exponentialRampToValueAtTime(options.f1, t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + (options.attack || 0.008));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(context.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
   } catch (e) {}
+}
+
+function playTone(kind) {
+  const context = ensureToneContext();
+  if (!context) return;
+  if (kind === 'win') {
+    // 胜利：C5-E5-G5 短琶音，略带回响层次
+    [523.25, 659.25, 783.99].forEach(function (freq, index) {
+      scheduleTone(context, { f0: freq, at: index * 0.085, dur: index === 2 ? 0.26 : 0.13, vol: 0.05, type: 'triangle' });
+    });
+    scheduleTone(context, { f0: 1046.5, at: 0.26, dur: 0.2, vol: 0.028, type: 'sine' });
+    return;
+  }
+  if (kind === 'jump') {
+    // 跳跃：轻快的上滑（起跳）+ 短低音落地
+    scheduleTone(context, { f0: 660, f1: 990, dur: 0.07, vol: 0.05, type: 'triangle', attack: 0.004 });
+    scheduleTone(context, { f0: 196, at: 0.07, dur: 0.07, vol: 0.05, type: 'sine', attack: 0.004 });
+    scheduleTone(context, { f0: 392, at: 0.11, dur: 0.06, vol: 0.026, type: 'triangle', attack: 0.004 });
+    return;
+  }
+  // 相邻移动：一颗木珠轻轻"嗒"一下
+  scheduleTone(context, { f0: 430, f1: 372, dur: 0.06, vol: 0.045, type: 'triangle', attack: 0.004 });
+  scheduleTone(context, { f0: 158, at: 0.03, dur: 0.07, vol: 0.05, type: 'sine', attack: 0.004 });
 }
 
 /**
@@ -572,6 +612,10 @@ function prefersReducedMotion() {
  * FLIP 位移动画：节点已直接落到终点，这里从终点向起点回放一段合成器关键帧。
  * 只动 translate 属性（transform 被 -50% 居中 + 抵消棋盘倾斜占用），位移全程走合成器，
  * 不会逐帧重排/重绘整块木纹棋盘——left/top 过渡正是之前走棋卡顿的元凶。
+ * 手感约定：
+ *  - 阴影永远贴地走（连跳时不再跟着弹珠一起浮空）；
+ *  - 2D 用屏幕 Y 上抛、3D 沿板面法线(translateZ)表现腾空；
+ *  - 单步轻跃、跳跃明显，多跳逐段缓动，长连跳读得出“每跳落地”。
  */
 function animateSlide(node, from, to, kind, isShadow, path) {
   if (!node || !from || !to || typeof node.animate !== 'function' || prefersReducedMotion()) return;
@@ -583,30 +627,42 @@ function animateSlide(node, from, to, kind, isShadow, path) {
   const dy = (from.y - to.y) * height;
   if (!dx && !dy) return;
   const lift = isShadow ? 0 : (kind === 'jump' ? 26 : 12);
+  const twoD = boardView === '2d';
+  const groundY = function (y) { return y; };
+  // 弹珠：2D 抬屏幕 Y、3D 抬法线 Z；阴影：Y/Z 都不抬。
+  const bodyY = function (y) { return twoD ? y - lift * .6 : y; };
+  const bodyZ = function () { return twoD ? 0 : lift; };
+  const shadowY = groundY;
+  const shadowZ = function () { return 0; };
+
   if (kind === 'jump' && path && path.length >= 2 && path.every(Boolean)) {
     const hops = path.length - 1;
     const frame = function (x, y, z, offset) {
       return { translate: x.toFixed(2) + 'px ' + y.toFixed(2) + 'px ' + z + 'px', offset: offset };
     };
     const frames = [frame(dx, dy, 0, 0)];
+    const pickY = isShadow ? shadowY : bodyY;
+    const pickZ = isShadow ? shadowZ : bodyZ;
     for (let i = 1; i < path.length; i++) {
       const start = path[i - 1], end = path[i];
       const midX = ((start.x + end.x) / 2 - to.x) * width;
       const midY = ((start.y + end.y) / 2 - to.y) * height;
-      // 平面视角用向上位移表现腾空；3D 视角沿棋盘法线抬起。
-      frames.push(frame(midX, midY - (boardView === '2d' ? lift * .6 : 0), boardView === '2d' ? 0 : lift, (i - .5) / hops));
+      // 弧线顶点：弹珠腾空，阴影贴地跟随同一水平轨迹。
+      frames.push(frame(midX, pickY(midY), pickZ(), (i - .5) / hops));
+      // 每跳落点：回到地面（z=0 / y 不抬）。
       frames.push(frame((end.x - to.x) * width, (end.y - to.y) * height, 0, i / hops));
     }
-    node.animate(frames, { duration: Math.min(1100, hops * 240), easing: 'linear' });
+    // 逐跳缓动 + 每跳 240ms 再加一小段停顿，长连跳有“哒哒哒”的落地节奏。
+    node.animate(frames, { duration: Math.min(1400, hops * 240 + 120), easing: 'ease-in-out' });
     return;
   }
   node.animate(
     [
       { translate: dx.toFixed(2) + 'px ' + dy.toFixed(2) + 'px 0px' },
-      { translate: (dx * .45).toFixed(2) + 'px ' + (dy * .45).toFixed(2) + 'px ' + (lift * .9).toFixed(2) + 'px', offset: .5 },
+      { translate: (dx * .5).toFixed(2) + 'px ' + (isShadow ? (dy * .5) : bodyY(dy * .5)).toFixed(2) + 'px ' + (isShadow ? '0px' : (twoD ? '0px' : (lift * .9).toFixed(2) + 'px')), offset: .5 },
       { translate: '0px 0px 0px' }
     ],
-    { duration: kind === 'jump' ? 360 : 240, easing: 'cubic-bezier(.3,.9,.35,1)' }
+    { duration: kind === 'jump' ? 360 : 240, easing: 'cubic-bezier(.33,.5,.22,1)' }
   );
 }
 
