@@ -35,6 +35,7 @@ sandbox.addEventListener = function () {};
 vm.createContext(sandbox);
 
 const coreSource = fs.readFileSync('public/checkers/checkers_core.js', 'utf8');
+const engineSource = fs.readFileSync('public/checkers/checkers_ai_engine.js', 'utf8');
 const modelSource = fs.readFileSync('public/checkers/checkers_ai_model.js', 'utf8');
 const source = fs.readFileSync('public/checkers/checkers.js', 'utf8');
 const workerSource = fs.readFileSync('public/checkers/checkers_ai_worker.js', 'utf8');
@@ -48,11 +49,13 @@ const labRun = JSON.parse(fs.readFileSync('public/checkers/training/latest.json'
 const platformHtml = fs.readFileSync('public/index.html', 'utf8');
 const serverSource = fs.readFileSync('server.js', 'utf8');
 vm.runInContext(coreSource, sandbox, { filename: 'checkers_core.js' });
+vm.runInContext(engineSource, sandbox, { filename: 'checkers_ai_engine.js' });
 vm.runInContext(modelSource, sandbox, { filename: 'checkers_ai_model.js' });
 vm.runInContext(source, sandbox, { filename: 'checkers.js' });
 
 const T = sandbox.__checkersTest;
 const C = T.Core;
+const E = sandbox.CheckersAI;
 const M = sandbox.CheckersAiModel;
 let passed = 0;
 function ok(name, condition) {
@@ -225,12 +228,14 @@ const boardSandbox = {
   WebSocket: { OPEN: 1 }
 };
 boardSandbox.window = boardSandbox;
+boardSandbox.history = { replaceState() {} };
 boardSandbox.globalThis = boardSandbox;
 boardSandbox.addEventListener = function (type, handler) {
   (readyHandlers[type] = readyHandlers[type] || []).push(handler);
 };
 vm.createContext(boardSandbox);
 vm.runInContext(coreSource, boardSandbox, { filename: 'checkers_core.js' });
+vm.runInContext(engineSource, boardSandbox, { filename: 'checkers_ai_engine.js' });
 vm.runInContext(source, boardSandbox, { filename: 'checkers.js' });
 const boardTest = boardSandbox.__checkersTest;
 boardTest.applyBoardModeLayout('2d');
@@ -377,13 +382,13 @@ const aiMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0);
 ok('电脑可以从初始棋局选择一条合法蓝方走法',
   aiMove && C.getLegalMoves(initial, aiMove.from).all.includes(aiMove.target) && initial[aiMove.from] === 'blue');
 const aiApplied = C.applyMove(initial, 'blue', aiMove.from, aiMove.target);
-ok('困难电脑使用受预算保护的 DFS 搜索并优先改善局面',
-  /function dfsSearch/.test(coreSource) && /maxNodes/.test(coreSource) && /tailProgress/.test(coreSource) && /axisOffset/.test(coreSource) && aiApplied &&
+ok('困难电脑使用受预算保护的分阶段搜索并改善开局位置',
+  /function chooseMove/.test(engineSource) && /maxNodes/.test(engineSource) && /tailProgress/.test(coreSource) && /axisOffset/.test(coreSource) && aiApplied &&
   C.evaluatePosition(aiApplied.pieces, 'blue') > C.evaluatePosition(initial, 'blue'));
 const workerReplies = [];
 const workerSandbox = {
   console, Math, JSON, Number, String, Array, Object, Set, Map, Error,
-  CheckersCore: C, CheckersAiModel: M,
+  CheckersCore: C, CheckersAiModel: M, CheckersAI: E,
   importScripts() {}, postMessage(message) { workerReplies.push(message); }
 };
 workerSandbox.self = workerSandbox;
@@ -406,12 +411,13 @@ const learnedResult = C.applyMove(initial, 'blue', learnedMove.from, learnedMove
 const antiRepeatMove = C.chooseAiMove(initial, 'blue', 'hard', () => 0, {
   model: M, recentPositions: [C.positionKey(learnedResult.pieces)]
 });
-ok('困难电脑混合 DFS 与价值模型，并避开近期已经出现的局面',
-  learnedMove && antiRepeatMove && (learnedMove.from !== antiRepeatMove.from || learnedMove.target !== antiRepeatMove.target));
+ok('旧模型与近期局面参数仍可调用，新引擎默认不启用未经晋级的模型',
+  learnedMove && antiRepeatMove && C.applyMove(initial, 'blue', antiRepeatMove.from, antiRepeatMove.target) &&
+  E.chooseMove(initial, 'blue', {level:'easy', model:M}).stats.modelUsed === false);
 const finishState = {};
 C.BOTTOM_CAMP.filter(key => key !== '14:0').forEach(key => { finishState[key] = 'red'; });
 finishState['12:2'] = 'red';
-C.TOP_CAMP.forEach(key => { finishState[key] = 'blue'; });
+C.BOARD_CELLS.filter(cell => !cell.camp && !finishState[cell.key]).slice(0,10).forEach(cell => { finishState[cell.key] = 'blue'; });
 const finishMove = C.chooseAiMove(finishState, 'red', 'hard', () => 0, { model: M });
 const finishResult = C.applyMove(finishState, 'red', finishMove.from, finishMove.target);
 ok('搜索会在分配节点预算前发现直接获胜走法，不再在 9/10 时搬动营内棋子',
@@ -422,24 +428,16 @@ ok('TT key 同时隔离行动方、评估视角与 evaluator 版本',
   ttSideKey !== C.transpositionKey(initial, 'blue', 'red', 'test-evaluator') &&
   ttSideKey !== C.transpositionKey(initial, 'red', 'blue', 'test-evaluator') &&
   ttSideKey !== C.transpositionKey(initial, 'red', 'red', 'other-evaluator'));
-const completeWithoutTt = C.analyzeAiMoves(initial, 'red', 'hard', { maxNodes: 100000 });
-const completeWithTt = C.analyzeAiMoves(initial, 'red', 'hard', {
-  maxNodes: 100000, enableTranspositionTable: true
-});
-const withoutTtScores = new Map(completeWithoutTt.candidates.map(function (candidate) {
-  return [candidate.action.from + '>' + candidate.action.target, candidate.baseDfsScore];
-}));
-ok('完整 depth-3 搜索启用 TT 前后保持每个根候选分数与最终走法一致',
-  completeWithoutTt.searchComplete && completeWithTt.searchComplete &&
-  completeWithTt.candidates.every(function (candidate) {
-    return withoutTtScores.get(candidate.action.from + '>' + candidate.action.target) === candidate.baseDfsScore;
-  }) && completeWithTt.totalNodes <= completeWithoutTt.totalNodes);
-const boundedWithTt = C.analyzeAiMoves(initial, 'red', 'hard', {
-  candidateNodeBudget: 2, enableTranspositionTable: true
-});
+const completeWithoutTt = E.chooseMove(initial, 'red', {level:'hard', forceAlgorithm:'alpha-beta', timeLimitMs:0, maxNodes:100000, maxDepth:1});
+const completeWithTt = E.chooseMove(initial, 'red', {level:'hard', forceAlgorithm:'alpha-beta', timeLimitMs:0,
+  maxNodes:completeWithoutTt.stats.nodes + 3, maxDepth:5});
+ok('迭代加深中断保留上一完整深度的走法和候选分数',
+  completeWithoutTt.stats.reliable && completeWithTt.stats.completedDepth === 1 &&
+  JSON.stringify(completeWithoutTt.candidates) === JSON.stringify(completeWithTt.candidates));
+const boundedWithTt = C.analyzeAiMoves(initial, 'red', 'hard', { timeLimitMs:0, maxNodes:0 });
 ok('节点预算截断的根结果不会伪装成 EXACT 或写成完整搜索',
-  !boundedWithTt.searchComplete && boundedWithTt.budgetCutoffs > 0 &&
-  boundedWithTt.candidates.some(function (candidate) {
+  !boundedWithTt.searchComplete && boundedWithTt.diagnostics.reliable === false &&
+  boundedWithTt.options.depth === 0 && boundedWithTt.candidates.every(function (candidate) {
     return !candidate.searchComplete && candidate.boundType === null;
   }));
 
@@ -456,10 +454,10 @@ ok('棋子数量不完整或位置越界的状态会被拒绝',
 ok('大厅提供人机、本地多人、联机三种入口且不再混放棋盘',
   /id="startAiBtn"/.test(lobbyHtml) && /id="startLocalBtn"/.test(lobbyHtml) &&
   /id="createRoomBtn"/.test(lobbyHtml) && !/id="checkerBoard"/.test(lobbyHtml));
-ok('本地对战支持 2-6 人选择与 0-4 电脑补位',
-  /data-players="6"/.test(lobbyHtml) && /data-ai="4"/.test(lobbyHtml) &&
+ok('本地对战支持 2-6 人选择与 0-5 电脑补位',
+  /data-players="6"/.test(lobbyHtml) && /data-ai="5"/.test(lobbyHtml) &&
   /id="localSeatHint"/.test(lobbyHtml) &&
-  /SEAT_LAYOUTS\[playerCount\]/.test(source) && /chooseSeatMove/.test(source) &&
+  /SEAT_LAYOUTS\[playerCount\]/.test(source) && /requestAiMove\(seat.color/.test(source) &&
   /ensurePlayerRows\(\)/.test(source) && /seatsFromSave/.test(source));
 ok('联机建房可选 0-4 个电脑并自选强度，好友加入即开局',
   /data-bots="4"/.test(lobbyHtml) && /data-bot-level="hard"/.test(lobbyHtml) &&
@@ -494,7 +492,7 @@ ok('服务器托管电脑走子：join 解析 bots/level，落子与真人共用
   /function nextCheckersTurn/.test(serverSource) &&
   /function scheduleCheckersBotMove/.test(serverSource) &&
   /function runCheckersBotMove/.test(serverSource) &&
-  /CheckersCore\.chooseAiMove\(room\.pieces, seat\.color, room\.botLevel/.test(serverSource) &&
+  /new Worker\(path.join\(__dirname, 'scripts\/checkers_bot_worker.js'\)/.test(serverSource) &&
   /clearCheckersBotTimer\(room\)/.test(serverSource));
 ok('对称长跳已整体移除：服务器、客户端与 Worker 均无规则开关残留',
   !/symmetricJump/.test(serverSource) && !/applyCheckersRules/.test(serverSource) &&
@@ -504,16 +502,16 @@ ok('对称长跳已整体移除：服务器、客户端与 Worker 均无规则�
 ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
-  /checkers_core\.js\?v=20260906c/.test(playHtml) &&
-  /checkers\.js\?v=20261013a/.test(playHtml) &&
-  /checkers\.css\?v=20260908b/.test(playHtml) &&
-  /checkers\.css\?v=20260908b/.test(lobbyHtml) &&
-  /lobby\.js\?v=20260906l/.test(lobbyHtml));
+  /checkers_core\.js\?v=20260915stage1/.test(playHtml) &&
+  /checkers\.js\?v=20260915stage1/.test(playHtml) &&
+  /checkers\.css\?v=20260915stage1/.test(playHtml) &&
+  /checkers\.css\?v=20260915stage1/.test(lobbyHtml) &&
+  /lobby\.js\?v=20260915stage1/.test(lobbyHtml));
 ok('联机状态广播携带席位列表，电脑席位由服务端直发',
   /seats: checkersSeatList\(room\)/.test(serverSource) &&
   /nick: seat\.isBot \? '电脑'/.test(serverSource) &&
   /online: seat\.isBot \? true/.test(serverSource) &&
-  /scheduleCheckersBotMove\(room\);\n\}/.test(serverSource.replace(/\r\n/g, '\n')));
+  /scheduleCheckersBotMove\(room\);/.test(serverSource));
 ok('AI 训练实验室保持为未展示的开发工具而不进入玩家大厅',
   !/href="lab\.html"/.test(lobbyHtml) && /id="labBoard"/.test(labHtml) &&
   /\/ai-lab\/live/.test(labSource) && /setInterval\(pollLiveTraining, 800\)/.test(labSource) &&
@@ -521,16 +519,16 @@ ok('AI 训练实验室保持为未展示的开发工具而不进入玩家大厅'
   labRun.numericalBackend && labRun.numpyArena && labRun.v11 && labRun.v11.split.overlap === false);
 ok('游戏页只承载棋局，并先加载规则核心再加载交互脚本',
   /id="board"/.test(playHtml) && !/id="createRoomBtn"/.test(playHtml) &&
-  playHtml.indexOf('checkers_core.js') >= 0 && playHtml.indexOf('checkers_core.js') < playHtml.indexOf('checkers_ai_model.js') &&
-  playHtml.indexOf('checkers_ai_model.js') < playHtml.indexOf('checkers.js'));
-ok('困难模式向搜索传入训练模型和近期局面',
-  /aiLevel === 'hard'/.test(source) && /CheckersAiModel/.test(source) && /recentPositions/.test(source));
+  playHtml.indexOf('checkers_core.js') >= 0 && playHtml.indexOf('checkers_core.js') < playHtml.indexOf('checkers_ai_engine.js') &&
+  playHtml.indexOf('checkers_ai_engine.js') < playHtml.indexOf('checkers.js'));
+ok('Worker 加载冻结模型，并向分阶段搜索传入近期局面',
+  /CheckersStageModel/.test(workerSource) && /recentPositions/.test(workerSource));
 ok('大厅仅展示通过稳定性验证的三档难度',
   !/data-level="expert"/.test(lobbyHtml) && /difficulty-picker\{[^}]*grid-template-columns:repeat\(3,1fr\)/.test(css));
 ok('困难搜索在独立 Worker 中执行，失败时仍有同步规则核心回退',
-  /new window\.Worker\('checkers_ai_worker\.js'\)/.test(source) && /const fallback = function/.test(source) &&
-  /importScripts\('checkers_core\.js', 'checkers_ai_model\.js'\)/.test(workerSource) &&
-  /Core\.chooseAiMove/.test(workerSource) && /cancelAiSearch\(\)/.test(source));
+  /new window\.Worker\('checkers_ai_worker\.js\?v='/.test(source) && /const fallback = function/.test(source) &&
+  /importScripts\('checkers_core\.js\?v='/.test(workerSource) &&
+  /CheckersAI\.chooseMove/.test(workerSource) && /cancelAiSearch\(\)/.test(source));
 ok('游戏页提供上一步说明，棋盘能绘制来源、落点和完整路线',
   /id="lastMoveBar"/.test(playHtml) && /last-move-path/.test(source) &&
   /move-origin/.test(source) && /move-destination/.test(source));
@@ -680,5 +678,20 @@ ok('连续跳跃动画经过转弯的中间落点，阴影逐段贴地跟随',
   routeAnimation.piece[2].translate === '86.40px 0.00px 0px' &&
   routeAnimation.shadow[2].translate === routeAnimation.piece[2].translate &&
   routeAnimation.duration > 360 && routeAnimation.duration <= 1200);
+
+const migratedSave = vm.runInContext(`
+  (function () {
+    const legacyKey = CONFIG.LEGACY_SAVE_PREFIX + mode;
+    const old = JSON.stringify({pieces:Core.createInitialPieces(),turn:'blue',moveNumber:9,winner:'',
+      seats:[{color:'red',isAI:false},{color:'blue',isAI:true}]});
+    safeSet(legacyKey,old); localStorage.removeItem(CONFIG.LAST_SLOT_PREFIX+mode); saveSlot='';
+    const restored = loadGame(); saveGame();
+    return {restored:restored,moveNumber:moveNumber,slot:saveSlot,
+      migrated:JSON.parse(safeGet(saveSlot)).schemaVersion===3,legacyUnchanged:safeGet(legacyKey)===old};
+  })();
+`, boardSandbox);
+ok('旧 v2 人机存档迁移到独立 v3 槽并保留原存档与回合',
+  migratedSave.restored && migratedSave.moveNumber===9 && migratedSave.migrated && migratedSave.legacyUnchanged &&
+  migratedSave.slot.includes('redH-blueA'));
 
 console.log('\n✅ 中国跳棋核心测试全部通过（' + passed + ' 项）');

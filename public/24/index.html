@@ -26,6 +26,18 @@
   h1 { font-size: 26px; margin: 8px 0 2px; color: var(--blue); letter-spacing: 1px; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
   .view { display: none; }
+  /* 存储不可用提示条：隐私模式 / 内嵌预览沙箱 / file:// 打开时 localStorage 会被禁，进度无法保存 */
+  .storage-warn {
+    display: none; margin: 0 0 14px; padding: 12px 14px; border-radius: 14px;
+    background: #fff4e5; border: 1px solid #f2b872; color: #8a4b00;
+    font-size: 13px; line-height: 1.55; font-weight: 600;
+  }
+  .storage-warn b { color: #b35c00; }
+  /* 关卡地图顶部的续玩入口：把「上次玩到哪」提到最显眼位置 */
+  .levels-resume { margin-bottom: 14px; }
+  .levels-resume .resume-btn { margin-bottom: 6px; }
+  .levels-resume .resume-note { text-align: center; color: var(--muted); font-size: 13px; }
+  .level-cell.lv-last { box-shadow: 0 0 0 2px var(--orange, #f2994a) inset, 0 6px 16px rgba(242,153,74,.28); }
   .panel {
     background: var(--card); border-radius: 18px; padding: 18px;
     box-shadow: 0 8px 24px rgba(47,128,237,.12); margin-bottom: 14px;
@@ -476,6 +488,14 @@
 <body>
 <div id="app">
 
+  <!-- 存储不可用提示：仅当 localStorage 被浏览器/沙箱禁用时由 game.js 显示 -->
+  <div id="storage-warn" class="storage-warn" role="alert">
+    <b>⚠️ 当前环境无法保存进度</b><br/>
+    浏览器已禁用本站的本地存储（常见于无痕/隐私窗口、内嵌预览沙箱、或直接用文件方式打开页面）。
+    你仍然可以正常闯关，但<b>刷新或关闭后星星、解锁进度与竞速纪录都会丢失</b>。
+    请改用普通浏览器标签页打开本页面。
+  </div>
+
   <!-- 24 点首页 -->
   <section id="view-home" class="view">
     <div class="game-home-nav"><a href="../" class="back">← 游戏大厅</a><span class="game-home-label">24 Point</span></div>
@@ -512,7 +532,10 @@
   <!-- 等级地图 -->
   <section id="view-levels" class="view">
     <div class="topbar"><button id="levels-back" class="back">← 返回</button><div class="title">选择关卡</div></div>
-    <div class="panel"><div id="levels-grid" class="grid"></div></div>
+    <div class="panel">
+      <div id="levels-resume" class="levels-resume" style="display:none;"></div>
+      <div id="levels-grid" class="grid"></div>
+    </div>
   </section>
 
   <!-- 关卡选择 -->
@@ -810,6 +833,6 @@
 <script src="core.js?v=20260814b"></script>
 <script src="data.js?v=20260814c"></script>
 <script src="net.js?v=20260821b"></script>
-<script src="game.js?v=20260822c"></script>
+<script src="game.js?v=20260914b"></script>
 </body>
 </html>

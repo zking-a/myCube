@@ -31,6 +31,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const { Worker } = require('node:worker_threads');
 const WebSocket = require('ws');
 const Questions = require('./server_questions');
 const CheckersCore = require('./public/checkers/checkers_core');
@@ -197,6 +198,12 @@ function resetCheckersRoom(room) {
 
 function clearCheckersBotTimer(room) {
   if (room._botTimer) { clearTimeout(room._botTimer); room._botTimer = null; }
+  const job = room._botJob;
+  room._botJob = null;
+  if (job) {
+    clearTimeout(job.timeout);
+    if (job.worker) job.worker.terminate().catch(function () {});
+  }
 }
 
 function checkersSeatForColor(room, color) {
@@ -209,7 +216,7 @@ function nextCheckersTurn(room, fromColor) {
   const start = Math.max(0, colors.indexOf(fromColor));
   for (let i = 1; i < colors.length; i++) {
     const candidate = colors[(start + i) % colors.length];
-    if (CheckersCore.getLegalMoves(room.pieces, candidate).all.length) return candidate;
+    if (CheckersCore.listMoves(room.pieces, candidate).length) return candidate;
   }
   return colors[(start + 1) % colors.length];
 }
@@ -252,16 +259,37 @@ function runCheckersBotMove(room) {
   if (room.phase !== 'playing' || room.winner) return;
   const seat = checkersSeatForColor(room, room.turn);
   if (!seat || !seat.isBot) return;
-  const move = CheckersCore.chooseAiMove(room.pieces, seat.color, room.botLevel, function () { return 0; });
-  if (!move) {
-    room.turn = nextCheckersTurn(room, seat.color);
+  const snapshot = room.pieces, sequence = room.moveNumber;
+  const job = { worker: null, timeout: null };
+  room._botJob = job;
+  const finish = function (move) {
+    if (room._botJob !== job) return;
+    clearCheckersBotTimer(room);
+    // A restarted/expired room must never accept a result from the previous board.
+    if (checkersRooms.get(room.code) !== room || room.phase !== 'playing' || room.winner ||
+        room.pieces !== snapshot || room.moveNumber !== sequence || room.turn !== seat.color) return;
+    if (!move || !CheckersCore.applyMove(snapshot, seat.color, move.from, move.target)) {
+      move = CheckersCore.listMoves(snapshot, seat.color).sort(function (a, b) {
+        return CheckersCore.moveScore(snapshot, seat.color, b) - CheckersCore.moveScore(snapshot, seat.color, a);
+      })[0];
+    }
+    if (move) checkersApplyMove(room, seat.color, move.from, move.target);
+    else room.turn = nextCheckersTurn(room, seat.color);
     broadcastCheckersState(room);
     scheduleCheckersBotMove(room);
-    return;
+  };
+  try {
+    job.worker = new Worker(path.join(__dirname, 'scripts/checkers_bot_worker.js'), {
+      workerData: { pieces: snapshot, player: seat.color, seats: room.seats.map(function (s) { return s.color; }),
+        level: room.botLevel, seed: sequence * 104729 + room.seats.length }
+    });
+    job.worker.once('message', function (result) { finish(result && result.move); });
+    job.worker.once('error', function () { finish(null); });
+    job.worker.once('exit', function () { if (room._botJob === job) finish(null); });
+    job.timeout = setTimeout(function () { finish(null); }, 3000);
+  } catch (error) {
+    finish(null);
   }
-  checkersApplyMove(room, seat.color, move.from, move.target);
-  broadcastCheckersState(room);
-  scheduleCheckersBotMove(room);
 }
 
 // 创建新房间前，释放同一 IP 遗留的“单人等待房”（房主已离开但房间未被 GC），

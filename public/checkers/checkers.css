@@ -131,3 +131,7 @@ button,a,input,summary{font:inherit}button{touch-action:manipulation}.red{backgr
 .lobby-page .feature-strip{margin-top:14px}.lobby-page .feature-strip span{padding:11px 6px;font-size:10px}.lobby-page .lobby-tip{margin:12px 7px 0;font-size:10px;line-height:1.6}
 @keyframes modeConfigIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
 @media(max-width:420px){.lobby-page .lobby-shell{padding:14px 12px calc(34px + env(safe-area-inset-bottom))}.lobby-page .lobby-hero{gap:13px;margin:13px 1px 19px}.lobby-page .hero-board{width:68px;height:76px;border-radius:21px}.lobby-page .hero-piece{width:11px;height:11px}.lobby-page .hero-piece.p1{left:12px;bottom:18px}.lobby-page .hero-piece.p2{left:24px;bottom:10px}.lobby-page .hero-piece.p3{left:33px;bottom:23px}.lobby-page .hero-piece.p4{right:12px;top:18px}.lobby-page .hero-piece.p5{right:24px;top:10px}.lobby-page .hero-piece.p6{right:33px;top:23px}.lobby-page .hero-star{font-size:25px}.lobby-page .hero-copy h1{font-size:25px}.lobby-page .hero-copy p{font-size:11px}.mode-entry{min-height:74px;padding:13px 15px}.mode-entry .mode-icon{width:42px;height:42px;font-size:21px}.mode-entry-title{font-size:17px}.mode-config{padding:13px 14px 14px}.lobby-page .feature-strip{grid-template-columns:1fr 1fr}.mode-config .online-fields label{grid-template-columns:58px 1fr}}
+
+/* Mobile readability; retain a user-selectable flat 2D view. */
+@media(max-width:480px){.ck-board[data-view="3d"]{--board-tilt:8deg;--board-zoom:.98}}
+#aiEngineNote{font-size:10px;min-height:30px;overflow-wrap:anywhere}

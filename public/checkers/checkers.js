@@ -4,7 +4,10 @@ const Core = window.CheckersCore;
 if (!Core) throw new Error('CheckersCore 未加载');
 
 const CONFIG = {
-  SAVE_PREFIX: 'chinese_checkers_save_v2_',
+  SAVE_PREFIX: 'chinese_checkers_save_v3_',
+  LEGACY_SAVE_PREFIX: 'chinese_checkers_save_v2_',
+  LAST_SLOT_PREFIX: 'chinese_checkers_last_slot_v3_',
+  BUILD_ID: '20260915stage1',
   SOUND_KEY: 'chinese_checkers_sound',
   AI_LEVEL_KEY: 'chinese_checkers_ai_level',
   BOARD_VIEW_KEY: 'chinese_checkers_board_view',
@@ -43,6 +46,16 @@ let aiLevel = 'normal';
 let aiThinking = false;
 let aiTimer = null;
 let aiWorker = null;
+let aiWorkerBusy = false;
+let aiWatchdog = null;
+let lastAiStats = null;
+let motionEpoch = 0;
+let animating = false;
+const activeAnimations = new Set();
+const shadowAnimations = new Set();
+let saveSlot = '';
+let restoredRecentKeys = [];
+const localIntent = launchParams.get('intent') === 'new' ? 'new' : 'resume';
 let aiRequestId = 0;
 let toastTimer = null;
 let boardView = '3d';
@@ -260,9 +273,23 @@ function sanitizeLocalState(raw) {
   return { pieces: clean.pieces, turn: clean.turn, moveNumber: clean.moveNumber, gameOver: clean.winner, lastMove: clean.lastMove };
 }
 
+function slotForCurrentConfig() {
+  return CONFIG.SAVE_PREFIX + mode + '_' + seats.map(function (s) { return s.color + (s.isAI ? 'A' : 'H'); }).join('-') + '_' + aiLevel;
+}
 function saveGame() {
   if (mode === 'online') return;
-  safeSet(CONFIG.SAVE_PREFIX + mode, JSON.stringify({ pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove, seats: seats }));
+  if (!saveSlot) saveSlot = slotForCurrentConfig();
+  safeSet(saveSlot, JSON.stringify({ schemaVersion: 3, rulesVersion: 'adjacent-jump-v1',
+    pieces: pieces, turn: turn, moveNumber: moveNumber, winner: gameOver, lastMove: lastMove,
+    seats: seats, aiLevel: aiLevel, recentKeys: recentPositionKeys() }));
+  safeSet(CONFIG.LAST_SLOT_PREFIX + mode, saveSlot);
+}
+function recentPositionKeys() {
+  return restoredRecentKeys.concat(history.map(function (x) { return Core.positionKey(x.pieces) + '|' + x.turn; })).slice(-40);
+}
+function archiveExistingSlot() {
+  const previous = safeGet(saveSlot);
+  if (previous) safeSet(saveSlot + '_previous', previous); // one bounded backup per config, not a storage leak
 }
 
 /** 校验存档里的席位表：每个席位颜色都在盘面上且恰好 10 枚，盘面上也没有席位之外的颜色。 */
@@ -276,7 +303,7 @@ function seatsFromSave(savedPieces, rawSeats) {
   const clean = rawSeats.map(function (seat) {
     return seat && Core.COLORS.indexOf(seat.color) >= 0 ? { color: seat.color, isAI: !!seat.isAI } : null;
   }).filter(Boolean);
-  if (clean.length !== rawSeats.length) return null;
+  if (clean.length !== rawSeats.length || new Set(clean.map(function (x) { return x.color; })).size !== clean.length || clean.length > 6 || clean.every(function (x) { return x.isAI; })) return null;
   const seatColors = clean.map(function (seat) { return seat.color; });
   const presentColors = Object.keys(counts);
   if (presentColors.length !== clean.length) return null;
@@ -287,21 +314,37 @@ function seatsFromSave(savedPieces, rawSeats) {
 }
 
 function loadGame() {
+  if (localIntent === 'new') return false;
   try {
-    const raw = safeGet(CONFIG.SAVE_PREFIX + mode);
+    const requestedSlot = launchParams.get('slot');
+    const last = safeGet(CONFIG.LAST_SLOT_PREFIX + mode);
+    const chosen = [requestedSlot, last, saveSlot].find(function (key) {
+      return typeof key === 'string' && key.startsWith(CONFIG.SAVE_PREFIX + mode + '_') && !!safeGet(key);
+    });
+    const raw = safeGet(chosen || CONFIG.LEGACY_SAVE_PREFIX + mode);
     const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && parsed.schemaVersion && parsed.schemaVersion !== 3) return false;
+    if (parsed && parsed.rulesVersion && parsed.rulesVersion !== 'adjacent-jump-v1') return false;
     const saved = sanitizeLocalState(parsed);
     if (!saved) return false;
-    const restoredSeats = seatsFromSave(saved.pieces, parsed ? parsed.seats : null);
-    if (restoredSeats) seats = restoredSeats;
+    let restoredSeats = seatsFromSave(saved.pieces, parsed.seats);
+    // Migrate only legacy red/blue saves whose seats are unambiguous.
+    if (!restoredSeats && !parsed.seats && Object.values(saved.pieces).every(function (c) { return c === 'red' || c === 'blue'; })) {
+      restoredSeats = [{color:'red',isAI:false},{color:'blue',isAI:mode === 'ai'}];
+    }
+    if (!restoredSeats || (mode === 'ai' && (restoredSeats.length !== 2 || restoredSeats[0].color !== 'red' || restoredSeats[0].isAI || restoredSeats[1].color !== 'blue' || !restoredSeats[1].isAI))) return false;
+    seats = restoredSeats;
+    if (AI_LEVELS.includes(parsed.aiLevel)) aiLevel = parsed.aiLevel;
     pieces = saved.pieces; turn = saved.turn; moveNumber = saved.moveNumber;
     gameOver = saved.gameOver; lastMove = saved.lastMove;
-    if (!seats.some(function (seat) { return seat.color === turn; })) turn = seats[0].color;
+    restoredRecentKeys = Array.isArray(parsed.recentKeys) ? parsed.recentKeys.filter(function (k) { return typeof k === 'string' && k.length < 140; }).slice(-40) : [];
+    saveSlot = chosen || slotForCurrentConfig();
     return true;
   } catch (e) { return false; }
 }
 
 function resetState() {
+  cancelAnimations(); restoredRecentKeys = []; lastAiStats = null;
   pieces = Core.createInitialPiecesForSeats(seats.map(function (seat) { return Core.campOfColor(seat.color); }));
   turn = seats.length ? seats[0].color : 'red';
   selectedKey = ''; legalMoves = emptyMoves();
@@ -315,6 +358,7 @@ function pushHistory() {
 }
 
 function restoreHistory(snapshot) {
+  cancelAnimations(); lastAiStats = null;
   pieces = snapshot.pieces; turn = snapshot.turn; moveNumber = snapshot.moveNumber;
   gameOver = snapshot.gameOver; lastMove = snapshot.lastMove || null;
   selectedKey = ''; legalMoves = emptyMoves(); closeWinner();
@@ -617,6 +661,27 @@ function prefersReducedMotion() {
  *  - 2D 用屏幕 Y 上抛、3D 沿板面法线(translateZ)表现腾空；
  *  - 单步轻跃、跳跃明显，多跳逐段缓动，长连跳读得出“每跳落地”。
  */
+function cancelAnimations() {
+  motionEpoch++;
+  activeAnimations.forEach(function (animation) { animation.cancel(); });
+  activeAnimations.clear(); shadowAnimations.forEach(function (a) {a.cancel();}); shadowAnimations.clear(); animating = false;
+}
+function trackAnimation(animation, shadow) {
+  if (!animation) return animation;
+  if (shadow) { shadowAnimations.add(animation); Promise.resolve(animation.finished).catch(function () {}).then(function () {shadowAnimations.delete(animation);}); return animation; }
+  const epoch = motionEpoch;
+  activeAnimations.add(animation); animating = true;
+  Promise.resolve(animation.finished).catch(function () {}).then(function () {
+    if (epoch !== motionEpoch) return;
+    activeAnimations.delete(animation);
+    if (!activeAnimations.size) {
+      animating = false; updateStatus();
+      if (gameOver) showWinner(gameOver); else scheduleAiMove();
+    }
+  });
+  return animation;
+}
+
 function animateSlide(node, from, to, kind, isShadow, path) {
   if (!node || !from || !to || typeof node.animate !== 'function' || prefersReducedMotion()) return;
   const width = dom.pieceLayer.offsetWidth;
@@ -653,17 +718,17 @@ function animateSlide(node, from, to, kind, isShadow, path) {
       frames.push(frame((end.x - to.x) * width, (end.y - to.y) * height, 0, i / hops));
     }
     // 逐跳缓动 + 每跳 240ms 再加一小段停顿，长连跳有“哒哒哒”的落地节奏。
-    node.animate(frames, { duration: Math.min(1400, hops * 240 + 120), easing: 'ease-in-out' });
+    trackAnimation(node.animate(frames, { duration: Math.min(1400, hops * 240 + 120), easing: 'ease-in-out' }), isShadow);
     return;
   }
-  node.animate(
+  trackAnimation(node.animate(
     [
       { translate: dx.toFixed(2) + 'px ' + dy.toFixed(2) + 'px 0px' },
       { translate: (dx * .5).toFixed(2) + 'px ' + (isShadow ? (dy * .5) : bodyY(dy * .5)).toFixed(2) + 'px ' + (isShadow ? '0px' : (twoD ? '0px' : (lift * .9).toFixed(2) + 'px')), offset: .5 },
       { translate: '0px 0px 0px' }
     ],
     { duration: kind === 'jump' ? 360 : 240, easing: 'cubic-bezier(.33,.5,.22,1)' }
-  );
+  ), isShadow);
 }
 
 /** 阴影与棋子同键、同步位移动画，但始终留在地面，棋子抬起时它才负责「分离」。 */
@@ -806,7 +871,7 @@ function updatePlayerNames() {
 }
 
 function canAct() {
-  if (gameOver || aiThinking) return false;
+  if (gameOver || aiThinking || animating) return false;
   if (mode === 'ai') return turn === 'red';
   if (mode === 'local') { const seat = seatByColor(turn); return !!seat && !seat.isAI; }
   return online.phase === 'playing' && online.seats.length > 0 &&
@@ -903,83 +968,78 @@ function showWinner(player) {
 function closeWinner() { const overlay = $('winnerOverlay'); if (!overlay) return; overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); }
 
 function applyLocalMove(fromKey, targetKey, actor) {
+  if (animating || gameOver || actor !== turn) return false;
   const result = Core.applyMove(pieces, actor, fromKey, targetKey); if (!result) return false;
   pushHistory(); pieces = result.pieces;
   lastMove = { player: actor, from: fromKey, target: targetKey, kind: result.kind, path: result.path.slice(), moveNumber: moveNumber };
   selectedKey = ''; legalMoves = emptyMoves();
-  if (result.winner) { gameOver = result.winner; playTone('win'); showWinner(result.winner); }
+  if (result.winner) { gameOver = result.winner; playTone('win'); }
   else { advanceTurn(actor); moveNumber++; playTone(result.kind); }
-  saveGame(); render(); scheduleAiMove();
+  saveGame(); render();
+  if (gameOver && !animating) showWinner(gameOver);
+  scheduleAiMove();
   return true;
 }
 
-/** 取消过期计算；终止 Worker 才能真正释放正在执行的深层搜索。 */
-function cancelAiSearch() {
-  aiRequestId++;
-  if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
+/** Invalidate outstanding callbacks; keep an idle worker warm between turns. */
+function cancelAiSearch(force) {
+  aiRequestId++; clearTimeout(aiWatchdog); aiWatchdog = null;
+  if (aiWorker && (aiWorkerBusy || force)) { aiWorker.terminate(); aiWorker = null; }
+  aiWorkerBusy = false;
 }
-
-/**
- * 优先在 Worker 中运行搜索。旧浏览器或 Worker 加载失败时回退到同步核心，
- * 保证离线文件部署和历史环境仍然能够完成人机对局。
- * player 已参数化；当前仅人机模式（蓝方）走 Worker，本地多席位 AI 用贪心（见 scheduleAiMove）。
- */
+function showAiDiagnostics(stats) {
+  lastAiStats = stats || null;
+  const node = $('aiEngineNote');
+  if (!node || !stats) return;
+  const stage = stats.stage && ({opening:'开局规划',contact:'对抗搜索',endgame:'收官搜索'}[stats.stage.name]);
+  node.textContent = (stage || stats.algorithm || 'AI') + ' · ' +
+    (stats.simulations !== undefined ? stats.simulations + ' 次模拟' : '完成 ' + (stats.completedDepth || 0) + ' 层') +
+    ' · ' + Math.round(stats.elapsedMs || 0) + ' ms' + (stats.modelUsed ? ' · 冻结模型' : ' · 规则搜索');
+  node.title = JSON.stringify(stats);
+}
 function requestAiMove(player, recentPositions, callback) {
-  const requestId = ++aiRequestId;
-  const snapshot = { ...pieces };
-  const finish = function (move, error) {
-    if (requestId !== aiRequestId) return;
-    callback(move, error);
+  const requestId = ++aiRequestId, snapshot = { ...pieces };
+  let settled = false;
+  const finish = function (move, stats) {
+    if (settled || requestId !== aiRequestId) return;
+    settled = true; clearTimeout(aiWatchdog); aiWatchdog = null; aiWorkerBusy = false;
+    // Don't trust a worker payload without a rule-engine check at the UI boundary.
+    if (move && !Core.applyMove(snapshot, player, move.from, move.target)) move = null;
+    showAiDiagnostics(stats); callback(move);
   };
-  const fallback = function (error) {
-    if (requestId !== aiRequestId) return;
-    const searchOptions = aiLevel === 'hard' ? {
-      model: window.CheckersAiModel || null,
-      recentPositions: recentPositions
-    } : null;
-    finish(Core.chooseAiMove(snapshot, player, aiLevel, null, searchOptions), error);
+  const fallback = function (reason) {
+    if (settled || requestId !== aiRequestId) return;
+    if (aiWorker) { aiWorker.terminate(); aiWorker = null; } aiWorkerBusy = false;
+    // Deliberately bounded main-thread fallback, never the legacy deep synchronous search.
+    const result = window.CheckersAI.chooseMove(snapshot, player, {
+      seats:seats.map(function (s) { return s.color; }), level:'easy', timeLimitMs:8,
+      maxNodes:100, seed:moveNumber, useModel:false, recentPositions:recentPositions
+    });
+    result.stats.fallbackReason = reason;
+    finish(result.move, result.stats);
   };
-
-  if (typeof window.Worker !== 'function') { fallback(null); return; }
+  if (typeof window.Worker !== 'function') { fallback('Worker unavailable'); return; }
   try {
-    if (!aiWorker) aiWorker = new window.Worker('checkers_ai_worker.js');
+    if (!aiWorker) aiWorker = new window.Worker('checkers_ai_worker.js?v=' + CONFIG.BUILD_ID);
+    aiWorkerBusy = true;
     aiWorker.onmessage = function (event) {
-      const response = event && event.data ? event.data : {};
+      const response = event && event.data || {};
       if (Number(response.requestId) !== requestId) return;
-      if (response.error) fallback(response.error);
-      else finish(response.move || null, null);
+      if (response.error || (response.move && !Core.applyMove(snapshot,player,response.move.from,response.move.target)) || (!response.move && Core.listMoves(snapshot,player).length && !Core.COLORS.some(function(c){return Core.hasWon(snapshot,c);}))) fallback(response.error || 'Invalid worker move');
+      else finish(response.move || null, response.stats);
     };
     aiWorker.onerror = function (event) {
-      if (event && typeof event.preventDefault === 'function') event.preventDefault();
-      if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
-      fallback('搜索线程加载失败');
+      if (event && event.preventDefault) event.preventDefault(); fallback('Worker load/runtime error');
     };
-    aiWorker.postMessage({
-      requestId: requestId,
-      pieces: snapshot,
-      player: player,
-      level: aiLevel,
-      recentPositions: recentPositions
-    });
-  } catch (error) {
-    if (aiWorker) { aiWorker.terminate(); aiWorker = null; }
-    fallback(String(error && error.message || error));
-  }
-}
-
-/** 本地多席位 AI（非人机模式的电脑座位）使用轻量贪心：按 moveScore 排序，难度决定头部窗口内随机。 */
-function chooseSeatMove(color) {
-  const moves = Core.listMoves(pieces, color);
-  if (!moves.length) return null;
-  const scored = moves.map(function (move) {
-    return { move: move, score: Core.moveScore(pieces, color, move) };
-  }).sort(function (a, b) { return b.score - a.score; });
-  const windowSize = aiLevel === 'easy' ? Math.min(scored.length, 6) : (aiLevel === 'normal' ? Math.min(scored.length, 3) : 1);
-  return scored[Math.floor(Math.random() * windowSize)].move;
+    aiWatchdog = setTimeout(function () { fallback('Worker watchdog'); }, 3000);
+    aiWorker.postMessage({requestId:requestId,pieces:snapshot,player:player,level:aiLevel,
+      seats:seats.map(function (s) { return s.color; }), moveNumber:moveNumber,
+      recentPositions:recentPositions,seed:moveNumber * 104729 + seats.length});
+  } catch (error) { fallback(String(error && error.message || error)); }
 }
 
 function scheduleAiMove() {
-  if (mode === 'online' || gameOver) return;
+  if (mode === 'online' || gameOver || animating || aiThinking) return;
   const seat = seatByColor(turn);
   if (!seat || !seat.isAI) return;
   clearTimeout(aiTimer); cancelAiSearch(); aiThinking = true; render();
@@ -997,12 +1057,7 @@ function scheduleAiMove() {
       }
       applyLocalMove(move.from, move.target, seat.color);
     };
-    if (mode === 'ai') {
-      const recentPositions = history.slice(-20).map(function (snapshot) { return Core.positionKey(snapshot.pieces); });
-      requestAiMove(seat.color, recentPositions, finish);
-    } else {
-      finish(chooseSeatMove(seat.color));
-    }
+    requestAiMove(seat.color, recentPositionKeys(), finish);
   }, CONFIG.AI_DELAY);
 }
 
@@ -1028,7 +1083,8 @@ function handleCell(key) {
 }
 
 function undoMove() {
-  if (mode === 'online') return;
+  if (mode === 'online' || !history.length) return;
+  cancelAnimations();
   clearTimeout(aiTimer); aiTimer = null; cancelAiSearch(); aiThinking = false;
   let previous = history.pop(); if (!previous) return;
   if (mode === 'ai' && previous.turn === 'blue' && history.length) previous = history.pop();
@@ -1045,7 +1101,7 @@ function resetGame(skipConfirm) {
     return;
   }
   if (!skipConfirm && moveNumber > 1 && typeof window.confirm === 'function' && !window.confirm('确定重新开始当前棋局吗？')) return;
-  resetState(); saveGame(); render();
+  archiveExistingSlot(); resetState(); saveGame(); render(); scheduleAiMove();
 }
 
 function toggleSound() {
@@ -1110,6 +1166,7 @@ function connectOnline(intent) {
       const rawSeats = Array.isArray(message.seats) && message.seats.length ? message.seats
         : (Array.isArray(message.players) ? message.players : null);
       if (!clean || message.room !== online.room || !rawSeats) return;
+      if (clean.moveNumber !== moveNumber || Core.positionKey(clean.pieces) !== Core.positionKey(pieces)) cancelAnimations();
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
       online.phase = ['waiting','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
       online.seats = rawSeats.map(function (seat) {
@@ -1126,7 +1183,9 @@ function connectOnline(intent) {
       const botCount = online.seats.filter(function (seat) { return seat.isBot; }).length;
       const badge = $('modeBadge'); if (badge) badge.textContent = '好友对战' + (botCount ? ' · ' + botCount + ' 电脑' : '');
       online.retryAttempt = 0; online.retryDelay = 0; online.intent = 'join';
-      if (gameOver) showWinner(gameOver); else closeWinner(); render(); return;
+      closeWinner(); render();
+      if (gameOver && !animating) showWinner(gameOver);
+      return;
     }
     if (message.t === 'err') {
       const errorMessage = String(message.msg || '联机操作失败').slice(0, 80);
@@ -1156,6 +1215,7 @@ function copyInvite() {
 }
 
 function exitToLobby() {
+  cancelAnimations(); cancelAiSearch(true);
   clearTimeout(aiTimer); cancelAiSearch();
   if (mode === 'online') leaveOnline(true);
   location.href = 'index.html';
@@ -1247,25 +1307,18 @@ function bindBoardInput() {
 
 /** 多于 2 席时补齐玩家面板行并把面板切成纵向布局；2 席保持旧版结构。 */
 function ensurePlayerRows() {
-  const card = document.querySelector('.players-card');
-  if (!card || typeof card.appendChild !== 'function') return;
-  Array.prototype.slice.call(card.querySelectorAll('[data-dynamic-seat]')).forEach(function (node) { node.remove(); });
-  const versus = card.querySelector('.versus');
-  if (versus) versus.hidden = seats.length > 2;
-  if (seats.length <= 2) { card.classList.remove('multi'); return; }
-  card.classList.add('multi');
-  seats.slice(2).forEach(function (seat) {
-    const row = document.createElement('div');
-    row.className = 'player-row'; row.id = seat.color + 'Player'; row.setAttribute('data-dynamic-seat', '1');
-    const piece = document.createElement('span');
-    piece.className = 'player-piece ' + seat.color; piece.setAttribute('aria-hidden', 'true');
-    const info = document.createElement('div');
-    const name = document.createElement('strong'); name.id = seat.color + 'Name';
-    const small = document.createElement('small'); small.textContent = '目标：对家营地';
-    info.appendChild(name); info.appendChild(small);
+  const card = document.querySelector('.players-card'); if (!card) return;
+  card.replaceChildren(); card.classList.toggle('multi', seats.length > 2);
+  seats.forEach(function (seat, index) {
+    if (index === 1 && seats.length === 2) {
+      const vs = document.createElement('div'); vs.className = 'versus'; vs.textContent = 'VS'; card.appendChild(vs);
+    }
+    const row = document.createElement('div'); row.className = 'player-row'; row.id = seat.color + 'Player';
+    const piece = document.createElement('span'); piece.className = 'player-piece ' + seat.color; piece.setAttribute('aria-hidden','true');
+    const info = document.createElement('div'), name = document.createElement('strong'), hint = document.createElement('small');
+    name.id = seat.color + 'Name'; hint.textContent = '目标：对家营地'; info.append(name,hint);
     const progress = document.createElement('b'); progress.id = seat.color + 'Progress'; progress.textContent = '0/10';
-    row.appendChild(piece); row.appendChild(info); row.appendChild(progress);
-    card.appendChild(row);
+    row.append(piece,info,progress); card.appendChild(row);
   });
 }
 
@@ -1277,7 +1330,7 @@ function init() {
     const requestedPlayers = Math.floor(Number(launchParams.get('players')) || 2);
     const requestedAi = Math.floor(Number(launchParams.get('ai')) || 0);
     const playerCount = Math.max(2, Math.min(6, requestedPlayers));
-    const aiCount = Math.max(0, Math.min(4, Math.min(playerCount - 1, requestedAi)));
+    const aiCount = Math.max(0, Math.min(5, Math.min(playerCount - 1, requestedAi)));
     seats = Core.seatColorsFor(Core.SEAT_LAYOUTS[playerCount] || Core.SEAT_LAYOUTS[2])
       .map(function (color, index) { return { color: color, isAI: index >= playerCount - aiCount }; });
   } else if (mode === 'ai') {
@@ -1285,15 +1338,23 @@ function init() {
   } else {
     seats = [{ color: 'red', isAI: false }, { color: 'blue', isAI: false }];
   }
+  saveSlot = slotForCurrentConfig();
+  if (mode === 'online') resetState();
+  else {
+    if (!loadGame()) { if (localIntent === 'new') archiveExistingSlot(); resetState(); }
+    saveGame();
+    // A reload resumes the just-created game, instead of replaying the 'new' intent.
+    const url = new URL(location.href); url.searchParams.set('intent','resume'); url.searchParams.set('slot',saveSlot);
+    window.history.replaceState(null,'',url.toString());
+  }
   ensurePlayerRows();
-  if (mode === 'online') resetState(); else if (!loadGame()) { resetState(); saveGame(); }
   boardView = normalizeBoardView(safeGet(CONFIG.BOARD_VIEW_KEY));
   const boardModeSelect = $('boardModeSelect'); if (boardModeSelect) boardModeSelect.value = boardView;
   var soundBtnEl = $('soundBtn');
   if (soundBtnEl) { soundBtnEl.innerHTML = '<i class="ui-icon ' + (soundEnabled ? 'ui-icon--volume-high' : 'ui-icon--volume-xmark') + '" aria-hidden="true"></i>'; soundBtnEl.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false'); }
   $('onlineRoomBar').hidden = mode !== 'online';
   const aiSeatCount = seatAiCount();
-  $('modeBadge').textContent = mode === 'ai' ? '人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 自学习' }[aiLevel]) : (mode === 'local' ? '本地 ' + seats.length + ' 人' + (aiSeatCount ? ' · ' + aiSeatCount + ' 电脑' : '') : (mode === 'online' && online.bots ? '好友对战 · ' + online.bots + ' 电脑' : '好友对战'));
+  $('modeBadge').textContent = mode === 'ai' ? '人机对战 · ' + ({ easy:'轻松', normal:'标准', hard:'困难 · 分阶段' }[aiLevel]) : (mode === 'local' ? '本地 ' + seats.length + ' 人' + (aiSeatCount ? ' · ' + aiSeatCount + ' 电脑' : '') : (mode === 'online' && online.bots ? '好友对战 · ' + online.bots + ' 电脑' : '好友对战'));
   $('saveNote').textContent = mode === 'online' ? '联机棋局由服务器同步与校验，短暂断线会自动恢复。' : '棋局会自动保存在当前浏览器中，刷新后可以继续。';
   if (mode === 'online') $('roomCodeText').textContent = launchRoom || '-----';
 
@@ -1301,7 +1362,7 @@ function init() {
   applyBoardModeLayout(boardView);
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
-  window.addEventListener('beforeunload', function () { cancelAiSearch(); if (online.active) sendOnline({ t: 'ping' }); });
+  window.addEventListener('beforeunload', function () { cancelAiSearch(true); cancelAnimations(); if (online.active) sendOnline({ t: 'ping' }); });
   render(); scheduleAiMove();
   if (gameOver) showWinner(gameOver); if (mode === 'online') connectOnline(launchIntent);
 }
@@ -1311,6 +1372,9 @@ window.__checkersTest = {
   normalizeRoom: normalizeRoom, sanitizeLocalState: sanitizeLocalState, websocketUrl: websocketUrl,
   reconnectDelayForAttempt: reconnectDelayForAttempt, normalizeBoardView: normalizeBoardView,
   applyBoardModeLayout: applyBoardModeLayout, buildBoardModel: buildBoardModel,
-  findNeighborKey: findNeighborKey, BOARD_SPAN: BOARD_SPAN
+  findNeighborKey: findNeighborKey, BOARD_SPAN: BOARD_SPAN,
+  state: function () { return {pieces:{...pieces},turn:turn,seats:seats.map(function (s) {return {...s};}),moveNumber:moveNumber,
+    gameOver:gameOver,animating:animating,aiThinking:aiThinking,aiWorkerBusy:aiWorkerBusy,saveSlot:saveSlot,lastAiStats:lastAiStats}; },
+  canAct:canAct,handleCell:handleCell,applyLocalMove:applyLocalMove,undoMove:undoMove,resetGame:resetGame
 };
 window.addEventListener('DOMContentLoaded', init);

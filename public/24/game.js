@@ -3,7 +3,7 @@
  * 交互改为「合并式」：点两张牌 → 选运算符 → 立刻算出结果（按点击顺序），
  * 结果变成新的一张牌，可继续合并，直到只剩一张且等于 24 即过关。无括号按钮。
  * 计算内核来自 core.js 的 Rational（与小程序同源，分数精确，无 eval）。
- * 覆盖：闯关(15级×15关/解锁门控/三星/三级提示) + 竞速(10题/计时/罚时/结算)。
+ * 覆盖：闯关(80大关×10关/解锁门控/三星/三级提示) + 竞速(10题/计时/罚时/结算)。
  */
 (function () {
   var LEVELS = window.LEVELS;
@@ -30,13 +30,39 @@
   var MATH_NOTE = (LEVELS.meta && LEVELS.meta.mathNotes) || {};
 
   // ---------- 存储 ----------
+  // ⚠️ 之前的实现把 localStorage 的异常全部吞掉：隐私模式 / 内嵌预览沙箱 / 部分浏览器的 file://
+  // 下 setItem 会直接抛错，玩家只看到「通关成功」却发现进度没保存，且没有任何提示。
+  // 这里开机探测一次可用性，失败时在界面上给出明确提示，并把后续写入降级为无操作。
   var STORE_KEY = 'g24_progress_v2';
   var SPEED_BEST_KEY = 'g24_speed_best_v2';
+
+  var storageOk = (function () {
+    try {
+      var probe = '__g24_probe__';
+      localStorage.setItem(probe, '1');
+      var back = localStorage.getItem(probe);
+      localStorage.removeItem(probe);
+      return back === '1';
+    } catch (e) { return false; }
+  })();
+  var storageWarned = false;
+  function warnStorage() {
+    if (storageWarned) return;
+    storageWarned = true;
+    var bar = $('storage-warn');
+    if (bar) bar.style.display = 'block';
+  }
+  function storageAvailable() { return storageOk; }
+
   function loadStore() {
     try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { slots: {}, stars: {} }; }
     catch (e) { return { slots: {}, stars: {} }; }
   }
-  function saveStore(s) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {} }
+  function saveStore(s) {
+    if (!storageOk) { warnStorage(); return; }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+    catch (e) { storageOk = false; warnStorage(); }
+  }
   var store = loadStore();
   if (!store.slots) store.slots = {};
   if (!store.stars) store.stars = {};
@@ -54,6 +80,48 @@
   function stageUnlocked(level, index) {
     if (index === 1) return levelUnlocked(level);
     return stageCleared(level, index - 1);
+  }
+  /** 该大关第一个未通关的关卡序号；全部通关返回 0。 */
+  function firstUnclearedStage(level) {
+    var total = perLevelCount(level);
+    for (var i = 1; i <= total; i++) if (!stageCleared(level, i)) return i;
+    return 0;
+  }
+  /**
+   * 续玩目标：优先回到「上次所在且尚未通关」的那一关；
+   * 若该关已通关，则从上次所在大关起找第一个还有未通关关卡的大关，回到它的第一道未通关关卡。
+   * 全部通关返回 null（此时关卡地图不再显示续玩按钮）。
+   */
+  function resumeTarget() {
+    var last = store.last;
+    if (last && last.level >= 1 && last.level <= LEVEL_COUNT) {
+      var lv = last.level, idx = last.index;
+      if (idx >= 1 && idx <= perLevelCount(lv) && !stageCleared(lv, idx)) return { level: lv, index: idx };
+    }
+    var start = last && last.level >= 1 && last.level <= LEVEL_COUNT ? last.level : 1;
+    for (var scan = start; scan <= LEVEL_COUNT; scan++) {
+      if (!levelUnlocked(scan)) break;
+      var next = firstUnclearedStage(scan);
+      if (next) return { level: scan, index: next };
+    }
+    return null;
+  }
+  /** 累计统计：已通关关卡数与星星总数（关卡地图的进度摘要用）。 */
+  function progressSummary() {
+    var cleared = 0, stars = 0, totalStages = 0;
+    for (var lv = 1; lv <= LEVEL_COUNT; lv++) totalStages += perLevelCount(lv);
+    Object.keys(store.stars).forEach(function (k) {
+      var arr = store.stars[k] || [];
+      for (var i = 0; i < arr.length; i++) {
+        if (arr[i] && arr[i].stars > 0) { cleared++; stars += arr[i].stars; }
+      }
+    });
+    return { cleared: cleared, stars: stars, totalStages: totalStages };
+  }
+  /** 记录「上次玩到哪」，供关卡地图的续玩入口使用。 */
+  function rememberPosition(level, index) {
+    store.last = { level: level, index: index };
+    saveStore(store);
   }
   function saveStageResult(level, index, res) {
     if (!store.stars[level]) store.stars[level] = [];
@@ -101,7 +169,11 @@
     try { var v = localStorage.getItem(SPEED_BEST_KEY); return v == null ? null : parseInt(v, 10); }
     catch (e) { return null; }
   }
-  function saveSpeedBest(ms) { try { localStorage.setItem(SPEED_BEST_KEY, String(ms)); } catch (e) {} }
+  function saveSpeedBest(ms) {
+    if (!storageOk) { warnStorage(); return; }
+    try { localStorage.setItem(SPEED_BEST_KEY, String(ms)); }
+    catch (e) { storageOk = false; warnStorage(); }
+  }
 
   // ---------- 工具 ----------
   function $(id) { return document.getElementById(id); }
@@ -390,7 +462,31 @@
   });
 
   function renderLevels() {
+    // 续玩入口：把「上次玩到哪」放在关卡地图最上方，避免每次进来都要从第 1 大关重新翻。
+    var resumeBox = $('levels-resume');
+    if (resumeBox) {
+      var target = resumeTarget();
+      var sum = progressSummary();
+      if (target) {
+        var isSame = store.last && store.last.level === target.level && store.last.index === target.index;
+        resumeBox.innerHTML =
+          '<button type="button" class="big-btn btn-orange resume-btn" id="levels-continue">' +
+          (isSame ? '继续上次' : '继续闯关') + '：第 ' + target.level + ' 大关 · 第 ' + target.index + ' 关 →</button>' +
+          '<div class="resume-note">已通关 ' + sum.cleared + ' / ' + sum.totalStages + ' 关 · 累计 ' + sum.stars + ' ★</div>';
+        resumeBox.style.display = 'block';
+        var btn = $('levels-continue');
+        if (btn) btn.onclick = function () { openChallenge(target.level, target.index); };
+      } else if (sum.cleared > 0) {
+        resumeBox.innerHTML = '<div class="resume-note">🎉 已通关全部 ' + sum.totalStages + ' 关 · 累计 ' + sum.stars + ' ★</div>';
+        resumeBox.style.display = 'block';
+      } else {
+        resumeBox.innerHTML = '';
+        resumeBox.style.display = 'none';
+      }
+    }
     var grid = $('levels-grid'); grid.innerHTML = '';
+    var lastLevel = store.last && store.last.level >= 1 ? store.last.level : 0;
+    var lastCell = null;
     for (var lv = 1; lv <= LEVEL_COUNT; lv++) {
       (function (l) {
         var unlocked = levelUnlocked(l);
@@ -398,13 +494,18 @@
     var total = perLevelCount(l);
     for (var i = 1; i <= total; i++) if (stageCleared(l, i)) cleared++;
         var cell = document.createElement('div');
-        cell.className = 'level-cell' + (unlocked ? '' : ' locked');
+        cell.className = 'level-cell' + (unlocked ? '' : ' locked') + (l === lastLevel ? ' lv-last' : '');
         cell.innerHTML = '<div class="lv-num">' + l + '</div>' +
           '<div class="lv-title">' + LEVEL_TITLES[l] + '</div>' +
           '<div class="lv-prog">' + cleared + '/' + perLevelCount(l) + '★</div>';
         if (unlocked) cell.onclick = function () { openStages(l); };
         grid.appendChild(cell);
+        if (l === lastLevel) lastCell = cell;
       })(lv);
+    }
+    // 80 个大关一屏列不完，自动把上次所在的大关滚到视野中央
+    if (lastCell && typeof lastCell.scrollIntoView === 'function') {
+      try { lastCell.scrollIntoView({ block: 'center' }); } catch (e) {}
     }
   }
   function openStages(level) {
@@ -434,6 +535,7 @@
     chState.level = level; chState.index = index; chState.entry = q;
     chState.hints = buildHints(q); chState.hintLevel = 0; chState.hintUsed = false;
     chState.elapsedMs = 0; chState.timedOut = false; chState.showResult = false;
+    rememberPosition(level, index);
     boardCh.init(q.numbers);
     $('ch-level').textContent = '第 ' + level + ' 级 · ' + LEVEL_TITLES[level];
     $('ch-diff').textContent = (q.difficulty && q.difficulty.label) || '';
@@ -1342,8 +1444,17 @@
     $('levels-back').onclick = function () { show('home'); };
     $('stages-back').onclick = function () { show('home'); };
     $('stages-reshuffle').onclick = function () {
-      var lv = chState.level; // 仅在 stages 视图有意义，用当前关卡
-      reshuffleLevel(openStagesLevel); saveStore(store); renderLevels(); openStages(openStagesLevel);
+      // 「换一批题」会重抽题目并使该大关已获得的星星失效（题目变了，旧星数不再可信）。
+      // 这是不可逆的进度丢失，因此已有星数时必须先跟玩家确认。
+      var lv = openStagesLevel;
+      var stars = store.stars[lv] || [];
+      var cleared = 0;
+      for (var i = 0; i < stars.length; i++) if (stars[i] && stars[i].stars > 0) cleared++;
+      if (cleared > 0) {
+        var tip = '换一批题后本大关的题目会重新随机，\n已获得的 ' + cleared + ' 颗关卡星星将被清空（不可恢复）。\n\n确定要换题吗？';
+        if (typeof window.confirm === 'function' && !window.confirm(tip)) return;
+      }
+      reshuffleLevel(lv); saveStore(store); renderLevels(); openStages(lv);
     };
     // 闯关
     $('ch-back').onclick = function () { stopChTimer(); openStages(chState.level); };
@@ -1453,6 +1564,9 @@
 
   window.addEventListener('DOMContentLoaded', function () {
     bind();
+    // 存储不可用（隐私模式 / 内嵌预览沙箱 / file:// 打开）时立刻给出可见提示，
+    // 否则玩家会以为「通关成功」就等于进度已保存。
+    if (!storageAvailable()) warnStorage();
     var invite = Net.readInviteCode();
     if (invite) {
       openVsLobby();

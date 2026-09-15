@@ -96,23 +96,28 @@
    * 落点在其正后方（距离 2）且为空，可连续跳跃一气呵成。
    * 返回 Map(落点 → 链上前一位置)，getLegalMoves 与 findMovePath 共用，避免两份逻辑漂移。
    */
+  // Geometry is immutable; don't recreate coordinate strings at every search edge.
+  const NEIGHBORS = new Map();
+  BOARD_CELLS.forEach(function (cell) {
+    NEIGHBORS.set(cell.key, DIRECTIONS.map(function (d) {
+      const middle = keyOf(cell.row + d[0], cell.unit + d[1]);
+      const target = keyOf(cell.row + d[0] * 2, cell.unit + d[1] * 2);
+      return { middle: CELL_MAP.has(middle) ? middle : '', target: CELL_MAP.has(target) ? target : '' };
+    }));
+  });
   function collectJumps(pieces, fromKey) {
     const parents = new Map();
     const visited = new Set([fromKey]);
     const queue = [fromKey];
-    const empty = function (key) { return key !== fromKey && !pieces[key]; };
-    while (queue.length) {
-      const currentKey = queue.shift();
-      const current = CELL_MAP.get(currentKey);
-      DIRECTIONS.forEach(function (direction) {
-        // 经典相邻跳：被跳棋子必须紧邻（相邻格有子，己方或对方均可），落点在其正后方且为空。
-        const probeKey = keyOf(current.row + direction[0], current.unit + direction[1]);
-        if (!CELL_MAP.has(probeKey) || !pieces[probeKey]) return;
-        const landingKey = keyOf(current.row + direction[0] * 2, current.unit + direction[1] * 2);
-        if (CELL_MAP.has(landingKey) && empty(landingKey) && !visited.has(landingKey)) {
-          visited.add(landingKey);
-          parents.set(landingKey, currentKey);
-          queue.push(landingKey);
+    if (!CELL_MAP.has(fromKey) || !pieces || !pieces[fromKey]) return parents;
+    for (let head = 0; head < queue.length; head++) {
+      const currentKey = queue[head];
+      NEIGHBORS.get(currentKey).forEach(function (edge) {
+        // The moving checker has vacated its origin; it cannot become its own hurdle.
+        if (!edge.middle || edge.middle === fromKey || !pieces[edge.middle]) return;
+        const landing = edge.target;
+        if (landing && landing !== fromKey && !pieces[landing] && !visited.has(landing)) {
+          visited.add(landing); parents.set(landing, currentKey); queue.push(landing);
         }
       });
     }
@@ -151,10 +156,7 @@
   function findMovePath(pieces, fromKey, targetKey) {
     const from = CELL_MAP.get(fromKey);
     if (!from || !CELL_MAP.has(targetKey) || !pieces || !pieces[fromKey] || pieces[targetKey]) return null;
-    const legal = getLegalMoves(pieces, fromKey);
-    if (legal.steps.includes(targetKey)) return [fromKey, targetKey];
-    if (!legal.jumps.includes(targetKey)) return null;
-
+    if (NEIGHBORS.get(fromKey).some(function (edge) { return edge.middle === targetKey; })) return [fromKey, targetKey];
     const parents = collectJumps(pieces, fromKey);
     if (!parents.has(targetKey)) return null;
     const path = [targetKey];
@@ -215,7 +217,9 @@
     if (!raw || !isLiveColor(raw.pieces, raw.turn)) return null;
     const pieces = sanitizePieces(raw.pieces);
     if (!pieces) return null;
-    const claimedWinner = isLiveColor(pieces, raw.winner) && hasWon(pieces, raw.winner) ? raw.winner : '';
+    const actualWinners = COLORS.filter(function (color) { return hasWon(pieces, color); });
+    if (actualWinners.length > 1) return null; // First-finisher rules cannot produce two winners.
+    const claimedWinner = actualWinners[0] || '';
     return {
       pieces: pieces,
       turn: raw.turn,
@@ -257,28 +261,49 @@
   function moveScore(pieces, player, move) {
     const from = CELL_MAP.get(move.from);
     const target = CELL_MAP.get(move.target);
-    const forward = player === 'red' ? target.row - from.row : from.row - target.row;
+    const forward = orientedMetrics(target, player).progress - orientedMetrics(from, player).progress;
     const fromGoal = goalFor(player).has(move.from);
     const targetGoal = goalFor(player).has(move.target);
     const enteringGoal = !fromGoal && targetGoal ? 1 : 0;
     const leavingGoal = fromGoal && !targetGoal ? 1 : 0;
-    const centerGain = Math.abs(from.unit) - Math.abs(target.unit);
+    const centerGain = Math.abs(orientedMetrics(from, player).axis) - Math.abs(orientedMetrics(target, player).axis);
     // 历史教训（2026.08）：不要为“营内挪动”加排序惩罚——腾出营地空孔让营外
     // 棋子跳入是终局关键战术，惩罚会把这类获胜计划挤出根候选窗口（拆解竞技场
     // 0–7 惨败）。营内挪动是否浪费由搜索与评估自行判断。
     return forward * 9 + enteringGoal * 120 - leavingGoal * 180 + centerGain * .7 + (move.kind === 'jump' ? 5 : 0);
   }
 
+  // Rotate every camp into red's local coordinates. Preserve red/blue feature units.
+  const AXES = {};
+  function orientedMetrics(cell, player) {
+    let axis = AXES[player];
+    if (!axis) {
+      const goals = Array.from(goalFor(player)).map(function (key) { return CELL_MAP.get(key); });
+      let dx = 0, dy = 0;
+      goals.forEach(function (c) { dx += c.unit / 2; dy += (c.row - 8) * Math.sqrt(3) / 2; });
+      const norm = Math.hypot(dx, dy) || 1;
+      axis = AXES[player] = { x: dx / norm, y: dy / norm };
+    }
+    const x = cell.unit / 2, y = (cell.row - 8) * Math.sqrt(3) / 2;
+    return { progress: Math.round((8 + (x * axis.x + y * axis.y) * 2 / Math.sqrt(3)) * 1e9) / 1e9,
+      axis: Math.round((x * axis.y - y * axis.x) * 2 * 1e9) / 1e9 };
+  }
+
   function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
 
+  const DIST_CACHE = new Map();
   function distanceToGoal(cell, player) {
+    const cacheKey = cell.key + '|' + player;
+    if (DIST_CACHE.has(cacheKey)) return DIST_CACHE.get(cacheKey);
     let shortest = Infinity;
     goalFor(player).forEach(function (goalKey) {
       const goal = CELL_MAP.get(goalKey);
-      const rowDistance = Math.abs(cell.row - goal.row);
-      const unitDistance = Math.abs(cell.unit - goal.unit) / 2;
+      const a = orientedMetrics(cell, player), b = orientedMetrics(goal, player);
+      const rowDistance = Math.abs(a.progress - b.progress);
+      const unitDistance = Math.abs(a.axis - b.axis) / 2;
       shortest = Math.min(shortest, rowDistance * 1.25 + unitDistance * .58);
     });
+    DIST_CACHE.set(cacheKey, shortest);
     return shortest;
   }
 
@@ -348,11 +373,11 @@
       if (pieces[key] !== player) return;
       const cell = CELL_MAP.get(key);
       pieceCells.push(cell);
-      const cellProgress = player === 'red' ? cell.row : (16 - cell.row);
+      const cellProgress = orientedMetrics(cell, player).progress;
       progress.push(cellProgress);
       forward += cellProgress;
       distance += distanceToGoal(cell, player);
-      axisOffset += Math.abs(cell.unit);
+      axisOffset += Math.abs(orientedMetrics(cell, player).axis);
       tailProgress = Math.min(tailProgress, cellProgress);
       if (goalFor(player).has(key)) inGoal++;
     });
@@ -471,316 +496,33 @@
     }).join('');
   }
 
-  function orderedMoves(pieces, player, limit) {
-    return listMoves(pieces, player)
-      .map(function (move) { return { move: move, score: moveScore(pieces, player, move) }; })
-      .sort(function (a, b) { return b.score - a.score; })
-      .slice(0, Math.max(1, limit))
-      .map(function (item) { return item.move; });
+  // Backwards-compatible public entrypoints now route to the stage engine.
+  // The original DFS is kept only in /baseline for honest A/B comparisons, never in the live path.
+  function stageEngine() {
+    if (typeof module === 'object' && module.exports) return require('./checkers_ai_engine.js');
+    if (typeof globalThis !== 'undefined' && globalThis.CheckersAI) return globalThis.CheckersAI;
+    throw new Error('Load checkers_ai_engine.js before requesting AI moves');
   }
-
-  const TT_EXACT = 'EXACT';
-  const TT_LOWER = 'LOWER';
-  const TT_UPPER = 'UPPER';
-
-  /**
-   * TT values are perspective-sensitive minimax scores. Side-to-move and the
-   * evaluator contract therefore belong to the key; omitting either silently
-   * reuses a score with different semantics.
-   */
   function transpositionKey(pieces, activePlayer, perspective, evaluatorVersion) {
     return positionKey(pieces) + '|' + activePlayer + '|' + perspective + '|' + String(evaluatorVersion || 'static-v2');
   }
-
-  /**
-   * 叶子评估：优先复用同一决策内的评估缓存（置换局面只算一次），
-   * 再退回静态+价值混合评估。缓存对同一决策内的多次评估是确定性的。
-   */
-  function evaluateLeaf(context, pieces, perspective) {
-    const cache = context.evalCache;
-    if (cache) {
-      const key = positionKey(pieces) + '|' + perspective;
-      const cached = cache.get(key);
-      if (cached !== undefined) return cached;
-      const value = evaluateHybridPosition(pieces, perspective, context.model);
-      if (cache.size < context.evalCacheLimit) cache.set(key, value);
-      return value;
-    }
-    return evaluateHybridPosition(pieces, perspective, context.model);
-  }
-
-  // 受预算保护的深度优先极大极小搜索。跳棋分支会在中局膨胀，
-  // 因而结合 alpha-beta 剪枝、走法排序、节点上限与可选的决策时间预算。
-  function dfsSearch(pieces, activePlayer, perspective, depth, alpha, beta, context) {
-    if (depth <= 0) {
-      return { score: evaluateLeaf(context, pieces, perspective), complete: true, boundType: TT_EXACT };
-    }
-    if (context.nodes >= context.maxNodes) {
-      context.budgetCutoffs++;
-      return { score: evaluateLeaf(context, pieces, perspective), complete: false, boundType: null };
-    }
-    const originalAlpha = alpha;
-    const originalBeta = beta;
-    const key = context.tt
-      ? transpositionKey(pieces, activePlayer, perspective, context.evaluatorVersion)
-      : '';
-    if (context.tt) {
-      context.ttProbes++;
-      const entry = context.tt.get(key);
-      if (entry && entry.complete && entry.searchedDepth >= depth) {
-        context.ttHits++;
-        if (entry.boundType === TT_EXACT) {
-          context.ttExactHits++;
-          return { score: entry.score, complete: true, boundType: TT_EXACT, bestMove: entry.bestMove || null, fromTable: true };
-        }
-        if (entry.boundType === TT_LOWER) alpha = Math.max(alpha, entry.score);
-        else if (entry.boundType === TT_UPPER) beta = Math.min(beta, entry.score);
-        if (alpha >= beta) {
-          context.ttCutoffs++;
-          return { score: entry.score, complete: true, boundType: entry.boundType, bestMove: entry.bestMove || null, fromTable: true };
-        }
-      }
-    }
-    context.nodes++;
-    // 决策时间预算：逐节点检查墙钟（Date.now 约几十纳秒，开销可忽略），
-    // 超时立即中止整个候选的搜索（设置 timedOut 标志并向上传播）。
-    if (context.timeLimitMs > 0 && Date.now() - context.startTime >= context.timeLimitMs) {
-      context.budgetCutoffs++;
-      context.timedOut = true;
-      return { score: evaluateLeaf(context, pieces, perspective), complete: false, boundType: null };
-    }
-    const moves = orderedMoves(pieces, activePlayer, context.widths[Math.min(context.widths.length - 1, context.ply)]);
-    if (!moves.length) {
-      const score = evaluateLeaf(context, pieces, perspective);
-      if (context.tt) {
-        context.tt.set(key, { searchedDepth: depth, score: score, boundType: TT_EXACT, bestMove: null, complete: true });
-        context.ttStores++;
-      }
-      return { score: score, complete: true, boundType: TT_EXACT, bestMove: null };
-    }
-    const maximizing = activePlayer === perspective;
-    let best = maximizing ? -Infinity : Infinity;
-    let bestMove = null;
-    let complete = true;
-    for (let i = 0; i < moves.length; i++) {
-      if (context.nodes >= context.maxNodes || context.timedOut) { complete = false; context.budgetCutoffs++; break; }
-      const result = applyMove(pieces, activePlayer, moves[i].from, moves[i].target);
-      if (!result) continue;
-      let child;
-      if (result.winner) {
-        child = { score: result.winner === perspective ? 100000 + depth : -100000 - depth, complete: true };
-      } else {
-        context.ply++;
-        child = dfsSearch(result.pieces, opposite(activePlayer), perspective, depth - 1, alpha, beta, context);
-        context.ply--;
-      }
-      const score = child.score;
-      if (!child.complete) complete = false;
-      if (maximizing) {
-        if (score > best) { best = score; bestMove = moves[i]; }
-        alpha = Math.max(alpha, best);
-      } else {
-        if (score < best) { best = score; bestMove = moves[i]; }
-        beta = Math.min(beta, best);
-      }
-      if (beta <= alpha) break;
-    }
-    if (best === Infinity || best === -Infinity) {
-      best = evaluateLeaf(context, pieces, perspective);
-      complete = false;
-    }
-    let boundType = null;
-    if (complete) {
-      boundType = best <= originalAlpha ? TT_UPPER : (best >= originalBeta ? TT_LOWER : TT_EXACT);
-      if (context.tt) {
-        const previous = context.tt.get(key);
-        if (!previous || previous.searchedDepth <= depth || previous.boundType !== TT_EXACT) {
-          context.tt.set(key, {
-            searchedDepth: depth, score: best, boundType: boundType,
-            bestMove: bestMove, complete: true
-          });
-          context.ttStores++;
-        }
-      }
-    }
-    return { score: best, complete: complete, boundType: boundType, bestMove: bestMove };
-  }
-
-  function aiSearchOptions(level) {
-    if (level === 'hard') return { depth: 3, maxNodes: 3600, widths: [20, 14, 12] };
-    return { depth: 2, maxNodes: 1200, widths: [16, 12] };
-  }
-
-  /**
-   * 终局自适应加深。历史教训（2026.08 竞技场 + S2 消融）：中后局（合计营外棋子
-   * 超过 8）盲目加深会在时间预算下产生半截搜索噪声，比稳定的 depth-3 更差；
-   * 只有真正的终局（每方 ≤ 4 子在外，分支大幅收缩）才能安全加深，
-   * 让搜索看到更远的强制获胜序列。节点预算只做安全网，真正的限制是决策时间预算。
-   */
-  function adaptiveSearchProfile(pieces) {
-    const redRemaining = 10 - countInGoal(pieces, 'red');
-    const blueRemaining = 10 - countInGoal(pieces, 'blue');
-    const total = redRemaining + blueRemaining;
-    if (total <= 4) return { depth: 7, widths: [20, 14, 12, 10, 8, 8] };
-    if (total <= 8) return { depth: 5, widths: [20, 14, 12, 10] };
-    return { depth: 3, widths: [24, 16, 12] };
-  }
-
-  /**
-   * Run the deterministic DFS part once and expose root score margins. The
-   * selector and model arena can therefore share exactly the same deployed
-   * hard-search contract instead of duplicating it.
-   */
-  function analyzeAiMoves(pieces, player, level, searchOptions) {
-    const moves = listMoves(pieces, player);
-    if (!moves.length) return { moves: [], candidates: [], winningMoves: [], bestBaseScore: -Infinity };
-    const options = aiSearchOptions(level);
-    const advanced = searchOptions && typeof searchOptions === 'object' ? searchOptions : {};
-    const strategicLevel = level === 'hard';
-    const learnedModel = strategicLevel && advanced.model ? advanced.model : null;
-    const requestedTempo = Number(advanced.tempoWeight);
-    const tempoWeight = strategicLevel && Number.isFinite(requestedTempo) ? Math.max(0, Math.min(4, requestedTempo)) : 0;
-    const requestedRootWidth = Math.floor(Number(advanced.rootWidth));
-    const requestedMaxNodes = Math.floor(Number(advanced.maxNodes));
-    if (strategicLevel && Number.isFinite(requestedMaxNodes)) {
-      options.maxNodes = Math.max(100, Math.min(100000, requestedMaxNodes));
-    }
-    // 自适应配置：终局加深，中局保持 3 层；节点上限只做安全网，时间预算主导。
-    const adaptive = strategicLevel && advanced.adaptive === true;
-    if (adaptive) {
-      const profile = adaptiveSearchProfile(pieces);
-      options.depth = profile.depth;
-      options.widths = profile.widths.slice();
-      options.maxNodes = Math.max(options.maxNodes, 30000);
-    }
-    const requestedTimeLimit = Number(advanced.timeLimitMs);
-    const timeLimitMs = strategicLevel && Number.isFinite(requestedTimeLimit) && requestedTimeLimit > 0
-      ? Math.max(20, Math.min(20000, requestedTimeLimit))
-      : 0;
-    const widths = options.widths.slice();
-    if (strategicLevel && Number.isFinite(requestedRootWidth)) {
-      widths[0] = Math.max(8, Math.min(24, requestedRootWidth));
-    }
-    // 可复用策略价值引擎可以为根节点候选提供归一化增益；原 DFS、合法性和
-    // 胜棋检查仍是最终保护层。默认权重为 0，因此不会改变现有线上机器人。
-    const learnedMoveScores = advanced.learnedMoveScores && typeof advanced.learnedMoveScores === 'object'
-      ? advanced.learnedMoveScores : null;
-    const requestedLearnedWeight = Number(advanced.learnedMoveWeight);
-    const learnedMoveWeight = strategicLevel && Number.isFinite(requestedLearnedWeight)
-      ? Math.max(0, Math.min(600, requestedLearnedWeight)) : 0;
-    const recentPositions = new Set(Array.isArray(advanced.recentPositions) ? advanced.recentPositions.slice(-20) : []);
-    const candidates = orderedMoves(pieces, player, widths[0]);
-    // Scan every legal root move. Candidate-width pruning must never hide a win.
-    const winningMoves = moves.filter(function (move) {
-      const result = applyMove(pieces, player, move.from, move.target);
-      return result && result.winner === player;
-    });
-    // 对手一步可赢：把“进入对手营地”的全部合法走法强制纳入根候选——
-    // 这是唯一可能拖延对手完成的手段，不能因为走法排序被宽度剪枝排除。
-    // 阻挡是亏节奏的战术，因此只在该威胁真实存在时才会被考虑。
-    if (!winningMoves.length) {
-      const opponent = opposite(player);
-      const opponentCanWinNext = listMoves(pieces, opponent).some(function (opponentMove) {
-        const result = applyMove(pieces, opponent, opponentMove.from, opponentMove.target);
-        return result && result.winner === opponent;
-      });
-      if (opponentCanWinNext) {
-        const theirGoal = goalFor(opponent);
-        moves.forEach(function (move) {
-          if (!theirGoal.has(move.target)) return;
-          if (candidates.some(function (candidate) { return candidate.from === move.from && candidate.target === move.target; })) return;
-          candidates.push(move);
-        });
-      }
-    }
-    const requestedCandidateBudget = Math.floor(Number(advanced.candidateNodeBudget));
-    const candidateBudget = Number.isFinite(requestedCandidateBudget)
-      ? Math.max(1, Math.min(100000, requestedCandidateBudget))
-      : Math.max(24, Math.floor(options.maxNodes / Math.max(1, candidates.length)));
-    const useTranspositionTable = strategicLevel && advanced.enableTranspositionTable === true;
-    const transpositionTable = useTranspositionTable ? new Map() : null;
-    const evaluatorVersion = learnedModel && learnedModel.featureVersion
-      ? learnedModel.featureVersion
-      : 'cc-static-v2';
-    // 同一决策内共享叶子评估缓存：置换局面只计算一次静态+价值分。
-    const evalCache = new Map();
-    const evalCacheLimit = 10000;
-    const analyzed = [];
-    let timePoolMs = timeLimitMs;
-    candidates.forEach(function (move, candidateIndex) {
-      // 时间预算按剩余候选均分，前面的候选用不完的份额会留给后面的候选。
-      const shareMs = timeLimitMs > 0
-        ? Math.max(3, Math.floor(timePoolMs / Math.max(1, candidates.length - candidateIndex)))
-        : 0;
-      const context = {
-        nodes: 0, maxNodes: candidateBudget, widths: widths, ply: 1, model: learnedModel,
-        tt: transpositionTable, evaluatorVersion: evaluatorVersion,
-        ttProbes: 0, ttHits: 0, ttExactHits: 0, ttCutoffs: 0, ttStores: 0,
-        budgetCutoffs: 0, startTime: Date.now(), timeLimitMs: shareMs,
-        evalCache: evalCache, evalCacheLimit: evalCacheLimit
-      };
-      const result = applyMove(pieces, player, move.from, move.target);
-      if (!result) return;
-      const searchResult = result.winner
-        ? { score: 100000, complete: true, boundType: TT_EXACT }
-        : dfsSearch(result.pieces, opposite(player), player, options.depth - 1, -Infinity, Infinity, context);
-      if (timeLimitMs > 0) timePoolMs = Math.max(0, timePoolMs - (Date.now() - context.startTime));
-      let baseScore = searchResult.score;
-      // 价值接近时优先长跳和真正进入目标营地的走法，避免过度防守拖慢竞速局。
-      baseScore += moveScore(pieces, player, move) * tempoWeight;
-      // 根节点避免回到最近已经出现过的完整局面，减少两枚棋子反复横跳。
-      if (!result.winner && recentPositions.has(positionKey(result.pieces))) baseScore -= 900;
-      analyzed.push({
-        action: move, baseDfsScore: baseScore, nodes: context.nodes,
-        searchComplete: searchResult.complete, boundType: searchResult.boundType,
-        ttProbes: context.ttProbes, ttHits: context.ttHits,
-        ttExactHits: context.ttExactHits, ttCutoffs: context.ttCutoffs,
-        ttStores: context.ttStores, budgetCutoffs: context.budgetCutoffs,
-        directWin: !!result.winner, repeated: !result.winner && recentPositions.has(positionKey(result.pieces)),
-        moveScore: moveScore(pieces, player, move)
-      });
-    });
-    const bestBaseScore = analyzed.reduce(function (best, item) { return Math.max(best, item.baseDfsScore); }, -Infinity);
-    return {
-      moves: moves, candidates: analyzed, winningMoves: winningMoves,
-      bestBaseScore: bestBaseScore, learnedMoveScores: learnedMoveScores,
-      learnedMoveWeight: learnedMoveWeight, options: options,
-      totalNodes: analyzed.reduce(function (sum, item) { return sum + item.nodes; }, 0),
-      searchComplete: analyzed.every(function (item) { return item.searchComplete; }),
-      transpositionTableEnabled: useTranspositionTable,
-      transpositionTableSize: transpositionTable ? transpositionTable.size : 0,
-      ttProbes: analyzed.reduce(function (sum, item) { return sum + item.ttProbes; }, 0),
-      ttHits: analyzed.reduce(function (sum, item) { return sum + item.ttHits; }, 0),
-      ttExactHits: analyzed.reduce(function (sum, item) { return sum + item.ttExactHits; }, 0),
-      ttCutoffs: analyzed.reduce(function (sum, item) { return sum + item.ttCutoffs; }, 0),
-      ttStores: analyzed.reduce(function (sum, item) { return sum + item.ttStores; }, 0),
-      budgetCutoffs: analyzed.reduce(function (sum, item) { return sum + item.budgetCutoffs; }, 0)
-    };
-  }
-
   function chooseAiMove(pieces, player, level, randomFn, searchOptions) {
-    const moves = listMoves(pieces, player);
-    if (!moves.length) return null;
-    const random = typeof randomFn === 'function' ? randomFn : Math.random;
-    if (level === 'easy') return moves[Math.floor(random() * moves.length)];
-    const advanced = searchOptions && typeof searchOptions === 'object' ? searchOptions : {};
-    const analysis = analyzeAiMoves(pieces, player, level, advanced);
-    if (analysis.winningMoves.length) return analysis.winningMoves[Math.floor(random() * analysis.winningMoves.length)];
-    const requestedMargin = Number(advanced.safeLearnedMargin);
-    const safeLearnedMargin = Number.isFinite(requestedMargin) ? Math.max(0, Math.min(5000, requestedMargin)) : Infinity;
-    let bestScore = -Infinity;
-    let bestMoves = [];
-    analysis.candidates.forEach(function (candidate) {
-      let score = candidate.baseDfsScore;
-      if (analysis.learnedMoveScores && analysis.learnedMoveWeight > 0 &&
-        analysis.bestBaseScore - candidate.baseDfsScore <= safeLearnedMargin) {
-        const learnedScore = Number(analysis.learnedMoveScores[candidate.action.from + '>' + candidate.action.target]);
-        if (Number.isFinite(learnedScore)) score += Math.max(-2, Math.min(2, learnedScore)) * analysis.learnedMoveWeight;
-      }
-      if (score > bestScore) { bestScore = score; bestMoves = [candidate.action]; }
-      else if (score === bestScore) bestMoves.push(candidate.action);
+    const opts = Object.assign({}, searchOptions || {}, {level:level});
+    if (typeof randomFn === 'function' && !Number.isFinite(opts.seed)) opts.seed = Math.floor(randomFn() * 4294967296);
+    return stageEngine().chooseMove(pieces, player, opts).move;
+  }
+  function analyzeAiMoves(pieces, player, level, searchOptions) {
+    const result = stageEngine().chooseMove(pieces, player, Object.assign({}, searchOptions || {}, {level:level}));
+    const candidates = (result.candidates || []).map(function (c) {
+      return {action:c.move,baseDfsScore:c.score,searchComplete:result.stats.reliable === true,
+        boundType:result.stats.reliable ? (result.stats.algorithm === 'iterative-alpha-beta' ? 'EXACT_WITHIN_SELECTIVE_SEARCH' : result.stats.algorithm === 'direct-win' ? 'TERMINAL' : 'HEURISTIC') : null,
+        nodes:0,visits:c.visits,directWin:result.stats.algorithm === 'direct-win'};
     });
-    return bestMoves.length ? bestMoves[Math.floor(random() * bestMoves.length)] : moves[0];
+    return {moves:listMoves(pieces,player),candidates:candidates,
+      winningMoves:result.stats.algorithm === 'direct-win' ? [result.move] : [],
+      bestBaseScore:candidates.length ? Math.max.apply(null,candidates.map(function(c){return c.baseDfsScore;})) : -Infinity,
+      totalNodes:result.stats.nodes || 0,searchComplete:result.stats.reliable === true,
+      options:{depth:result.stats.completedDepth || 0},diagnostics:result.stats};
   }
 
   return {
@@ -801,6 +543,8 @@
     extractValueFeatures: extractValueFeatures, predictValueModel: predictValueModel,
     evaluateHybridPosition: evaluateHybridPosition, positionKey: positionKey,
     transpositionKey: transpositionKey,
+    goalFor: goalFor, playerPosition: playerPosition, hexDistance: hexDistance, orientedMetrics: orientedMetrics,
+    goalAssignmentDistance: goalAssignmentDistance,
     analyzeAiMoves: analyzeAiMoves, chooseAiMove: chooseAiMove
   };
 });

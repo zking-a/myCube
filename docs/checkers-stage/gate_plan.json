@@ -1,0 +1,16 @@
+{
+  "frozen_before_holdout": true,
+  "candidate": "2026.09.15-distill1",
+  "policy_weight": 24,
+  "value_enabled": false,
+  "holdout": {"pairs": 32, "seed": 820000, "node_budget": 2500},
+  "promotion_requirements": [
+    "At least 64 games, swap colors in paired openings",
+    "No illegal moves, crashes or false terminal claims",
+    "Pair-resampled bootstrap 95% lower score bound must exceed 0.50",
+    "If this strength gate passes, require a separate same-wall-budget non-regression arena before enabling policy",
+    "Value head is separately gated; validation loss cannot enable it"
+  ],
+  "default_until_pass": "Pure phase-aware search. Trained model remains frozen candidate, bundled but disabled.",
+  "no_human_strength_claim": true
+}

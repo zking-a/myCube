@@ -1,0 +1,55 @@
+{
+  "release": "2026.09.15-stage1",
+  "modelVersion": "2026.09.15-distill1",
+  "modelEnabled": false,
+  "training": {
+    "games": 128,
+    "positions": 4182,
+    "actionRows": 83571,
+    "splitCounts": {
+      "train": {
+        "positions": 3125,
+        "actionRows": 62431
+      },
+      "validation": {
+        "positions": 510,
+        "actionRows": 10200
+      },
+      "test": {
+        "positions": 503,
+        "actionRows": 10060
+      }
+    },
+    "method": "搜索教师监督蒸馏；不是强化学习"
+  },
+  "arenas": [
+    {
+      "name": "模型验证集：模型 vs 纯搜索",
+      "wins": 9,
+      "losses": 15,
+      "draws": 0,
+      "games": 24
+    },
+    {
+      "name": "模型独立留出集：模型 vs 纯搜索",
+      "wins": 36,
+      "losses": 28,
+      "draws": 0,
+      "games": 64
+    },
+    {
+      "name": "新版纯搜索 vs 原版（60ms 软预算）",
+      "wins": 8,
+      "losses": 6,
+      "draws": 2,
+      "games": 16
+    }
+  ],
+  "decision": "模型已训练并冻结，但尚未通过上线门槛。默认纯分阶段搜索；价值网络同样保持关闭。",
+  "limitations": [
+    "浏览器测试是隔离 DOM + 真实 Blob Worker，不是 ChatGPT Sites 实际部署验收。",
+    "本包没有 /checkers-ws 和 /ai-lab 后端。",
+    "未测人类等级分；多人搜索仅做功能验证。",
+    "未实现 AlphaZero 强化学习、开局数据库或精确残局数据库。"
+  ]
+}

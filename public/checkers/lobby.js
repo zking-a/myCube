@@ -5,6 +5,7 @@ const CONFIG = {
   BOT_LEVEL_KEY: 'chinese_checkers_online_bot_level',
   NICK_KEY: 'light_games_nickname',
   SAVE_PREFIX: 'chinese_checkers_save_v2_',
+  LAST_SLOT_PREFIX: 'chinese_checkers_last_slot_v3_',
   ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
   ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/
 };
@@ -94,7 +95,7 @@ function selectLocalPlayers(count) {
 }
 
 function selectLocalAi(count) {
-  localAi = Math.max(0, Math.min(4, Math.floor(Number(count) || 0)));
+  localAi = Math.max(0, Math.min(5, Math.floor(Number(count) || 0)));
   if (localAi > localPlayers - 1) localAi = localPlayers - 1;
   refreshLocalSeatUi();
 }
@@ -153,7 +154,8 @@ function selectLevel(level) {
 
 function hasSavedGame(mode) {
   try {
-    const raw = JSON.parse(safeGet(CONFIG.SAVE_PREFIX + mode) || 'null');
+    const slot = safeGet(CONFIG.LAST_SLOT_PREFIX + mode);
+    const raw = JSON.parse((slot && safeGet(slot)) || safeGet(CONFIG.SAVE_PREFIX + mode) || 'null');
     return !!(raw && Number(raw.moveNumber) > 1 && !raw.winner);
   } catch (e) { return false; }
 }
@@ -162,8 +164,16 @@ function init() {
   aiLevel = AI_LEVELS.includes(safeGet(CONFIG.AI_LEVEL_KEY)) ? safeGet(CONFIG.AI_LEVEL_KEY) : 'normal';
   selectLevel(aiLevel);
   $('nickInput').value = safeGet(CONFIG.NICK_KEY) || '玩家';
-  $('startAiLabel').textContent = hasSavedGame('ai') ? '继续人机对战' : '开始人机对战';
-  $('startLocalLabel').textContent = hasSavedGame('local') ? '继续本地对战' : '本地对战';
+  $('startAiLabel').textContent = '开始新的人机对战';
+  if ($('startLocalLabel')) $('startLocalLabel').textContent = '开始新的本地对战';
+  ['ai','local'].forEach(function (mode) {
+    const start = $(mode === 'ai' ? 'startAiBtn' : 'startLocalBtn');
+    const button = document.createElement('button'); button.type = 'button';
+    button.className = 'mode-start ui-button ui-button--secondary'; button.id = mode + 'ResumeBtn';
+    button.textContent = '继续上次' + (mode === 'ai' ? '人机' : '本地') + '对局'; button.hidden = !hasSavedGame(mode);
+    button.addEventListener('click', function () { goToGame({mode:mode,intent:'resume'}); });
+    start.parentNode.insertBefore(button,start.nextSibling);
+  });
 
   const launchParams = new URLSearchParams(location.search);
   const invitedRoom = normalizeRoom(launchParams.get('room'));
@@ -215,11 +225,11 @@ function init() {
     showError('');
   });
   $('startAiBtn').addEventListener('click', function () {
-    const params = { mode: 'ai', level: aiLevel };
+    const params = { mode: 'ai', level: aiLevel, intent:'new' };
     goToGame(params);
   });
   $('startLocalBtn').addEventListener('click', function () {
-    const params = localPlayers === 2 && localAi === 0 ? { mode: 'local' } : { mode: 'local', players: localPlayers, ai: localAi };
+    const params = { mode: 'local', players: localPlayers, ai: localAi, level:aiLevel, intent:'new' };
     goToGame(params);
   });
   $('createRoomBtn').addEventListener('click', function () {

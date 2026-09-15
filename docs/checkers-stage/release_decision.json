@@ -1,0 +1,16 @@
+{
+  "candidate": "2026.09.15-distill1",
+  "policyEnabled": false,
+  "valueEnabled": false,
+  "strengthGatePassed": false,
+  "wallGatePassed": false,
+  "holdoutScore": 0.5625,
+  "holdoutPairedBootstrap95": [
+    0.5,
+    0.640625
+  ],
+  "decision": "trained_candidate_not_promoted",
+  "reason": "Stronger-than-pure-search not established; keep safe search default. Validation fit is not a playing-strength gate.",
+  "predeclaredPlan": "reports/gate_plan.json",
+  "note": "A non-promoted trained model is still included for reproducibility/experimentation. No human rating or guaranteed wins are claimed."
+}
