@@ -79,6 +79,10 @@ function closedResult(ws) {
     const plain = await request('/24/data.js');
     ok('gzip 表示使用独立 ETag 并可直接命中 304 缓存',
       gzip.status === 200 && gzip.headers['content-encoding'] === 'gzip' && cached.status === 304 && plain.headers.etag !== gzip.headers.etag);
+    const versioned = await request('/24/data.js?v=content-hash');
+    ok('带版本标识的静态资源使用长期 immutable 缓存',
+      /max-age=31536000/.test(versioned.headers['cache-control'] || '') && /immutable/.test(versioned.headers['cache-control'] || '') &&
+      /max-age=300/.test(plain.headers['cache-control'] || ''));
 
     console.log('\n✅ 安全与缓存回归全部通过（' + passed + ' 项）');
   } finally {

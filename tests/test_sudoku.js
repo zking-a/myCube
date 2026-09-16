@@ -60,6 +60,8 @@ ok('五档题目全部保持唯一解', puzzles.every(p => S.countSolutions(p, 2
 const clueCounts = puzzles.map(p => p.filter(Boolean).length);
 console.log('  INFO  五档给定数：' + clueCounts.join('/'));
 ok('难度越高给定数字不增加', clueCounts.every((v, i) => i === 0 || v <= clueCounts[i - 1]));
+ok('极限难度如实说明唯一解下的目标给定数',
+  clueCounts[4] >= 24 && clueCounts[4] <= 26 && /极限[\s\S]*约 24 个已知数/.test(sudokuHtml));
 
 ok('难度参数越界时安全回落到简单', S.normalizeDifficulty(-1) === 0 && S.normalizeDifficulty(99) === 0);
 ok('计时格式覆盖分钟和小时', S.formatDuration(65) === '01:05' && S.formatDuration(3661) === '01:01:01');

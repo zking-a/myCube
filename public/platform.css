@@ -55,6 +55,21 @@ body::after { width: 220px; height: 220px; right: -130px; bottom: 5%; background
 h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
 .platform-hero p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
 
+.recent-game {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 15px 16px;
+}
+.recent-game[hidden] { display: none; }
+.recent-game div { display: grid; gap: 2px; min-width: 0; }
+.recent-game-kicker { color: var(--blue); font-size: 10px; font-weight: 900; letter-spacing: 1.5px; }
+.recent-game strong { font-size: 16px; }
+.recent-game small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.recent-game a { flex: 0 0 auto; display: grid; padding: 0 16px; place-items: center; text-decoration: none; }
+
 .game-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
 .game-card {
   position: relative;
@@ -95,6 +110,7 @@ h1 { margin: 0 0 7px; font-size: 30px; letter-spacing: -.6px; }
   .game-grid { grid-template-columns: 1fr; }
   .game-card { min-height: 0; padding: 18px; }
   .game-card p { min-height: 0; }
+  .recent-game { margin-left: 0; margin-right: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

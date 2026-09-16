@@ -6,6 +6,7 @@ const SAVE_KEYS = {
 
 const CONFIG = {
   NICK_KEY: 'light_games_nickname',
+  AI_LEVEL_KEY: 'light_games_gomoku_ai_level',
   ROOM_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
   ROOM_RE: /^[A-HJ-NP-Z2-9]{5}$/
 };
@@ -63,8 +64,34 @@ function bindMode(mode, buttonId, label) {
     button.setAttribute('aria-label', `${label}继续上局，共 ${display.moveText}`);
   }
   button.addEventListener('click', function () {
-    window.location.href = `play.html?mode=${mode}`;
+    const level = normalizeAiLevel(safeGet(CONFIG.AI_LEVEL_KEY));
+    window.location.href = `play.html?mode=${mode}&level=${level}`;
   });
+}
+
+function normalizeAiLevel(value) {
+  return ['easy', 'normal', 'hard'].includes(value) ? value : 'normal';
+}
+
+function initAiDifficulty() {
+  const buttons = Array.from(document.querySelectorAll('[data-ai-level]'));
+  if (!buttons.length) return;
+  let selected = normalizeAiLevel(safeGet(CONFIG.AI_LEVEL_KEY));
+  function render() {
+    buttons.forEach(function (button) {
+      const active = button.dataset.aiLevel === selected;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+  }
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      selected = normalizeAiLevel(button.dataset.aiLevel);
+      safeSet(CONFIG.AI_LEVEL_KEY, selected);
+      render();
+    });
+  });
+  render();
 }
 
 function normalizeRoom(value) {
@@ -157,6 +184,7 @@ function redirectInvite() {
 
 function init() {
   redirectInvite();
+  initAiDifficulty();
   bindMode('ai', 'startAiBtn', '单机人机');
   initOnline();
 }

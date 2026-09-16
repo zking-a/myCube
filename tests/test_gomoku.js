@@ -132,6 +132,7 @@ function runGomokuEnv(mode, storageSeed) {
 }
 
 const indexHtml = fs.readFileSync('public/gomoku/index.html', 'utf8');
+const indexSource = fs.readFileSync('public/gomoku/gomoku-index.js', 'utf8');
 const playHtml = fs.readFileSync('public/gomoku/play.html', 'utf8');
 const css = fs.readFileSync('public/gomoku/gomoku.css', 'utf8');
 
@@ -143,6 +144,9 @@ function ok(name, condition) {
 }
 
 ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && !/id="startLocalBtn"/.test(indexHtml));
+ok('单机人机提供三档可持久化难度并传入棋局',
+  ['easy', 'normal', 'hard'].every(level => indexHtml.includes(`data-ai-level="${level}"`)) &&
+  /AI_LEVEL_KEY/.test(indexSource) && /level=\$\{level\}/.test(indexSource));
 const modeGridRule = css.match(/\.mode-grid\s*\{[^}]*\}/);
 ok('五子棋大厅在所有屏幕宽度下均以纵向玩法菜单展示',
   !!modeGridRule && /grid-template-columns:\s*1fr\s*;/.test(modeGridRule[0]));
