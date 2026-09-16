@@ -1,14 +1,14 @@
-# 轻量游戏站 · 24点 + 数独 + 中国跳棋
+# 轻量游戏站 · 五款即开即玩的轻量游戏
 
-一个 Node 服务同时承载三件事：
+一个 Node 服务同时承载五款游戏、静态页面与各自独立的实时联机房间：
 
 | 能力 | 路径 |
 |---|---|
 | 游戏大厅 | `/`、`/index.html` |
 | 24点（单机 / 联机） | `/24/`；邀请链接使用 `/24/#r=房间码` |
-| 数独挑战 | `/sudoku/` |
-| 中国跳棋（人机 / 本地 / 联机） | 大厅 `/checkers/`；棋局 `/checkers/play.html` |
-| 五子棋（人机 / 本地 / 联机） | 大厅 `/gomoku/`；棋局 `/gomoku/play.html`；邀请 `/gomoku/?r=房间码` |
+| 数独挑战（单机 / 好友协作） | `/sudoku/`；邀请链接使用 `/sudoku/?join=房间码` |
+| 中国跳棋（人机 / 2–6 人本地 / 联机） | 大厅 `/checkers/`；棋局 `/checkers/play.html` |
+| 五子棋（人机 / 联机） | 大厅 `/gomoku/`；棋局 `/gomoku/play.html`；邀请 `/gomoku/?r=房间码` |
 | 飞行棋（2–4 人本地 / 联机） | 大厅 `/flight-chess/`；棋局 `/flight-chess/play.html` |
 | 联机 WebSocket 中转 | 24点 `/ws`；跳棋 `/checkers-ws`；数独 `/sudoku-ws`；飞行棋 `/flight-chess-ws`；五子棋 `/gomoku-ws` |
 | 健康检查 | `/health` |
@@ -23,14 +23,14 @@
 
 1. 把整个 `server/` 目录的内容作为一个 **Git 仓库**推到 GitHub（仓库根 = `server.js`、`package.json`、`render.yaml`、`public/`）。
 2. 打开 https://render.com → 用 GitHub 登录 → **New → Blueprint** → 连接你刚建的仓库。
-3. Render 自动读取 `render.yaml`，按 **Free** 层建好 Web Service（Build `npm install`、Start `node server.js`、健康检查 `/health`）。
+3. Render 自动读取 `render.yaml`，按 **Free** 层建好 Web Service（Build `npm install && npm run version:assets`、Start `node server.js`、健康检查 `/health`）。构建阶段会按 JS/CSS 内容自动刷新资源版本，确保长期缓存安全失效。
 4. 等 1–2 分钟部署变绿，拿到地址 `https://xxx.onrender.com`。
 
 ### 方法 B：手动 Web Service
 
 1. Render → **New → Web Service** → 连接仓库。
 2. 若仓库根就是 server 内容：Root Directory 留空；若 server 是子目录：填 `server`。
-3. Build Command：`npm install`；Start Command：`node server.js`；Plan：**Free**。
+3. Build Command：`npm install && npm run version:assets`；Start Command：`node server.js`；Plan：**Free**。
 4. 点部署，等变绿。
 
 ---
@@ -43,7 +43,8 @@
 4. 双方实时看到对手进度；短暂掉线会自动重连并恢复当前轮次、题号和计时，答完自动排名。
 5. 数独先进入独立挑战大厅，可继续存档或选择五档难度开局；游戏页支持手机沉浸全屏、大字号棋盘、候选笔记、提示、整盘撤销、自动存档、统计和深色模式。
 6. 跳棋先在独立大厅选择人机、本地或联机模式，再进入专用棋局页；联机会同步上一步的起点、完整跳跃路线和落点。
-7. 五子棋在大厅选择单机人机、本地双人（同屏轮流）或好友对战；好友对战创建房间后，把房间码或邀请链接发给朋友，两人到齐自动开局，黑先白后，五子连珠由服务端判定胜负，断线可带着原身份续局。
+7. 五子棋在大厅选择三档单机人机或好友对战；好友对战创建房间后，把房间码或邀请链接发给朋友，两人到齐自动开局，黑先白后，五子连珠由服务端判定胜负，断线可带着原身份续局。
+8. 飞行棋支持 2–4 人本地轮流或好友联机；联机骰点、回合、连跳、撞机与胜负均由服务端统一判定。
 
 **不需要填服务器地址**：游戏检测到是网页（非本地文件）时，会自动把「当前域名」当作中转服务器（同域 `/ws`、`/gomoku-ws` 等），零配置直接联机。
 

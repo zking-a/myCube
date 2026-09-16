@@ -135,7 +135,7 @@ ok('棋局页不重复人数配置，并按规则核心、联机层、交互脚�
   playHtml.indexOf('flight_chess_core.js') < playHtml.indexOf('flight_chess_net.js') &&
   playHtml.indexOf('flight_chess_net.js') < playHtml.indexOf('game.js'));
 ok('飞行棋资源升级缓存版本且返回大厅会显式离开联机房间',
-  /flight_chess_net\.js\?v=20260826a/.test(playHtml) && /game\.js\?v=20260826a/.test(playHtml) &&
+  /flight_chess_net\.js\?v=[a-f0-9]{12}/.test(playHtml) && /game\.js\?v=[a-f0-9]{12}/.test(playHtml) &&
   /data-leave-room/.test(playHtml) && /leaveOnlineRoom/.test(gameSource));
 ok('棋局使用参考图纹理、四个独立机场和精确落点映射',
   /data-board-style="classic"/.test(playHtml) && /REFERENCE_BOARD_SIZE = \[1024, 994\]/.test(gameSource) &&
@@ -195,7 +195,9 @@ ok('棋局提供自动存档、规则说明、响应式单列和减少动效支�
   /saveGame\(\)/.test(gameSource) && /本局规则/.test(playHtml) &&
   /@media \(max-width: 900px\)/.test(css) && /prefers-reduced-motion/.test(css));
 ok('游戏平台首页已新增飞行棋入口并更新为五款游戏',
-  /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /五款游戏/.test(platformHtml));
+  /href="flight-chess\/"/.test(platformHtml) && /2–4 人/.test(platformHtml) && /五款游戏/.test(platformHtml) &&
+  /platform\.css\?v=[a-f0-9]{12}/.test(platformHtml) && /platform\.js\?v=[a-f0-9]{12}/.test(platformHtml) &&
+  /recent-game-kicker">CONTINUE/.test(platformHtml) && /继续游戏/.test(platformHtml));
 ok('服务端为无尾斜杠飞行棋地址提供稳定重定向',
   /'\/flight-chess': '\/flight-chess\/'/.test(serverSource));
 ok('飞行棋服务端独立建房并权威生成骰点、校验移动与状态版本',

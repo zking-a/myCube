@@ -129,6 +129,9 @@ body { color: var(--ui-text); font-family: var(--ui-font-sans); background: radi
 .mode-chip.chip-alt { background: #e8f8f1; color: var(--ui-success); }
 .mode-chip.chip-online { background: #e6f1fb; color: #185fa5; }
 .mode-card p { margin: 10px 0 12px; color: var(--ui-text-secondary); font-size: 13px; line-height: 1.5; }
+.gomoku-difficulty { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 0 0 10px; }
+.gomoku-difficulty button { min-height: 38px; border: 1px solid var(--ui-border); border-radius: 10px; color: var(--ui-text-secondary); font-weight: 800; background: var(--ui-surface-soft); cursor: pointer; }
+.gomoku-difficulty button.active { border-color: var(--ui-primary); color: var(--ui-primary-strong); background: var(--ui-primary-soft); box-shadow: inset 0 0 0 1px var(--ui-primary); }
 .mode-btn { width: 100%; min-height: 42px; }
 
 .gomoku-field { display: block; margin-bottom: 10px; }

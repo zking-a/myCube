@@ -6,7 +6,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "version:assets": "node scripts/version_static_assets.js",
     "test": "node tests/test_net.js",
+    "test:platform": "node tests/test_platform.js",
     "test:e2e": "node tests/test_local.js",
     "test:sudoku": "node tests/test_sudoku.js",
     "test:sudoku:e2e": "node tests/test_sudoku_online.js",
@@ -19,7 +21,7 @@
     "test:gomoku:ui": "node tests/test_gomoku_online_ui.js",
     "test:flight-chess": "node tests/test_flight_chess.js",
     "test:flight-chess:e2e": "node tests/test_flight_chess_online.js",
-    "test:all": "node tests/test_net.js && node tests/test_sudoku.js && node tests/test_checkers.js && node tests/test_checkers_stage.cjs && node tests/test_checkers_stage_server.cjs && node tests/test_ai_engine.js && node tests/test_flight_chess.js && node tests/test_flight_chess_online.js && node tests/test_gomoku.js && node tests/test_gomoku_online.js && node tests/test_gomoku_online_ui.js && node tests/test_24_save.js && node tests/test_security.js",
+    "test:all": "node tests/test_platform.js && node tests/test_net.js && node tests/test_sudoku.js && node tests/test_checkers.js && node tests/test_checkers_stage.cjs && node tests/test_checkers_stage_server.cjs && node tests/test_ai_engine.js && node tests/test_flight_chess.js && node tests/test_flight_chess_online.js && node tests/test_gomoku.js && node tests/test_gomoku_online.js && node tests/test_gomoku_online_ui.js && node tests/test_24_save.js && node tests/test_security.js",
     "train:checkers-ai": "node scripts/train_checkers_ai.js",
     "train:checkers-robot": "node scripts/train_checkers_robot_v11.js --version 1.4 --feature-version 2 --data-profile v14-generation1 --teacher-games 48 --league-games 272 --max-moves 160 --init-model models/checkers-policy-value-v1_3-numpy.json --init-sha256 c076e91b960287d95cd3aba1fc518f9016869b23402c92bf35e914f5d31d4eea --history-model models/checkers-policy-value-v1_3-numpy.json --history-sha256 c076e91b960287d95cd3aba1fc518f9016869b23402c92bf35e914f5d31d4eea --league-agent hybrid --arena-agent hybrid --skip-teacher-fit --skip-league-fit --live-output models/checkers-live.json",
     "train:checkers-robot:fast": "node scripts/run_python_trainer.js",

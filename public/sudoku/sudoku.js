@@ -10,7 +10,8 @@ const CONFIG = {
   BOARD_SIZE        : 9,
   BOX_SIZE          : 3,
   MAX_SOLUTIONS_CHECK: 2,
-  DIFFICULTY_KEEP  : [40, 34, 30, 26, 23],
+  // 极限档以 24 个给定数为目标；唯一解约束可能让个别盘面多保留少量数字。
+  DIFFICULTY_KEEP  : [40, 34, 30, 26, 24],
 
   // ② UI 交互
   TOAST_DURATION    : 3000,

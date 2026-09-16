@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#eef3ff">
   <meta name="description" content="轻量游戏站：24 点、数独、中国跳棋、五子棋与飞行棋，随时来一局。">
   <title>轻量游戏站</title>
-  <link rel="stylesheet" href="ui-foundation.css?v=20260822a">
-  <link rel="stylesheet" href="platform.css?v=20260822a">
-  <script src="platform.js?v=20260821a" defer></script>
+  <link rel="stylesheet" href="ui-foundation.css?v=6aafc30c28ed">
+  <link rel="stylesheet" href="platform.css?v=77eebbd74924">
+  <script src="platform.js?v=ecc0efd7ce4c" defer></script>
 </head>
 <body>
   <main class="platform-shell">
@@ -19,37 +19,46 @@
       <p>随时来一局脑力挑战<br>选择你现在想玩的游戏</p>
     </header>
 
+    <section class="recent-game ui-panel" id="recentGame" hidden aria-labelledby="recentGameTitle">
+      <div>
+        <span class="recent-game-kicker">CONTINUE</span>
+        <strong id="recentGameTitle">继续游戏</strong>
+        <small id="recentGameMeta"></small>
+      </div>
+      <a class="ui-button ui-button--primary" id="recentGameLink" href="24/">继续 →</a>
+    </section>
+
     <nav class="game-grid" aria-label="选择游戏">
-      <a class="game-card math ui-panel" href="24/">
+      <a class="game-card math ui-panel" href="24/" data-game-id="24" data-game-name="24 点大挑战">
         <span class="game-card-icon" aria-hidden="true">24</span>
         <h2>24 点大挑战</h2>
         <p>四张牌凑出 24，支持闯关、竞速和好友实时对战。</p>
         <span class="game-tags"><span>80 大关</span><span>实时联机</span><span>好友对战</span></span>
       </a>
 
-      <a class="game-card sudoku ui-panel" href="sudoku/">
+      <a class="game-card sudoku ui-panel" href="sudoku/" data-game-id="sudoku" data-game-name="数独挑战">
         <span class="game-card-icon" aria-hidden="true">九</span>
         <h2>数独挑战</h2>
         <p>先选难度或继续存档，再进入沉浸式全屏棋盘。</p>
         <span class="game-tags"><span>唯一解</span><span>沉浸全屏</span><span>断点续玩</span></span>
       </a>
 
-      <a class="game-card checkers ui-panel" href="checkers/index.html">
+      <a class="game-card checkers ui-panel" href="checkers/index.html" data-game-id="checkers" data-game-name="中国跳棋">
         <span class="game-card-icon" aria-hidden="true">跳</span>
         <h2>中国跳棋</h2>
-        <p>固定玩家视角，支持人机对战、本地双人和好友对战。</p>
+        <p>固定玩家视角，支持人机对战、2–6 人本地对战和好友对战。</p>
         <span class="game-tags"><span>人机对战</span><span>好友对战</span><span>六角星盘</span></span>
       </a>
 
       
-      <a class="game-card gomoku ui-panel" href="gomoku/">
+      <a class="game-card gomoku ui-panel" href="gomoku/" data-game-id="gomoku" data-game-name="五子棋">
         <span class="game-card-icon" aria-hidden="true">五</span>
         <h2>五子棋</h2>
-        <p>经典 15×15 对局，支持单机 AI、本地双人和好友实时联机。</p>
+        <p>经典 15×15 对局，支持三档单机 AI 和好友实时联机。</p>
         <span class="game-tags"><span>单机 AI</span><span>好友联机</span><span>五连珠</span></span>
       </a>
 
-      <a class="game-card flight ui-panel" href="flight-chess/">
+      <a class="game-card flight ui-panel" href="flight-chess/" data-game-id="flight-chess" data-game-name="飞行棋">
         <span class="game-card-icon" aria-hidden="true">飞</span>
         <h2>飞行棋</h2>
         <p>支持同屏轮流和 2–4 人好友联机，服务端同步掷骰、连跳与撞机。</p>
@@ -57,8 +66,7 @@
       </a>
     </nav>
 
-    <p class="platform-note">五款游戏独立运行、独立保存进度；24 点、中国跳棋和五子棋的邀请链接均可直达对战房间。</p>
+    <p class="platform-note">五款游戏独立运行、独立保存进度；支持联机或协作的游戏可通过房间码或邀请链接加入，并支持断线恢复。</p>
   </main>
 </body>
 </html>
-

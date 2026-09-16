@@ -502,11 +502,11 @@ ok('对称长跳已整体移除：服务器、客户端与 Worker 均无规则�
 ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   !/data-jump/.test(lobbyHtml) && !/selectJump/.test(lobbySource) &&
   !/JUMP_KEY/.test(lobbySource) &&
-  /checkers_core\.js\?v=20260915stage1/.test(playHtml) &&
-  /checkers\.js\?v=20260915stage1/.test(playHtml) &&
-  /checkers\.css\?v=20260915stage1/.test(playHtml) &&
-  /checkers\.css\?v=20260915stage1/.test(lobbyHtml) &&
-  /lobby\.js\?v=20260915stage1/.test(lobbyHtml));
+  /checkers_core\.js\?v=[a-f0-9]{12}/.test(playHtml) &&
+  /checkers\.js\?v=[a-f0-9]{12}/.test(playHtml) &&
+  /checkers\.css\?v=[a-f0-9]{12}/.test(playHtml) &&
+  /checkers\.css\?v=[a-f0-9]{12}/.test(lobbyHtml) &&
+  /lobby\.js\?v=[a-f0-9]{12}/.test(lobbyHtml));
 ok('联机状态广播携带席位列表，电脑席位由服务端直发',
   /seats: checkersSeatList\(room\)/.test(serverSource) &&
   /nick: seat\.isBot \? '电脑'/.test(serverSource) &&

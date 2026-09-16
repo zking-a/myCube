@@ -13,6 +13,7 @@ const STAR_POINTS = new Set(['3,3', '3,11', '7,7', '11,3', '11,11']);
 const params = new URLSearchParams(window.location.search);
 const RAW_MODE = params.get('mode');
 const MODE = RAW_MODE === 'online' ? 'online' : 'ai';
+const AI_LEVEL = ['easy', 'normal', 'hard'].includes(params.get('level')) ? params.get('level') : 'normal';
 const STORAGE_KEY = SAVE_KEYS[MODE] || SAVE_KEYS.ai;
 const IS_ONLINE = MODE === 'online';
 // 联机态：棋盘与轮次完全由 /gomoku-ws 下发，本地只负责渲染与上报落子。
@@ -35,7 +36,8 @@ const CONFIG = {
   aiColor: WHITE,
   humanColor: BLACK,
   aiThinkDelayMin: 110,
-  aiThinkDelayMax: 240
+  aiThinkDelayMax: 240,
+  aiLevel: AI_LEVEL
 };
 
 function $(id) { return document.getElementById(id); }
@@ -89,7 +91,7 @@ function createState() {
     lastMove: null,
     board: createEmptyBoard(),
     blackName: '你（黑）',
-    whiteName: '电脑（白）'
+    whiteName: '电脑（' + ({ easy: '轻松', normal: '标准', hard: '困难' }[CONFIG.aiLevel]) + '）'
   };
 }
 
@@ -129,7 +131,7 @@ function loadSaved() {
       lastMove: data.lastMove || null,
       board: cloneBoard(data.board),
       blackName: '你（黑）',
-      whiteName: '电脑（白）'
+      whiteName: '电脑（' + ({ easy: '轻松', normal: '标准', hard: '困难' }[CONFIG.aiLevel]) + '）'
     };
   } catch (error) {
     return null;
@@ -480,11 +482,30 @@ function chooseAiMove() {
 
   let bestScore = -1;
   let bestMoves = [];
+  const profile = {
+    easy: { attack: 1, defend: 0.72, noise: 700, pool: 5 },
+    normal: { attack: 1.15, defend: 0.85, noise: 18, pool: 1 },
+    hard: { attack: 1.12, defend: 1.08, noise: 0, pool: 1 }
+  }[CONFIG.aiLevel];
+  const scored = [];
   for (let i = 0; i < candidates.length; i++) {
     const m = candidates[i];
-    const attack = evalPoint(m.r, m.c, CONFIG.aiColor) * 1.15;
-    const defend = evalPoint(m.r, m.c, CONFIG.humanColor) * 0.85;
-    const score = attack + defend + (Math.random() * 18);
+    const attack = evalPoint(m.r, m.c, CONFIG.aiColor) * profile.attack;
+    const defend = evalPoint(m.r, m.c, CONFIG.humanColor) * profile.defend;
+    let score = attack + defend + (Math.random() * profile.noise);
+    // 困难档多看半步：落子后评估玩家最强的下一处线段，优先压制双活三等复合威胁。
+    if (CONFIG.aiLevel === 'hard') {
+      board[m.r][m.c] = CONFIG.aiColor;
+      let opponentReply = 0;
+      for (let j = 0; j < candidates.length; j++) {
+        const reply = candidates[j];
+        if (board[reply.r][reply.c] !== EMPTY) continue;
+        opponentReply = Math.max(opponentReply, evalPoint(reply.r, reply.c, CONFIG.humanColor));
+      }
+      board[m.r][m.c] = EMPTY;
+      score -= opponentReply * 0.32;
+    }
+    scored.push({ move: m, score: score });
     if (score > bestScore) {
       bestScore = score;
       bestMoves = [m];
@@ -493,6 +514,11 @@ function chooseAiMove() {
     }
   }
 
+  if (profile.pool > 1) {
+    scored.sort(function (a, b) { return b.score - a.score; });
+    const pool = scored.slice(0, Math.min(profile.pool, scored.length));
+    return pool[Math.floor(Math.random() * pool.length)].move;
+  }
   const picked = bestMoves[Math.floor(Math.random() * bestMoves.length)];
   return picked || candidates[0];
 }
@@ -697,6 +723,7 @@ if (typeof window !== 'undefined') {
     EMPTY: EMPTY,
     BLACK: BLACK,
     WHITE: WHITE,
+    aiLevel: CONFIG.aiLevel,
     isInside: isInside,
     createEmptyBoard: createEmptyBoard,
     cloneBoard: cloneBoard,
