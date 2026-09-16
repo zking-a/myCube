@@ -57,6 +57,11 @@ const base = S.generateSolution();
 const puzzles = [0, 1, 2, 3, 4].map(diff => S.generateGivens(base, diff));
 ok('五档题目都保留给定数字且不篡改答案', puzzles.every(p => p.length === 81 && p.every((v, i) => v === 0 || v === base[i])));
 ok('五档题目全部保持唯一解', puzzles.every(p => S.countSolutions(p, 2) === 1));
+const techniqueScores = puzzles.map(p => S.analyzePuzzleDifficulty(p));
+ok('难度评估记录裸单、隐藏单与高级技巧剩余量', techniqueScores.every(result =>
+  Number.isFinite(result.score) && result.score >= 0 && result.nakedSingles >= 0 &&
+  result.hiddenSingles >= 0 && result.unresolved >= 0));
+ok('高难档的技巧评分不低于简单档', techniqueScores[4].score >= techniqueScores[0].score);
 const clueCounts = puzzles.map(p => p.filter(Boolean).length);
 console.log('  INFO  五档给定数：' + clueCounts.join('/'));
 ok('难度越高给定数字不增加', clueCounts.every((v, i) => i === 0 || v <= clueCounts[i - 1]));

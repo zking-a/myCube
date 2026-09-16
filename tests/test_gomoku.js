@@ -283,6 +283,16 @@ ok('AI 模式默认下黑先手，当前仅一个候选中心位可用于开局'
 ok('AI 难度参数会进入棋局且非法参数安全回落到标准',
   runGomokuEnv('ai', null, 'hard').testApi.aiLevel === 'hard' &&
   runGomokuEnv('ai', null, 'invalid').testApi.aiLevel === 'normal');
+ok('困难 AI 的三层评估保持棋盘不变并返回合法落点', function () {
+  const env = runGomokuEnv('ai', null, 'hard');
+  const b = new Array(15).fill(0).map(function () { return new Array(15).fill(0); });
+  b[7][7] = 1; b[7][8] = 2; b[8][7] = 1; b[6][8] = 2;
+  env.testApi.setStateForTest({ board: b, turn: 2, moveNumber: 4, history: [] });
+  const before = JSON.stringify(env.testApi.getTestSnapshot().board);
+  const move = env.testApi.chooseAiMove();
+  const after = JSON.stringify(env.testApi.getTestSnapshot().board);
+  return move && b[move.r][move.c] === 0 && before === after;
+}());
 
 ok('连续两步后会写入本地存档，重建后可读到最近局面', function () {
   const env = runGomokuEnv('ai');

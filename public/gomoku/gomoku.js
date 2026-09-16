@@ -493,17 +493,34 @@ function chooseAiMove() {
     const attack = evalPoint(m.r, m.c, CONFIG.aiColor) * profile.attack;
     const defend = evalPoint(m.r, m.c, CONFIG.humanColor) * profile.defend;
     let score = attack + defend + (Math.random() * profile.noise);
-    // 困难档多看半步：落子后评估玩家最强的下一处线段，优先压制双活三等复合威胁。
+    // 困难档做受限三层评估：我方候选 → 对手最强回复 → 我方最佳反击。
     if (CONFIG.aiLevel === 'hard') {
       board[m.r][m.c] = CONFIG.aiColor;
-      let opponentReply = 0;
+      const replies = [];
       for (let j = 0; j < candidates.length; j++) {
         const reply = candidates[j];
         if (board[reply.r][reply.c] !== EMPTY) continue;
-        opponentReply = Math.max(opponentReply, evalPoint(reply.r, reply.c, CONFIG.humanColor));
+        board[reply.r][reply.c] = CONFIG.humanColor;
+        const wins = checkWin(reply.r, reply.c, CONFIG.humanColor);
+        board[reply.r][reply.c] = EMPTY;
+        replies.push({ move: reply, threat: wins ? 100000 : evalPoint(reply.r, reply.c, CONFIG.humanColor) });
       }
+      replies.sort(function (a, b) { return b.threat - a.threat; });
+      let worstReply = Infinity;
+      replies.slice(0, 8).forEach(function (entry) {
+        const reply = entry.move;
+        board[reply.r][reply.c] = CONFIG.humanColor;
+        let counter = 0;
+        for (let k = 0; k < candidates.length; k++) {
+          const next = candidates[k];
+          if (board[next.r][next.c] !== EMPTY) continue;
+          counter = Math.max(counter, evalPoint(next.r, next.c, CONFIG.aiColor));
+        }
+        board[reply.r][reply.c] = EMPTY;
+        worstReply = Math.min(worstReply, counter * 0.42 - entry.threat);
+      });
       board[m.r][m.c] = EMPTY;
-      score -= opponentReply * 0.32;
+      if (Number.isFinite(worstReply)) score += worstReply;
     }
     scored.push({ move: m, score: score });
     if (score > bestScore) {
