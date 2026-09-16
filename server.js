@@ -2,11 +2,12 @@
 /*
  * server.js —— 轻量游戏站联机与静态资源服务器
  *
- * 作用：静态托管小游戏，并为 24 点、中国跳棋、数独与飞行棋提供独立的联机房间。
+ * 作用：静态托管小游戏，并为 24 点、中国跳棋、数独、飞行棋与五子棋提供独立的联机房间。
  *   - 房间码就是随机种子，双方题目天然一致；服务端按同一规则复现题目并验证表达式。
  *   - 跳棋由服务端保存棋盘、校验回合和合法走法，双方客户端只负责固定阵营视角的展示。
  *   - 数独协作由服务端保存同一盘面，双方只提交填写，避免客户端各自漂移。
  *   - 飞行棋由服务端掷骰并校验 2–4 人回合、移动与胜负，客户端只提交操作意图。
+ *   - 五子棋由服务端校验回合、落子和胜负，客户端只提交落子意图。
  *   - 房间仍只保存在内存，不需要数据库，适合轻量好友对局。
  *
  * 24 点协议（JSON，UTF-8；跳棋协议见文件下方 /checkers-ws 处理器）
@@ -1027,19 +1028,23 @@ function serveStatic(req, res) {
     res.end('Forbidden');
     return;
   }
+  const ext = path.extname(filePath).toLowerCase();
+  const versionedAsset = ext !== '.html' && /(?:\?|&)v=[A-Za-z0-9._-]+(?:&|$)/.test(req.url || '');
   function respond(entry) {
     const useGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')) && !!entry.gzip;
     const body = useGzip ? entry.gzip : entry.data;
     const etag = useGzip ? entry.gzipEtag : entry.etag;
+    const cacheControl = ext === '.html' ? 'no-cache' :
+      (versionedAsset ? 'public, max-age=31536000, immutable' : 'public, max-age=300, must-revalidate');
     if (req.headers['if-none-match'] === etag) {
-      writeHead(res, 304, { ETag: etag, 'Cache-Control': entry.cacheControl, Vary: 'Accept-Encoding' });
+      writeHead(res, 304, { ETag: etag, 'Cache-Control': cacheControl, Vary: 'Accept-Encoding' });
       res.end();
       return;
     }
     writeHead(res, 200, {
       'Content-Type': entry.contentType,
       'Content-Length': body.length,
-      'Cache-Control': entry.cacheControl,
+      'Cache-Control': cacheControl,
       ETag: etag,
       Vary: 'Accept-Encoding',
       ...(useGzip ? { 'Content-Encoding': 'gzip' } : {})
@@ -1055,7 +1060,6 @@ function serveStatic(req, res) {
       res.end('404 Not Found');
       return;
     }
-    const ext = path.extname(filePath).toLowerCase();
     const hash = crypto.createHash('sha1').update(data).digest('base64url').slice(0, 16);
     const canGzip = data.length > 1024 && /^(\.html|\.js|\.css|\.json|\.svg)$/.test(ext);
     const entry = {
@@ -1063,8 +1067,7 @@ function serveStatic(req, res) {
       gzip: canGzip ? zlib.gzipSync(data, { level: 6 }) : null,
       etag: '"' + hash + '"',
       gzipEtag: '"' + hash + '-gzip"',
-      contentType: MIME[ext] || 'application/octet-stream',
-      cacheControl: ext === '.html' ? 'no-cache' : 'public, max-age=300, must-revalidate'
+      contentType: MIME[ext] || 'application/octet-stream'
     };
     staticCache.set(filePath, entry);
     respond(entry);
@@ -2302,4 +2305,3 @@ gomokuWss.on('close', function () { if (allChannelsIdle()) clearInterval(heartbe
 server.listen(PORT, function () {
   console.log('[light-games] relay listening on :' + PORT + '  (24点 /ws，跳棋 /checkers-ws，数独协作 /sudoku-ws，飞行棋 /flight-chess-ws，五子棋 /gomoku-ws)');
 });
-

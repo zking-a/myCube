@@ -38,6 +38,11 @@
           <span class="mode-chip">AI 对局</span>
         </div>
         <p>不需要联网，一局定胜负。支持悔棋、继续上局与自动存档。</p>
+        <div class="gomoku-difficulty" role="radiogroup" aria-label="选择电脑难度">
+          <button type="button" data-ai-level="easy" role="radio" aria-checked="false">轻松</button>
+          <button type="button" data-ai-level="normal" role="radio" aria-checked="true" class="active">标准</button>
+          <button type="button" data-ai-level="hard" role="radio" aria-checked="false">困难</button>
+        </div>
         <button type="button" id="startAiBtn" class="mode-btn ui-button ui-button--primary">进入对战</button>
       </article>
 
@@ -72,7 +77,7 @@
       <span><b>⇄</b> 好友联机</span>
     </div>
 
-    <p class="lobby-tip">AI 为近似智能：先手杀法、阻挡与线段评估。联机模式由服务端同步棋盘与轮次，断线后可带着原身份重连续局。</p>
+    <p class="lobby-tip">三档 AI 都会识别直接胜负，标准和困难档会加强攻防线段评估。联机模式由服务端同步棋盘与轮次，断线后可带着原身份重连续局。</p>
   </main>
 </body>
 </html>
