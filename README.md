@@ -23,14 +23,14 @@
 
 1. 把整个 `server/` 目录的内容作为一个 **Git 仓库**推到 GitHub（仓库根 = `server.js`、`package.json`、`render.yaml`、`public/`）。
 2. 打开 https://render.com → 用 GitHub 登录 → **New → Blueprint** → 连接你刚建的仓库。
-3. Render 自动读取 `render.yaml`，按 **Free** 层建好 Web Service（Build `npm install`、Start `node server.js`、健康检查 `/health`）。
+3. Render 自动读取 `render.yaml`，按 **Free** 层建好 Web Service（Build `npm install && npm run version:assets`、Start `node server.js`、健康检查 `/health`）。构建阶段会按 JS/CSS 内容自动刷新资源版本，确保长期缓存安全失效。
 4. 等 1–2 分钟部署变绿，拿到地址 `https://xxx.onrender.com`。
 
 ### 方法 B：手动 Web Service
 
 1. Render → **New → Web Service** → 连接仓库。
 2. 若仓库根就是 server 内容：Root Directory 留空；若 server 是子目录：填 `server`。
-3. Build Command：`npm install`；Start Command：`node server.js`；Plan：**Free**。
+3. Build Command：`npm install && npm run version:assets`；Start Command：`node server.js`；Plan：**Free**。
 4. 点部署，等变绿。
 
 ---

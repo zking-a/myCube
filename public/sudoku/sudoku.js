@@ -605,12 +605,65 @@ function carveUniquePuzzle(source, keep) {
   return givens;
 }
 
+/* 用裸单、隐藏单与剩余未解格评估人类解题难度，避免只按给定数分档。 */
+function analyzePuzzleDifficulty(givensBoard) {
+  const work = givensBoard.slice();
+  let rounds = 0, nakedSingles = 0, hiddenSingles = 0;
+  function candidatesAt(pos) {
+    const values = [];
+    for (let n = 1; n <= 9; n++) if (isValid(work, pos, n)) values.push(n);
+    return values;
+  }
+  const units = [];
+  for (let r = 0; r < 9; r++) units.push([...Array(9).keys()].map(c => r * 9 + c));
+  for (let c = 0; c < 9; c++) units.push([...Array(9).keys()].map(r => r * 9 + c));
+  for (let br = 0; br < 3; br++) for (let bc = 0; bc < 3; bc++) {
+    const box = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) box.push((br * 3 + r) * 9 + bc * 3 + c);
+    units.push(box);
+  }
+  for (let guard = 0; guard < 81; guard++) {
+    const fills = new Map();
+    for (let pos = 0; pos < 81; pos++) {
+      if (work[pos]) continue;
+      const options = candidatesAt(pos);
+      if (options.length === 1) fills.set(pos, { value: options[0], kind: 'naked' });
+    }
+    if (!fills.size) {
+      units.forEach(function (unit) {
+        for (let n = 1; n <= 9; n++) {
+          const places = unit.filter(pos => !work[pos] && candidatesAt(pos).indexOf(n) >= 0);
+          if (places.length === 1 && !fills.has(places[0])) fills.set(places[0], { value: n, kind: 'hidden' });
+        }
+      });
+    }
+    if (!fills.size) break;
+    fills.forEach(function (fill, pos) {
+      work[pos] = fill.value;
+      if (fill.kind === 'naked') nakedSingles++;
+      else hiddenSingles++;
+    });
+    rounds++;
+  }
+  const unresolved = work.filter(value => value === 0).length;
+  const blanks = givensBoard.filter(value => value === 0).length;
+  return { score: blanks + rounds * 2 + hiddenSingles * 3 + unresolved * 8,
+    rounds, nakedSingles, hiddenSingles, unresolved };
+}
+
+function selectTechniqueAwarePuzzle(candidates, difficulty) {
+  const ranked = candidates.map(function (puzzle) {
+    return { puzzle, analysis: analyzePuzzleDifficulty(puzzle) };
+  }).sort(function (a, b) { return a.analysis.score - b.analysis.score; });
+  return (difficulty <= 1 ? ranked[0] : ranked[ranked.length - 1]).puzzle;
+}
+
 /* 根据难度生成题目（挖洞）。极限档先稳定生成专家档，再继续挖空，避免难度倒挂。*/
 function generateGivens(solution, difficulty) {
   const normalized = normalizeDifficulty(difficulty);
   const keep = CONFIG.DIFFICULTY_KEEP[normalized];
   if (normalized !== CONFIG.DIFFICULTY_KEEP.length - 1) {
-    return carveUniquePuzzle(solution, keep);
+    return selectTechniqueAwarePuzzle([carveUniquePuzzle(solution, keep), carveUniquePuzzle(solution, keep)], normalized);
   }
   const expertKeep = CONFIG.DIFFICULTY_KEEP[normalized - 1];
   let expertPuzzle = carveUniquePuzzle(solution, expertKeep);
@@ -618,7 +671,7 @@ function generateGivens(solution, difficulty) {
     const retry = carveUniquePuzzle(solution, expertKeep);
     if (retry.filter(Boolean).length < expertPuzzle.filter(Boolean).length) expertPuzzle = retry;
   }
-  return carveUniquePuzzle(expertPuzzle, keep);
+  return selectTechniqueAwarePuzzle([carveUniquePuzzle(expertPuzzle, keep), carveUniquePuzzle(expertPuzzle, keep)], normalized);
 }
 
 /* 候选数计算 */
@@ -2370,6 +2423,7 @@ window.__sudokuTest = {
   SEED_SOLUTION: SEED_SOLUTION.slice(),
   generateSolution,
   generateGivens,
+  analyzePuzzleDifficulty,
   countSolutions,
   isValid,
   normalizeDifficulty,

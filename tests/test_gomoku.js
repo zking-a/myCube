@@ -89,7 +89,7 @@ function createFakeDom() {
   return { document, listeners };
 }
 
-function runGomokuEnv(mode, storageSeed) {
+function runGomokuEnv(mode, storageSeed, aiLevel) {
   storageSeed = storageSeed || {};
   const boardElement = null;
   const dom = createFakeDom();
@@ -106,7 +106,7 @@ function runGomokuEnv(mode, storageSeed) {
     setTimeout, clearTimeout,
     localStorage,
     document: dom.document,
-    location: { search: mode === 'online' ? '?mode=online' : '?mode=ai' },
+    location: { search: mode === 'online' ? '?mode=online' : '?mode=ai&level=' + (aiLevel || 'normal') },
     window: null,
     listeners: [],
     addEventListener: function (type, handler) {
@@ -146,7 +146,8 @@ function ok(name, condition) {
 ok('五子棋大厅页提供正确入口与卡片结构', /id="startAiBtn"/.test(indexHtml) && !/id="startLocalBtn"/.test(indexHtml));
 ok('单机人机提供三档可持久化难度并传入棋局',
   ['easy', 'normal', 'hard'].every(level => indexHtml.includes(`data-ai-level="${level}"`)) &&
-  /AI_LEVEL_KEY/.test(indexSource) && /level=\$\{level\}/.test(indexSource));
+  /AI_LEVEL_KEY/.test(indexSource) && /level=\$\{level\}/.test(indexSource) &&
+  /gomoku-index\.js\?v=[a-f0-9]{12}/.test(indexHtml) && /gomoku\.css\?v=[a-f0-9]{12}/.test(indexHtml));
 const modeGridRule = css.match(/\.mode-grid\s*\{[^}]*\}/);
 ok('五子棋大厅在所有屏幕宽度下均以纵向玩法菜单展示',
   !!modeGridRule && /grid-template-columns:\s*1fr\s*;/.test(modeGridRule[0]));
@@ -278,6 +279,19 @@ ok('AI 模式默认下黑先手，当前仅一个候选中心位可用于开局'
   if (first.r !== 7 || first.c !== 7) return false;
   const aiMove = aiApi.chooseAiMove();
   return aiMove && aiMove.r === 7 && aiMove.c === 7;
+}());
+ok('AI 难度参数会进入棋局且非法参数安全回落到标准',
+  runGomokuEnv('ai', null, 'hard').testApi.aiLevel === 'hard' &&
+  runGomokuEnv('ai', null, 'invalid').testApi.aiLevel === 'normal');
+ok('困难 AI 的三层评估保持棋盘不变并返回合法落点', function () {
+  const env = runGomokuEnv('ai', null, 'hard');
+  const b = new Array(15).fill(0).map(function () { return new Array(15).fill(0); });
+  b[7][7] = 1; b[7][8] = 2; b[8][7] = 1; b[6][8] = 2;
+  env.testApi.setStateForTest({ board: b, turn: 2, moveNumber: 4, history: [] });
+  const before = JSON.stringify(env.testApi.getTestSnapshot().board);
+  const move = env.testApi.chooseAiMove();
+  const after = JSON.stringify(env.testApi.getTestSnapshot().board);
+  return move && b[move.r][move.c] === 0 && before === after;
 }());
 
 ok('连续两步后会写入本地存档，重建后可读到最近局面', function () {
