@@ -13,6 +13,7 @@
     "test:sudoku": "node tests/test_sudoku.js",
     "test:sudoku:e2e": "node tests/test_sudoku_online.js",
     "test:checkers": "node tests/test_checkers.js",
+    "test:checkers:birthday-ui": "node tests/test_checkers_birthday_ui.cjs",
     "test:checkers:e2e": "node tests/test_checkers_online.js",
     "test:checkers:stage": "node tests/test_checkers_stage.cjs",
     "test:checkers:stage-server": "node tests/test_checkers_stage_server.cjs",

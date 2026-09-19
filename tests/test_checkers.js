@@ -24,7 +24,7 @@ const sandbox = {
   Uint8Array, URL, URLSearchParams,
   setTimeout, clearTimeout,
   document: {},
-  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai', search: '?mode=ai' },
+  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai&birthday=0', search: '?mode=ai&birthday=0' },
   navigator: {},
   localStorage: makeSimpleStorage(),
   WebSocket: { OPEN: 1 }
@@ -43,6 +43,7 @@ const lobbyHtml = fs.readFileSync('public/checkers/index.html', 'utf8');
 const lobbySource = fs.readFileSync('public/checkers/lobby.js', 'utf8');
 const playHtml = fs.readFileSync('public/checkers/play.html', 'utf8');
 const css = fs.readFileSync('public/checkers/checkers.css', 'utf8');
+const birthdayCss = fs.readFileSync('public/checkers/checkers-birthday.css', 'utf8');
 const labHtml = fs.readFileSync('public/checkers/lab.html', 'utf8');
 const labSource = fs.readFileSync('public/checkers/lab.js', 'utf8');
 const labRun = JSON.parse(fs.readFileSync('public/checkers/training/latest.json', 'utf8'));
@@ -222,7 +223,7 @@ const boardSandbox = {
     getElementById: function (id) { return boardNodes[id] || null; },
     querySelector: function () { return null; }
   },
-  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai', search: '?mode=ai' },
+  location: { protocol: 'https:', host: 'game.test', href: 'https://game.test/checkers/play.html?mode=ai&birthday=0', search: '?mode=ai&birthday=0' },
   navigator: {},
   localStorage: boardStorage,
   WebSocket: { OPEN: 1 }
@@ -507,6 +508,52 @@ ok('大厅不再有跳跃规则开关，页面版本号随本次更新递增',
   /checkers\.css\?v=[a-f0-9]{12}/.test(playHtml) &&
   /checkers\.css\?v=[a-f0-9]{12}/.test(lobbyHtml) &&
   /lobby\.js\?v=[a-f0-9]{12}/.test(lobbyHtml));
+
+// ===== 生日主题：棋盘 + 棋子（仅表现层，玩法文件 checkers_core.js / checkers_ai_engine.js 不动） =====
+ok('play.html 引入生日主题样式与脚本',
+  /checkers-birthday\.css/.test(playHtml) && /birthday-checkers\.js/.test(playHtml));
+ok('生日 CSS 用 html.birthday-mode 后代选择器，无失效的同元素多类选择器',
+  /html\.birthday-mode/.test(birthdayCss) &&
+  !/body\.birthday-mode/.test(birthdayCss) &&
+  !/\.ck-piece\.birthday-mode/.test(birthdayCss) &&
+  /background-size:auto,auto,auto,100% 100%,auto/.test(birthdayCss));
+ok('resolveBirthdayMode：?birthday=1 强制开、?birthday=0 强制关、无参数仅 9/19 开',
+  boardTest.resolveBirthdayMode('?birthday=1', new Date(2026, 0, 1)) === true &&
+  boardTest.resolveBirthdayMode('?birthday=0', new Date(2026, 8, 19)) === false &&
+  boardTest.resolveBirthdayMode('', new Date(2026, 8, 19)) === true &&
+  boardTest.resolveBirthdayMode('?mode=ai', new Date(2026, 8, 20)) === false);
+ok('生日六方棋子主体糖果色各不相同，可一眼区分阵营',
+  (function () {
+    const B = boardTest.BIRTHDAY_TINTS, P = boardTest.PIECE_TINTS;
+    const redBase = JSON.stringify(B.red.base);
+    const basesDiff = new Set(Object.keys(B).map(function (k) { return JSON.stringify(B[k].base); })).size === 6;
+    const outlinesDiff = new Set(Object.keys(B).map(function (k) { return B[k].outline; })).size === 6;
+    const baseChanged = redBase !== JSON.stringify(P.red.base);
+    const noGlassRed = !/f2606c/.test(redBase);
+    return basesDiff && outlinesDiff && baseChanged && noGlassRed;
+  })());
+ok('生日模式下 defs 渐变颜色确实变了，且 id 总数仍为 28（不新增 defs id）',
+  (function () {
+    const bd = boardTest.buildPieceDefs(boardSandbox.document, boardTest.BIRTHDAY_TINTS);
+    const defs = bd.children.filter(function (n) { return n.tagName === 'DEFS'; })[0];
+    const ids = defs ? defs.children.map(function (n) { return n.getAttribute && n.getAttribute('id'); }) : [];
+    const redBase = defs ? defs.children.filter(function (n) { return n.getAttribute && n.getAttribute('id') === 'ckg-red-base'; })[0] : null;
+    const stops = redBase ? redBase.children.map(function (s) { return s.getAttribute && s.getAttribute('stop-color'); }) : [];
+    const hasCandyRed = stops.some(function (c) { return c === '#ffd9e0'; });
+    const hasGlass = stops.some(function (c) { return c === '#f2606c'; });
+    return ids.length === 28 && !!redBase && hasCandyRed && !hasGlass;
+  })());
+ok('糖针层仅在生日配色注入（ck-candy + 专属彩针色），平时不注入',
+  (function () {
+    const candy = boardTest.buildPieceNode('red', boardSandbox.document, boardTest.BIRTHDAY_TINTS);
+    const glass = boardTest.buildPieceNode('red', boardSandbox.document, boardTest.PIECE_TINTS);
+    const rects = [];
+    (function walk(n) { n.children.forEach(function (c) { if (hasClass(c, 'ck-candy')) c.children.forEach(function (r) { rects.push(r); }); walk(c); }); })(candy);
+    const allPattern = rects.length > 0 && rects.every(function (r) { return r.getAttribute('fill') === boardTest.BIRTHDAY_TINTS.red.pattern; });
+    let glassHasCandy = false;
+    (function walk(n) { n.children.forEach(function (c) { if (hasClass(c, 'ck-candy')) glassHasCandy = true; walk(c); }); })(glass);
+    return rects.length >= 12 && allPattern && !glassHasCandy;
+  })());
 ok('联机状态广播携带席位列表，电脑席位由服务端直发',
   /seats: checkersSeatList\(room\)/.test(serverSource) &&
   /nick: seat\.isBot \? '电脑'/.test(serverSource) &&

@@ -27,6 +27,27 @@ const launchRoom = normalizeRoom(launchParams.get('room'));
 const requestedMode = launchParams.get('mode');
 const mode = ['ai', 'local', 'online'].includes(requestedMode) ? requestedMode : (launchRoom ? 'online' : 'ai');
 const launchIntent = launchParams.get('intent') === 'create' ? 'create' : 'join';
+
+// 生日模式判断：9月19日自动开启，?birthday=1 强制开，?birthday=0 强制关
+function resolveBirthdayMode(search, now) {
+  const params = new URLSearchParams(search || '');
+  const flag = params.get('birthday');
+  if (flag === '1') return true;
+  if (flag === '0') return false;
+  const d = now || new Date();
+  return d.getMonth() === 8 && d.getDate() === 19;
+}
+const birthdayMode = resolveBirthdayMode(location.search, new Date());
+if (birthdayMode && document.documentElement) {
+  document.documentElement.classList.add('birthday-mode');
+}
+window.__checkersBirthday = { active: birthdayMode };
+function birthdayOpening() { return !!(window.__checkersBirthday && window.__checkersBirthday.opening); }
+function presentationEvent(name, detail) {
+  if (document.dispatchEvent && typeof window.CustomEvent === 'function') {
+    document.dispatchEvent(new window.CustomEvent(name, { detail: detail }));
+  }
+}
 const BOARD_CELLS = Core.BOARD_CELLS;
 const CELL_BY_KEY = new Map(BOARD_CELLS.map(function (cell) { return [cell.key, cell]; }));
 /** 规则核心输出的坐标空间边长，模型统一归一化到 0~1，渲染层再换算成百分比。 */
@@ -85,6 +106,39 @@ function svgEl(doc, name, attrs) {
  * 其余四色按同一结构推导：base 四段、暗侧收影、底缘透光、边缘暗角、描边与花纹实色。
  * rings=true 的阵营画圆环纹理（蓝/绿/紫），false 的画斑块纹理（红/黄/橙）。
  */
+// 生日主题配色：六方各用清晰不同的糖果色（草莓/蓝莓/抹茶/柠檬/葡萄/香橙），
+// 主体本身即可一眼区分阵营；仍保留糖霜高光与彩针的派对质感。
+function hexToRgb(h) { h = h.replace('#', ''); return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]; }
+function candyTint(light, mid, deep, edge, outline, pattern) {
+  const d = hexToRgb(edge);
+  const sr = d[0] + ',' + d[1] + ',' + d[2];
+  return {
+    base: [['0%', light], ['38%', mid], ['74%', deep], ['100%', edge]],
+    shade: [['0%', 'rgba(' + sr + ',.34)'], ['100%', 'rgba(' + sr + ',0)']],
+    rim: [['0%', 'rgba(255,255,255,.92)'], ['45%', 'rgba(255,255,255,.5)'], ['100%', 'rgba(255,255,255,0)']],
+    vig: [['0%', 'rgba(' + sr + ',0)'], ['60%', 'rgba(' + sr + ',0)'], ['100%', 'rgba(' + sr + ',.28)']],
+    outline: outline, pattern: pattern, rings: false, candy: true
+  };
+}
+const BIRTHDAY_TINTS = {
+  red: candyTint('#ffd9e0', '#ff9bb0', '#f25877', '#d62f54', '#b81f43', '#f25877'),
+  blue: candyTint('#e3e8ff', '#9fb0ff', '#5b74f0', '#344ec9', '#243ba8', '#5b74f0'),
+  green: candyTint('#e2f8e6', '#9fe6ad', '#46c46a', '#1f9a47', '#157a37', '#46c46a'),
+  yellow: candyTint('#fff7d6', '#ffe486', '#f7c531', '#d99a0c', '#b87f06', '#f7c531'),
+  purple: candyTint('#f3e0ff', '#cf9df0', '#9b54d6', '#7430b0', '#5e2393', '#9b54d6'),
+  orange: candyTint('#ffe6cc', '#ffb877', '#ff8a32', '#e3620c', '#c44e08', '#ff8a32')
+};
+// 糖针几何：中心半径 ~30，远小于裁剪圆 r=50
+const SPRINKLE_STICKS = [
+  [30,32,7,-24], [44,24,6,18], [60,31,7,-40], [70,44,5,10], [27,46,6,52],
+  [46,45,7,-8], [63,55,6,30], [37,60,6,-34], [55,66,7,12], [66,70,5,-18],
+  [22,60,5,26], [47,76,6,-6], [60,78,5,40], [40,37,5,64], [34,70,6,20], [58,45,5,-52]
+];
+
+function activeTints() {
+  return window.__checkersBirthday && window.__checkersBirthday.active ? BIRTHDAY_TINTS : PIECE_TINTS;
+}
+
 const PIECE_TINTS = {
   red: {
     base: [['0%', '#f2606c'], ['38%', '#d02138'], ['74%', '#9c1124'], ['100%', '#6e0a19']],
@@ -140,7 +194,8 @@ const MARBLE_RING_DOTS = [[46, 30, 3], [64, 54, 3.2], [34, 64, 3], [24, 50, 2.6]
  * 棋子的渐变与裁剪全站只注入一份（放在棋子层首位），各色棋子按阵营引用。
  * 如果每颗棋子各自带 defs，重复的 id 会让 url(#...) 全部解析到第一个，颜色就串了。
  */
-function buildPieceDefs(doc) {
+function buildPieceDefs(doc, tints) {
+  const table = tints || activeTints();
   const svg = svgEl(doc, 'svg', { 'class': 'ck-defs', width: '0', height: '0', 'aria-hidden': 'true' });
   const defs = doc.createElementNS(SVG_NS, 'defs');
   const mkGrad = function (id, cx, cy, r, stops) {
@@ -156,8 +211,8 @@ function buildPieceDefs(doc) {
     });
     defs.appendChild(grad);
   };
-  Object.keys(PIECE_TINTS).forEach(function (tint) {
-    const meta = PIECE_TINTS[tint];
+  Object.keys(table).forEach(function (tint) {
+    const meta = table[tint];
     mkGrad('ckg-' + tint + '-base', '34%', '26%', '76%', meta.base);
     mkGrad('ckg-' + tint + '-shade', '50%', '50%', '50%', meta.shade);
     mkGrad('ckg-' + tint + '-rim', '50%', '112%', '58%', meta.rim);
@@ -181,47 +236,65 @@ function buildPieceDefs(doc) {
  * 真实感三件套全色共用：斑点数量多且半径错落；整组斑纹套轻微高斯模糊像"嵌在玻璃里"；
  * 边缘 vignette 模拟球面曲率。暗侧压在花纹之上，背光处的斑点一起变暗。内层按 0..100 设计，整体缩到 94%。
  */
-function buildPieceNode(owner, doc) {
-  const tint = PIECE_TINTS[owner] ? owner : 'red';
-  const meta = PIECE_TINTS[tint];
+function buildPieceNode(owner, doc, tints) {
+  const table = tints || activeTints();
+  const tint = table[owner] ? owner : 'red';
+  const meta = table[tint];
   const svg = svgEl(doc, 'svg', { 'class': 'ck-piece__svg', viewBox: '0 0 100 100', 'aria-hidden': 'true' });
   const g = svgEl(doc, 'g', { 'clip-path': 'url(#ckclip-marble)', transform: 'translate(3 3) scale(.94)' });
   g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-base)' }));
-  const pattern = svgEl(doc, 'g', { filter: 'url(#ckg-soft)' });
-  if (meta.rings) {
-    MARBLE_RINGS.forEach(function (ring) {
-      pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(ring[0]), cy: String(ring[1]), r: String(ring[2]),
-        fill: 'none', stroke: meta.pattern, 'stroke-width': '3', 'stroke-opacity': '.8'
+  if (meta.candy) {
+    const sugar = svgEl(doc, 'g', { 'class': 'ck-candy' });
+    SPRINKLE_STICKS.forEach(function (s) {
+      sugar.appendChild(svgEl(doc, 'rect', {
+        x: String(s[0] - s[2] / 2), y: String(s[1] - 1.1),
+        width: String(s[2]), height: '2.2', rx: '1.1',
+        transform: 'rotate(' + s[3] + ' ' + s[0] + ' ' + s[1] + ')',
+        fill: meta.pattern
       }));
     });
-    MARBLE_RING_DOTS.forEach(function (dot) {
-      pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(dot[0]), cy: String(dot[1]), r: String(dot[2]), fill: meta.pattern, 'fill-opacity': '.8'
-      }));
-    });
+    g.appendChild(sugar);
   } else {
-    MARBLE_SPOTS.forEach(function (spot) {
-      pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(spot[0]), cy: String(spot[1]), r: String(spot[2]), fill: meta.pattern, 'fill-opacity': '.85'
-      }));
-    });
-    MARBLE_FLECKS.forEach(function (fleck) {
-      pattern.appendChild(svgEl(doc, 'circle', {
-        cx: String(fleck[0]), cy: String(fleck[1]), r: String(fleck[2]), fill: meta.pattern, 'fill-opacity': '.55'
-      }));
-    });
+    const pattern = svgEl(doc, 'g', { filter: 'url(#ckg-soft)' });
+    if (meta.rings) {
+      MARBLE_RINGS.forEach(function (ring) {
+        pattern.appendChild(svgEl(doc, 'circle', {
+          cx: String(ring[0]), cy: String(ring[1]), r: String(ring[2]),
+          fill: 'none', stroke: meta.pattern, 'stroke-width': '3', 'stroke-opacity': '.8'
+        }));
+      });
+      MARBLE_RING_DOTS.forEach(function (dot) {
+        pattern.appendChild(svgEl(doc, 'circle', {
+          cx: String(dot[0]), cy: String(dot[1]), r: String(dot[2]), fill: meta.pattern, 'fill-opacity': '.8'
+        }));
+      });
+    } else {
+      MARBLE_SPOTS.forEach(function (spot) {
+        pattern.appendChild(svgEl(doc, 'circle', {
+          cx: String(spot[0]), cy: String(spot[1]), r: String(spot[2]), fill: meta.pattern, 'fill-opacity': '.85'
+        }));
+      });
+      MARBLE_FLECKS.forEach(function (fleck) {
+        pattern.appendChild(svgEl(doc, 'circle', {
+          cx: String(fleck[0]), cy: String(fleck[1]), r: String(fleck[2]), fill: meta.pattern, 'fill-opacity': '.55'
+        }));
+      });
+    }
+    g.appendChild(pattern);
   }
-  g.appendChild(pattern);
   g.appendChild(svgEl(doc, 'ellipse', { cx: '67', cy: '72', rx: '31', ry: '27', fill: 'url(#ckg-' + tint + '-shade)' }));
   g.appendChild(svgEl(doc, 'circle', { cx: '50', cy: '50', r: '50', fill: 'url(#ckg-' + tint + '-vig)' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '50', cy: '98', rx: '42', ry: '20', fill: 'url(#ckg-' + tint + '-rim)' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '30', cy: '48', rx: '24', ry: '13', transform: 'rotate(-38 30 48)', fill: 'url(#ckg-hi2)', opacity: '.3' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '35', cy: '31', rx: '19', ry: '12', transform: 'rotate(-26 35 31)', fill: 'url(#ckg-hi)' }));
   g.appendChild(svgEl(doc, 'ellipse', { cx: '66', cy: '23', rx: '7', ry: '4.5', transform: 'rotate(-20 66 23)', fill: 'url(#ckg-hi2)' }));
+  if (meta.candy) {
+    g.appendChild(svgEl(doc, 'ellipse', { cx: '34', cy: '30', rx: '25', ry: '14', transform: 'rotate(-30 34 30)', fill: '#ffffff', opacity: '.5' }));
+  }
+  const candy = !!meta.candy;
   g.appendChild(svgEl(doc, 'circle', {
-    cx: '50', cy: '50', r: '49.2', fill: 'none',
-    stroke: meta.outline, 'stroke-width': '1.5'
+    cx: '50', cy: '50', r: candy ? '48' : '49.2', fill: 'none',
+    stroke: meta.outline, 'stroke-width': candy ? '3.6' : '1.5'
   }));
   svg.appendChild(g);
   return svg;
@@ -871,6 +944,7 @@ function updatePlayerNames() {
 }
 
 function canAct() {
+  if (birthdayOpening()) return false;
   if (gameOver || aiThinking || animating) return false;
   if (mode === 'ai') return turn === 'red';
   if (mode === 'local') { const seat = seatByColor(turn); return !!seat && !seat.isAI; }
@@ -963,12 +1037,16 @@ function showWinner(player) {
   if (mode === 'online') $('winnerNewBtn').textContent = online.host === online.cid ? '再来一局' : '返回房间等待房主';
   else $('winnerNewBtn').textContent = '再来一局';
   $('winnerNewBtn').disabled = false; $('winnerOverlay').classList.add('active'); $('winnerOverlay').setAttribute('aria-hidden', 'false');
-  if (!alreadyOpen) setTimeout(function () { $('winnerNewBtn').focus(); }, 0);
+  if (!alreadyOpen) setTimeout(function () {
+    const blow = $('birthdayBlowBtn');
+    (birthdayMode && blow && !blow.hidden ? blow : $('winnerNewBtn')).focus();
+  }, 0);
+  presentationEvent('checkers:winner', { player: player, label: playerLabel(player) });
 }
-function closeWinner() { const overlay = $('winnerOverlay'); if (!overlay) return; overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); }
+function closeWinner() { const overlay = $('winnerOverlay'); if (!overlay) return; overlay.classList.remove('active'); overlay.setAttribute('aria-hidden', 'true'); presentationEvent('checkers:winner-close'); }
 
 function applyLocalMove(fromKey, targetKey, actor) {
-  if (animating || gameOver || actor !== turn) return false;
+  if (birthdayOpening() || animating || gameOver || actor !== turn) return false;
   const result = Core.applyMove(pieces, actor, fromKey, targetKey); if (!result) return false;
   pushHistory(); pieces = result.pieces;
   lastMove = { player: actor, from: fromKey, target: targetKey, kind: result.kind, path: result.path.slice(), moveNumber: moveNumber };
@@ -1039,7 +1117,7 @@ function requestAiMove(player, recentPositions, callback) {
 }
 
 function scheduleAiMove() {
-  if (mode === 'online' || gameOver || animating || aiThinking) return;
+  if (birthdayOpening() || mode === 'online' || gameOver || animating || aiThinking) return;
   const seat = seatByColor(turn);
   if (!seat || !seat.isAI) return;
   clearTimeout(aiTimer); cancelAiSearch(); aiThinking = true; render();
@@ -1101,7 +1179,8 @@ function resetGame(skipConfirm) {
     return;
   }
   if (!skipConfirm && moveNumber > 1 && typeof window.confirm === 'function' && !window.confirm('确定重新开始当前棋局吗？')) return;
-  archiveExistingSlot(); resetState(); saveGame(); render(); scheduleAiMove();
+  archiveExistingSlot(); resetState(); saveGame();
+  presentationEvent('checkers:newgame'); render(); scheduleAiMove();
 }
 
 function toggleSound() {
@@ -1166,6 +1245,7 @@ function connectOnline(intent) {
       const rawSeats = Array.isArray(message.seats) && message.seats.length ? message.seats
         : (Array.isArray(message.players) ? message.players : null);
       if (!clean || message.room !== online.room || !rawSeats) return;
+      const birthdayRestart = !!gameOver && !clean.winner && clean.moveNumber === 1;
       if (clean.moveNumber !== moveNumber || Core.positionKey(clean.pieces) !== Core.positionKey(pieces)) cancelAnimations();
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
       online.phase = ['waiting','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
@@ -1183,7 +1263,9 @@ function connectOnline(intent) {
       const botCount = online.seats.filter(function (seat) { return seat.isBot; }).length;
       const badge = $('modeBadge'); if (badge) badge.textContent = '好友对战' + (botCount ? ' · ' + botCount + ' 电脑' : '');
       online.retryAttempt = 0; online.retryDelay = 0; online.intent = 'join';
-      closeWinner(); render();
+      if (!gameOver) closeWinner();
+      if (birthdayRestart) presentationEvent('checkers:newgame');
+      render();
       if (gameOver && !animating) showWinner(gameOver);
       return;
     }
@@ -1360,6 +1442,7 @@ function init() {
 
   bindBoardInput();
   applyBoardModeLayout(boardView);
+  if (document.addEventListener) document.addEventListener('checkers:opening-end', function () { updateStatus(); scheduleAiMove(); });
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(true); cancelAnimations(); if (online.active) sendOnline({ t: 'ping' }); });
@@ -1375,6 +1458,9 @@ window.__checkersTest = {
   findNeighborKey: findNeighborKey, BOARD_SPAN: BOARD_SPAN,
   state: function () { return {pieces:{...pieces},turn:turn,seats:seats.map(function (s) {return {...s};}),moveNumber:moveNumber,
     gameOver:gameOver,animating:animating,aiThinking:aiThinking,aiWorkerBusy:aiWorkerBusy,saveSlot:saveSlot,lastAiStats:lastAiStats}; },
-  canAct:canAct,handleCell:handleCell,applyLocalMove:applyLocalMove,undoMove:undoMove,resetGame:resetGame
+  canAct:canAct,handleCell:handleCell,applyLocalMove:applyLocalMove,undoMove:undoMove,resetGame:resetGame,
+  PIECE_TINTS: PIECE_TINTS, BIRTHDAY_TINTS: BIRTHDAY_TINTS,
+  SPRINKLE_STICKS: SPRINKLE_STICKS, activeTints: activeTints, resolveBirthdayMode: resolveBirthdayMode,
+  buildPieceDefs: buildPieceDefs, buildPieceNode: buildPieceNode, birthdayMode: birthdayMode
 };
 window.addEventListener('DOMContentLoaded', init);
