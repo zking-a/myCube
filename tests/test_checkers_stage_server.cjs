@@ -23,11 +23,19 @@ test('Six-seat room: server workers play every bot color and broadcast legal mov
     const frames = [];
     for (const cid of ['STAGE-HOST', 'STAGE-GUEST']) {
       const ws = new WebSocket(`ws://127.0.0.1:${port}/checkers-ws`); sockets.push(ws);
+      const requestedRolls = new Set();
       ws.on('message', data => {
         const message=JSON.parse(data);
         if (cid === 'STAGE-HOST') frames.push(message);
         if (message.t==='state' && message.phase==='waiting' && message.players.length===2 && cid==='STAGE-HOST') ws.send(JSON.stringify({t:'start'}));
         if (message.t==='state' && message.phase==='opening') ws.send(JSON.stringify({t:'opening_ready',round:message.round}));
+        if (message.t==='state' && message.phase==='rolling') {
+          const key=message.round+':'+message.initiative.attempt;
+          if (!requestedRolls.has(key)) {
+            requestedRolls.add(key); // Simulate this test player's explicit click once per attempt.
+            ws.send(JSON.stringify({t:'roll',round:message.round,attempt:message.initiative.attempt}));
+          }
+        }
       });
       await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
       ws.send(JSON.stringify({ t: 'join', room: 'STAGE', nick: cid, cid,
@@ -106,7 +114,7 @@ test('Turn rotation skips a blocked seat using all of that color’s pieces', ()
 
 test('Rematch preserves colors and advances opening round, clearing previous readiness', () => {
   const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
-  const names=['planCheckersSeats','createCheckersRoom','checkersHumansOnline','resetCheckersRoom','clearCheckersBotTimer','rollCheckersInitiative','startCheckersRoom'];
+  const names=['planCheckersSeats','createCheckersRoom','checkersHumansOnline','resetCheckersRoom','clearCheckersBotTimer','startCheckersRoom'];
   const code=names.map(name=>source.match(new RegExp('function '+name+'\\([\\s\\S]*?\\n\\}'))[0]).join('\n');
   let rollNumber=0;
   const context=vm.createContext({CheckersCore:Core,checkersRooms:new Map(),clearTimeout,crypto:{randomInt:()=>[6,1,2,5][rollNumber++%4]}});
@@ -117,25 +125,36 @@ test('Rematch preserves colors and advances opening round, clearing previous rea
       seat.cid=seat.color==='blue'?'host':'guest';room.players.set(seat.cid,{online:true,color:seat.color});
     }
     assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,1);
-    assert.equal(room.turn,'red');
+    assert.equal(room.initiative.red,null);assert.equal(room.initiative.blue,null);assert.equal(room.initiative.first,null);
     const firstResult=room.initiative;
     assert.equal(context.startCheckersRoom(room),false);assert.equal(room.initiative,firstResult);
     room.openingReady.add('host');room.openingReady.add('guest');room.phase='done';
     context.resetCheckersRoom(room);
     assert.equal(room.phase,'waiting');assert.equal(room.openingReady.size,0);assert.equal(room.initiative,null);
     assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,2);
-    assert.equal(room.turn,'blue');
+    assert.equal(room.initiative.red,null);assert.equal(room.initiative.blue,null);assert.equal(rollNumber,0);
     assert.equal(room.seats.find(s=>s.cid==='host').color,'blue');
     assert.equal(room.seats.find(s=>s.cid==='guest').color,'red');
   }
 });
 
-test('Dice compare both colors fairly and automatically reroll ties',()=>{
+test('Each explicit roll affects only that player; ties require two fresh clicks and reject stale requests',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
-  const roll=vm.runInNewContext('('+source.match(/function rollCheckersInitiative\([\s\S]*?\n\}/)[0]+')');
-  const values=[3,3,5,5,2,6];
-  const blue=roll((min,max)=>{assert.equal(min,1);assert.equal(max,7);return values.shift();});
-  assert.equal(blue.first,'blue');assert.equal(blue.rerolls,2);assert.equal(blue.blue,6);assert.equal(blue.red,2);
-  const redValues=[6,1], red=roll(()=>redValues.shift());
-  assert.equal(red.first,'red');assert.equal(red.rerolls,0);assert.equal(red.red,6);assert.equal(red.blue,1);
+  const roll=vm.runInNewContext('('+source.match(/function rollCheckersDie\([\s\S]*?\n\}/)[0]+')');
+  const room={phase:'rolling',round:4,initiative:{red:null,blue:null,first:null,rerolls:0,attempt:1,lastTie:null}};
+  const values=[3,3,6,1], random=(min,max)=>{assert.equal(min,1);assert.equal(max,7);return values.shift();};
+  assert.equal(roll(room,'blue',4,1,random),'');
+  assert.equal(room.initiative.blue,3);assert.equal(room.initiative.red,null);assert.equal(room.phase,'rolling');
+  assert.equal(roll(room,'blue',4,1,random),'ALREADY_ROLLED');assert.equal(values.length,3);
+  assert.equal(roll(room,'red',4,1,random),'');
+  assert.equal(room.initiative.attempt,2);assert.equal(room.initiative.rerolls,1);assert.equal(room.initiative.lastTie,3);
+  assert.equal(room.initiative.red,null);assert.equal(room.initiative.blue,null);assert.equal(room.phase,'rolling');
+  assert.equal(roll(room,'blue',4,1,random),'STATE_OUTDATED');assert.equal(values.length,2);
+  assert.equal(roll(room,'blue',4,2,random),'');assert.equal(room.phase,'rolling');
+  assert.equal(roll(room,'red',4,2,random),'');assert.equal(room.turn,'blue');assert.equal(room.phase,'playing');
+  assert.equal(roll(room,'red',4,2,random),'ROLL_NOT_AVAILABLE');
+  const redRoom={phase:'rolling',round:5,initiative:{red:null,blue:null,first:null,rerolls:0,attempt:1,lastTie:null}};
+  const redValues=[6,1];
+  roll(redRoom,'red',5,1,()=>redValues.shift());roll(redRoom,'blue',5,1,()=>redValues.shift());
+  assert.equal(redRoom.turn,'red');
 });

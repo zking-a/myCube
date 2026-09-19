@@ -7,11 +7,11 @@
   <meta name="description" content="沉浸式中国跳棋棋局。">
   <title>中国跳棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=d47fcd10d2e3">
-  <link rel="stylesheet" href="checkers.css?v=ab3b4429b2e7">
+  <link rel="stylesheet" href="checkers.css?v=4c6b2d58b3a8">
   <link rel="stylesheet" href="checkers-birthday.css?v=efbe4c0c9b57">
   <script src="checkers_core.js?v=933c2131eda6" defer></script>
   <script src="checkers_ai_engine.js?v=f378864c7134" defer></script>
-  <script src="checkers.js?v=884b9b7e2dc3" defer></script>
+  <script src="checkers.js?v=73cd31303de4" defer></script>
   <script src="birthday-checkers.js?v=d44fd1b93df7" defer></script>
 </head>
 <body class="play-page">
@@ -52,7 +52,7 @@
 
         <section class="initiative-bar" id="initiativeBar" aria-label="本局掷骰先手" hidden>
           <div class="initiative-blue"><span class="initiative-die" id="blueInitiativeDie" role="img"></span><span>房主 · 蓝方</span></div>
-          <div class="initiative-result"><small>掷骰定先手</small><strong id="initiativeResult"></strong><span id="initiativeTies"></span></div>
+          <div class="initiative-result"><small>掷骰定先手</small><strong id="initiativeResult"></strong><span id="initiativeTies"></span><button type="button" class="initiative-roll-button" id="rollDiceBtn" hidden>投骰子</button></div>
           <div class="initiative-red"><span class="initiative-die" id="redInitiativeDie" role="img"></span><span>好友 · 红方</span></div>
         </section>
 
@@ -93,7 +93,7 @@
         <details class="rules-card">
           <summary>玩法与视角说明 <span>⌄</span></summary>
           <ol>
-            <li>本地对局红方先行；联机双方掷骰，大点先行、平点重掷。之后各席位按原顺序轮流走棋。</li>
+            <li>本地对局红方先行；联机双方各自点击“投骰子”，大点先行，平点时双方重新投。之后按原座位顺序轮流走棋。</li>
             <li>联机对战双方都看到己方位于屏幕下方，换手时棋盘不会翻转。</li>
             <li>绿色落点表示相邻移动，橙色落点表示可以跳跃。</li>
             <li>连续跳跃会绘制完整路线，上一步的起点和终点会持续标记。</li>

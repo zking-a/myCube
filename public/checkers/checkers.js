@@ -88,7 +88,7 @@ const online = {
   host: '', seats: [], players: [], intent: 'join', nick: '', intentionalClose: false,
   bots: 0, botLevel: 'normal',
   round: 0, openingRound: 0, readyRound: 0, startPending: false,
-  initiative: null, diceRoundShown: 0,
+  initiative: null, rollPending: '',
   reconnectTimer: null, retryAttempt: 0, retryDelay: 0
 };
 
@@ -969,6 +969,10 @@ function onlineStatusText() {
     return '等待另一位玩家加入';
   }
   if (online.phase === 'opening') return birthdayOpening() ? '开幕式进行中' : '等待另一位玩家完成开幕式';
+  if (online.phase === 'rolling') {
+    if (online.seats.some(function (seat) { return !seat.isBot && !seat.online; })) return '对方暂时离线，等待重连后投骰';
+    return online.initiative && online.initiative[online.color] !== null ? '你已投骰，等待对方' : '请点击投骰子，决定谁先走';
+  }
   if (online.phase === 'playing') {
     if (online.seats.some(function (seat) { return !seat.isBot && !seat.online; })) return '对手已离线，等待其自动重连';
     const actor = onlinePlayer(turn);
@@ -1000,16 +1004,21 @@ function updateInitiative() {
     if (!die.children.length) {
       for (let i = 0; i < 9; i++) { const pip = document.createElement('i'); pip.setAttribute('aria-hidden','true'); die.appendChild(pip); }
     }
-    die.dataset.value = String(roll[color]);
-    die.setAttribute('aria-label', playerLabel(color) + '掷出 ' + roll[color] + ' 点');
+    const value = String(roll[color] || 0), changed = die.dataset.value !== undefined && die.dataset.value !== value;
+    die.dataset.value = value;
+    die.setAttribute('aria-label', playerLabel(color) + (roll[color] === null ? '尚未投骰' : '掷出 ' + roll[color] + ' 点'));
+    if (value === '0') die.classList.remove('is-rolling');
+    else if (changed) {
+      die.classList.add('is-rolling');
+      die.addEventListener('animationend', function () { die.classList.remove('is-rolling'); }, { once: true });
+    }
   });
-  $('initiativeResult').textContent = playerLabel(roll.first) + '先手';
-  $('initiativeTies').textContent = roll.rerolls ? '平点重掷 ' + roll.rerolls + ' 次' : '大点先走';
-  if (online.phase === 'playing' && online.diceRoundShown !== online.round) {
-    online.diceRoundShown = online.round;
-    bar.classList.add('is-rolling');
-    bar.addEventListener('animationend', function () { bar.classList.remove('is-rolling'); }, { once: true });
-  }
+  $('initiativeResult').textContent = roll.first ? playerLabel(roll.first) + '先手' : (online.phase === 'opening' ? '开幕后各自投骰' : '双方各投一次');
+  $('initiativeTies').textContent = !roll.first && roll.lastTie ? '上轮都是 ' + roll.lastTie + ' 点，请重新投' : (roll.rerolls ? '平点重掷 ' + roll.rerolls + ' 次' : '大点先走');
+  const button = $('rollDiceBtn'), already = roll[online.color] !== null;
+  button.hidden = online.phase !== 'rolling';
+  button.disabled = already || !!online.rollPending || online.seats.some(function (seat) { return !seat.isBot && !seat.online; });
+  button.textContent = online.rollPending ? '正在投…' : (already ? '已投，等待对方' : '投骰子');
 }
 
 function updateStatus() {
@@ -1235,6 +1244,12 @@ function startOnlineGame() {
   online.startPending = sendOnline({ t: 'start' });
   updateStatus();
 }
+function rollOnlineDie() {
+  const dice = online.initiative;
+  if (mode !== 'online' || online.phase !== 'rolling' || !dice || dice[online.color] !== null || online.rollPending) return;
+  if (sendOnline({ t: 'roll', round: online.round, attempt: dice.attempt })) online.rollPending = online.round + ':' + dice.attempt;
+  updateStatus();
+}
 
 function reconnectDelayForAttempt(attempt, random) {
   const safeAttempt = Math.max(1, Math.floor(Number(attempt) || 1));
@@ -1274,6 +1289,7 @@ function connectOnline(intent) {
   ws.addEventListener('open', function () {
     if (online.ws !== ws) return;
     online.readyRound = 0;
+    online.rollPending = '';
     const payload = { t: 'join', room: online.room, nick: online.nick, cid: online.cid, token: online.token, intent: online.intent };
     if (online.intent === 'create' && online.bots > 0) { payload.bots = online.bots; payload.level = online.botLevel; }
     sendOnline(payload);
@@ -1292,12 +1308,13 @@ function connectOnline(intent) {
       if (!clean || message.room !== online.room || !rawSeats) return;
       if (clean.moveNumber !== moveNumber || Core.positionKey(clean.pieces) !== Core.positionKey(pieces)) cancelAnimations();
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
-      online.phase = ['waiting','opening','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
+      online.phase = ['waiting','opening','rolling','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
       online.round = Math.max(0, Math.floor(Number(message.round) || 0)); online.startPending = false;
       const roll = message.initiative;
-      online.initiative = roll && Number.isInteger(roll.red) && Number.isInteger(roll.blue) &&
-        roll.red >= 1 && roll.red <= 6 && roll.blue >= 1 && roll.blue <= 6 && roll.red !== roll.blue &&
-        roll.first === (roll.red > roll.blue ? 'red' : 'blue') ? roll : null;
+      const validDie = function (value) { return value === null || Number.isInteger(value) && value >= 1 && value <= 6; };
+      online.initiative = roll && validDie(roll.red) && validDie(roll.blue) && Number.isInteger(roll.attempt) && roll.attempt > 0 &&
+        (roll.first === null && (roll.red === null || roll.blue === null) || roll.red !== null && roll.blue !== null && roll.red !== roll.blue &&
+          roll.first === (roll.red > roll.blue ? 'red' : 'blue')) ? roll : null;
       online.seats = rawSeats.map(function (seat) {
         const color = Core.COLORS.indexOf(seat.color) >= 0 ? seat.color : 'red';
         return { cid: String(seat.cid || '').slice(0, 32), nick: String(seat.nick || '').slice(0, 16), color: color, online: !!seat.online, isBot: !!seat.isBot };
@@ -1306,6 +1323,8 @@ function connectOnline(intent) {
         return { cid: seat.cid, nick: seat.nick, color: seat.color, online: seat.online };
       });
       const self = online.seats.find(function (seat) { return seat.cid === online.cid; }); if (self) online.color = self.color;
+      if (online.phase !== 'rolling' || !online.initiative || online.initiative[online.color] !== null ||
+          online.rollPending !== online.round + ':' + online.initiative.attempt) online.rollPending = '';
       viewPlayer = getViewPlayerForMode('online', online.color); selectedKey = ''; legalMoves = emptyMoves(); history = [];
       seats = online.seats.map(function (seat) { return { color: seat.color, isAI: seat.isBot }; });
       ensurePlayerRows();
@@ -1325,7 +1344,7 @@ function connectOnline(intent) {
       return;
     }
     if (message.t === 'err') {
-      online.startPending = false; updateStatus();
+      online.startPending = false; online.rollPending = ''; updateStatus();
       const errorMessage = String(message.msg || '联机操作失败').slice(0, 80);
       showToast(errorMessage);
       if (['ROOM_NOT_FOUND','ROOM_FULL','ROOM_EXISTS','SERVER_FULL','SESSION_INVALID','IP_ROOM_LIMIT','CREATE_RATE_LIMIT'].includes(message.code)) {
@@ -1500,6 +1519,7 @@ function init() {
   applyBoardModeLayout(boardView);
   if (document.addEventListener) document.addEventListener('checkers:opening-end', function () { acknowledgeOpening(); updateStatus(); scheduleAiMove(); });
   if ($('startOnlineBtn')) $('startOnlineBtn').addEventListener('click', startOnlineGame);
+  if ($('rollDiceBtn')) $('rollDiceBtn').addEventListener('click', rollOnlineDie);
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(true); cancelAnimations(); if (online.active) sendOnline({ t: 'ping' }); });

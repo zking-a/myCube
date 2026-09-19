@@ -136,6 +136,28 @@ function check(name, value) { assert.ok(value, name); passed++; console.log('PAS
     await hostPage.locator('#startOnlineBtn').click();
     await Promise.all([hostPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening()),guestPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening())]);
     check('房主开始后双方自动开幕，无需各点一次拉幕',await hostPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct())&&await guestPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct()));
+    await Promise.all([hostPage.waitForFunction(()=>online.phase==='rolling'),guestPage.waitForFunction(()=>online.phase==='rolling')]);
+    check('开幕后等待两个玩家各自点击，没有自动产生骰点',await hostPage.evaluate(()=>online.initiative.red===null&&online.initiative.blue===null&&!canAct()&&!document.getElementById('rollDiceBtn').disabled)&&await guestPage.evaluate(()=>!document.getElementById('rollDiceBtn').disabled));
+    await hostPage.locator('#rollDiceBtn').click();
+    await hostPage.waitForFunction(()=>online.initiative.blue!==null);
+    await guestPage.waitForFunction(()=>online.initiative.blue!==null);
+    check('房主投完只显示蓝方点数，必须等待客人点击',await hostPage.evaluate(()=>online.initiative.red===null&&online.phase==='rolling'&&document.getElementById('rollDiceBtn').disabled)&&await guestPage.evaluate(()=>online.initiative.red===null&&!document.getElementById('rollDiceBtn').disabled));
+    const storedBlue=await hostPage.evaluate(()=>online.initiative.blue);
+    await hostPage.screenshot({path:path.join(output,'manual-dice-waiting.png')});
+    await hostPage.reload();
+    await hostPage.waitForFunction(()=>online.phase==='rolling');
+    check('投完后刷新保留点数，不能再次投，也不自动替客人投',await hostPage.evaluate(value=>online.initiative.blue===value&&online.initiative.red===null&&document.getElementById('rollDiceBtn').disabled&&!birthdayOpening(),storedBlue));
+    for(let attempts=0;attempts<20;attempts++) {
+      const attempt=await hostPage.evaluate(()=>online.initiative.attempt);
+      await guestPage.locator('#rollDiceBtn').click();
+      await hostPage.waitForFunction(old=>online.phase==='playing'||online.initiative.attempt>old,attempt);
+      if(await hostPage.evaluate(()=>online.phase==='playing')) break;
+      const nextAttempt=await hostPage.evaluate(()=>online.initiative.attempt);
+      await guestPage.waitForFunction(n=>online.initiative.attempt===n,nextAttempt);
+      assert.ok(await hostPage.evaluate(()=>online.initiative.red===null&&online.initiative.blue===null&&document.getElementById('initiativeTies').textContent.includes('重新投')),'平点后必须等待新的手动点击');
+      await hostPage.locator('#rollDiceBtn').click();
+      await guestPage.waitForFunction(()=>online.initiative.blue!==null);
+    }
     await Promise.all([hostPage.waitForFunction(()=>online.phase==='playing'),guestPage.waitForFunction(()=>online.phase==='playing')]);
     check('开幕结束后按骰子决定先手，双方操作权限与结果一致',await hostPage.evaluate(()=>!birthdayOpening()&&canAct()===(online.initiative.first===online.color))&&await guestPage.evaluate(()=>!birthdayOpening()&&canAct()===(online.initiative.first===online.color)));
     const hostRoll=await hostPage.evaluate(()=>online.initiative), guestRoll=await guestPage.evaluate(()=>online.initiative);

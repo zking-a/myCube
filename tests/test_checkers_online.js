@@ -132,7 +132,22 @@ function ok(name, condition) {
     await B.waitFor(m => m.t === 'err' && m.code === 'ROUND_NOT_STARTED');
     ok('开幕未完成不能落子，过期轮次确认无效', true);
     B.send({ t:'opening_ready', round:openingB.round });
-    const stateA = await A.waitFor(function (m) { return m.t === 'state' && m.phase === 'playing'; });
+    const readyToRoll = await A.waitFor(m=>m.t==='state'&&m.phase==='rolling');
+    await B.waitFor(m=>m.t==='state'&&m.phase==='rolling');
+    ok('开幕结束不会自动投骰，双方点数都为空',readyToRoll.initiative.red===null&&readyToRoll.initiative.blue===null);
+    A.send({t:'roll',round:readyToRoll.round,attempt:readyToRoll.initiative.attempt,color:'red',value:6});
+    const hostRolled = await A.waitFor(m=>m.t==='state'&&m.phase==='rolling'&&m.initiative.blue!==null);
+    ok('房主点击只产生自己的蓝方点数，客户端不能替红方投骰',hostRolled.initiative.red===null&&hostRolled.initiative.first===null);
+    A.send({t:'roll',round:readyToRoll.round,attempt:readyToRoll.initiative.attempt});
+    await A.waitFor(m=>m.t==='err'&&m.code==='ALREADY_ROLLED');
+    B.send({t:'roll',round:readyToRoll.round,attempt:readyToRoll.initiative.attempt});
+    let outcome=await A.waitFor(m=>m.t==='state'&&(m.phase==='playing'||m.phase==='rolling'&&m.initiative.attempt>1));
+    while(outcome.phase==='rolling') {
+      const attempt=outcome.initiative.attempt;
+      A.send({t:'roll',round:outcome.round,attempt});B.send({t:'roll',round:outcome.round,attempt});
+      outcome=await A.waitFor(m=>m.t==='state'&&(m.phase==='playing'||m.phase==='rolling'&&m.initiative.attempt>attempt));
+    }
+    const stateA = outcome;
     const stateB = await B.waitFor(function (m) { return m.t === 'state' && m.phase === 'playing'; });
     ok('双方开幕结束后才进入对局，由掷骰较大的一方先行', stateA.players.length === 2 && stateB.players.length === 2 && stateA.turn === stateA.initiative.first);
     ok('双方收到相同的有效骰点与先手结果', JSON.stringify(stateA.initiative) === JSON.stringify(stateB.initiative) &&

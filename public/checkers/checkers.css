@@ -153,7 +153,11 @@ body[data-room-phase="waiting"] .bd-board-wish,body[data-room-phase="connecting"
 .initiative-die{display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:3px;flex-shrink:0;width:42px;height:42px;padding:7px;border:1px solid #d8cfdc;border-radius:10px;background:#fff;box-shadow:0 3px 0 #ded6df;box-sizing:border-box}
 .initiative-die i{border-radius:50%;background:currentColor;visibility:hidden}.initiative-blue .initiative-die{color:#5573d3}.initiative-red .initiative-die{color:#cf5978}
 .initiative-die[data-value="1"] i:nth-child(5),.initiative-die[data-value="2"] i:nth-child(1),.initiative-die[data-value="2"] i:nth-child(9),.initiative-die[data-value="3"] i:nth-child(1),.initiative-die[data-value="3"] i:nth-child(5),.initiative-die[data-value="3"] i:nth-child(9),.initiative-die[data-value="4"] i:nth-child(1),.initiative-die[data-value="4"] i:nth-child(3),.initiative-die[data-value="4"] i:nth-child(7),.initiative-die[data-value="4"] i:nth-child(9),.initiative-die[data-value="5"] i:nth-child(1),.initiative-die[data-value="5"] i:nth-child(3),.initiative-die[data-value="5"] i:nth-child(5),.initiative-die[data-value="5"] i:nth-child(7),.initiative-die[data-value="5"] i:nth-child(9),.initiative-die[data-value="6"] i:nth-child(1),.initiative-die[data-value="6"] i:nth-child(3),.initiative-die[data-value="6"] i:nth-child(4),.initiative-die[data-value="6"] i:nth-child(6),.initiative-die[data-value="6"] i:nth-child(7),.initiative-die[data-value="6"] i:nth-child(9){visibility:visible}
-.initiative-bar.is-rolling .initiative-die{animation:initiative-roll .6s ease-out}
+.initiative-die.is-rolling{animation:initiative-roll .6s ease-out}
 @keyframes initiative-roll{0%{transform:translateY(-8px) rotate(-18deg) scale(.9)}65%{transform:translateY(1px) rotate(5deg)}100%{transform:none}}
 @media(max-width:420px){.initiative-bar>div:not(.initiative-result){flex-direction:column;gap:5px}}
-@media(prefers-reduced-motion:reduce){.initiative-bar.is-rolling .initiative-die{animation:none}}
+.initiative-die{position:relative}
+.initiative-die[data-value="0"]::after{position:absolute;inset:0;display:grid;place-items:center;content:"?";font-size:23px;color:#a89bac}
+.initiative-roll-button{min-height:44px;min-width:108px;padding:10px 12px;border:0;border-radius:12px;background:#6858ce;color:white;font-size:13px;font-weight:700;cursor:pointer}
+.initiative-roll-button:disabled{opacity:.55;cursor:default}
+@media(prefers-reduced-motion:reduce){.initiative-die.is-rolling{animation:none}}

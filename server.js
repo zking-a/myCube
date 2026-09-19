@@ -158,7 +158,7 @@ function createCheckersRoom(code, creatorIp, botCount, botLevel) {
   const seats = planCheckersSeats(botCount);
   const room = {
     code: code,
-    phase: 'waiting',       // waiting | opening | playing | done
+    phase: 'waiting',       // waiting | opening | rolling | playing | done
     round: 0,
     openingReady: new Set(),
     initiative: null,
@@ -202,21 +202,30 @@ function resetCheckersRoom(room) {
   room.lastActivityAt = Date.now();
 }
 
-function rollCheckersInitiative(randomInt) {
-  const roll = randomInt || crypto.randomInt;
-  let red, blue, rerolls = 0;
-  do {
-    red = roll(1, 7); blue = roll(1, 7);
-    if (red === blue) rerolls++;
-  } while (red === blue);
-  return { red: red, blue: blue, first: red > blue ? 'red' : 'blue', rerolls: rerolls };
+function rollCheckersDie(room, color, round, attempt, randomInt) {
+  if (room.phase !== 'rolling') return 'ROLL_NOT_AVAILABLE';
+  const dice = room.initiative;
+  if (Number(round) !== room.round || Number(attempt) !== dice.attempt) return 'STATE_OUTDATED';
+  if (color !== 'red' && color !== 'blue') return 'INVALID_PLAYER';
+  if (dice[color] !== null) return 'ALREADY_ROLLED';
+  dice[color] = (randomInt || crypto.randomInt)(1, 7);
+  if (dice.red !== null && dice.blue !== null) {
+    if (dice.red === dice.blue) {
+      dice.lastTie = dice.red; dice.rerolls++; dice.attempt++;
+      dice.red = null; dice.blue = null;
+    } else {
+      dice.first = dice.red > dice.blue ? 'red' : 'blue';
+      room.turn = dice.first; room.phase = 'playing';
+    }
+  }
+  room.lastActivityAt = Date.now();
+  return '';
 }
 
 function startCheckersRoom(room) {
   if (room.phase !== 'waiting' || !checkersHumansOnline(room)) return false;
   room.round++;
-  room.initiative = rollCheckersInitiative();
-  room.turn = room.initiative.first;
+  room.initiative = { red: null, blue: null, first: null, rerolls: 0, attempt: 1, lastTie: null };
   room.openingReady.clear();
   room.phase = 'opening';
   room.lastActivityAt = Date.now();
@@ -1662,11 +1671,19 @@ checkersWss.on('connection', function (ws, req) {
       if (room.phase !== 'opening' || Number(m.round) !== room.round) return;
       room.openingReady.add(player.cid);
       if (checkersHumansOnline(room) && room.seats.every(function (seat) { return seat.isBot || room.openingReady.has(seat.cid); })) {
-        room.phase = 'playing'; room.lastActivityAt = Date.now();
+        room.phase = 'rolling'; room.lastActivityAt = Date.now();
         broadcastCheckersState(room);
       }
+    } else if (m.t === 'roll') {
+      if (!checkersHumansOnline(room)) { fail('OPPONENT_OFFLINE', '请等待双方在线后投骰子'); return; }
+      const error = rollCheckersDie(room, player.color, m.round, m.attempt);
+      if (error) {
+        fail(error, error === 'ALREADY_ROLLED' ? '你已经投过，请等待对方' : '投骰状态已更新，请按当前提示操作');
+        broadcastCheckersState(room); return;
+      }
+      broadcastCheckersState(room);
     } else if (m.t === 'move') {
-      if (room.phase !== 'playing' || room.winner) { fail('ROUND_NOT_STARTED', '请等待房主开始并完成开幕式'); return; }
+      if (room.phase !== 'playing' || room.winner) { fail('ROUND_NOT_STARTED', '请完成开幕和双方投骰后再走棋'); return; }
       const humanOffline = room.seats.some(function (seat) {
         if (seat.isBot) return false;
         const seatPlayer = seat.cid ? room.players.get(seat.cid) : null;
