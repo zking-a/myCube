@@ -144,12 +144,11 @@ function createRoom(code, creatorIp) {
   return room;
 }
 
-/** 按“2 真人 + N 电脑”规划席位：房主固定拿 top（红），好友拿 bottom（蓝；3 席局无 bottom 则拿 lr），电脑补其余营地。 */
+/** 联机真人固定为红蓝对家；三人房额外使用右上营地，保证蓝方始终存在。 */
 function planCheckersSeats(botCount) {
   const total = Math.max(2, Math.min(6, 2 + botCount));
-  const camps = CheckersCore.SEAT_LAYOUTS[total];
-  const bottomIndex = camps.indexOf('bottom');
-  const humanCamps = [camps[0], bottomIndex > 0 ? 'bottom' : camps[1]];
+  const camps = total === 3 ? ['top', 'ur', 'bottom'] : CheckersCore.SEAT_LAYOUTS[total];
+  const humanCamps = ['top', 'bottom'];
   return camps.map(function (camp) {
     return { camp: camp, color: CheckersCore.CAMP_COLORS[camp], isBot: humanCamps.indexOf(camp) < 0, cid: '', nick: '' };
   });
@@ -159,7 +158,9 @@ function createCheckersRoom(code, creatorIp, botCount, botLevel) {
   const seats = planCheckersSeats(botCount);
   const room = {
     code: code,
-    phase: 'waiting',       // waiting | playing | done
+    phase: 'waiting',       // waiting | opening | playing | done
+    round: 0,
+    openingReady: new Set(),
     seats: seats,
     botLevel: ['easy', 'normal', 'hard'].indexOf(botLevel) >= 0 ? botLevel : 'normal',
     pieces: CheckersCore.createInitialPiecesForSeats(seats.map(function (seat) { return seat.camp; })),
@@ -188,13 +189,24 @@ function checkersHumansOnline(room) {
 }
 
 function resetCheckersRoom(room) {
+  clearCheckersBotTimer(room);
+  room.openingReady.clear();
   room.pieces = CheckersCore.createInitialPiecesForSeats(room.seats.map(function (seat) { return seat.camp; }));
   room.turn = room.seats[0].color;
   room.moveNumber = 1;
   room.winner = '';
   room.lastMove = null;
-  room.phase = checkersHumansOnline(room) ? 'playing' : 'waiting';
+  room.phase = 'waiting';
   room.lastActivityAt = Date.now();
+}
+
+function startCheckersRoom(room) {
+  if (room.phase !== 'waiting' || !checkersHumansOnline(room)) return false;
+  room.round++;
+  room.openingReady.clear();
+  room.phase = 'opening';
+  room.lastActivityAt = Date.now();
+  return true;
 }
 
 function clearCheckersBotTimer(room) {
@@ -637,6 +649,7 @@ function broadcastCheckersState(room) {
     t: 'state',
     room: room.code,
     phase: room.phase,
+    round: room.round,
     pieces: room.pieces,
     turn: room.turn,
     moveNumber: room.moveNumber,
@@ -655,6 +668,11 @@ function broadcastCheckersState(room) {
 function pickCheckersHost(room) {
   const next = Array.from(room.players.values()).find(function (p) { return p.online; }) || room.players.values().next().value;
   room.hostCid = next ? next.cid : null;
+  if (next && next.color !== 'blue') {
+    room.seats.forEach(function (seat) { if (seat.cid === next.cid) { seat.cid = ''; seat.nick = ''; } });
+    const blue = room.seats.find(function (seat) { return seat.color === 'blue'; });
+    blue.cid = next.cid; blue.nick = next.nick; next.color = 'blue';
+  }
 }
 
 function scheduleCheckersGC(room) {
@@ -1587,7 +1605,8 @@ checkersWss.on('connection', function (ws, req) {
         if (room.phase !== 'waiting') { fail('ROUND_IN_PROGRESS', '棋局已经开始，暂时不能加入'); return; }
         if (countSeats() >= MAX_CONNECTIONS) { fail('SERVER_FULL', '服务器玩家席位已满，请稍后再试'); return; }
         if (countSeatsForIp(clientIp) >= MAX_CONNECTIONS_PER_IP) { fail('IP_PLAYER_LIMIT', '当前网络加入的玩家数已达上限'); return; }
-        const openSeat = room.seats.find(function (seat) { return !seat.isBot && !seat.cid; });
+        const requestedColor = room.hostCid ? 'red' : 'blue';
+        const openSeat = room.seats.find(function (seat) { return !seat.isBot && !seat.cid && seat.color === requestedColor; });
         if (!openSeat) { fail('ROOM_FULL', '该跳棋房间的真人席位已满'); return; }
         p = {
           cid: cid,
@@ -1610,7 +1629,6 @@ checkersWss.on('connection', function (ws, req) {
       player = p;
       send(ws, { t: 'session', cid: p.cid, token: p.reconnectToken });
       if (replacedSocket) { try { replacedSocket.terminate(); } catch (e) {} }
-      if (room.phase === 'waiting' && checkersHumansOnline(room)) room.phase = 'playing';
       room.lastActivityAt = Date.now();
       clearTimeout(joinTimer);
       broadcastCheckersState(room);
@@ -1621,8 +1639,19 @@ checkersWss.on('connection', function (ws, req) {
     if (player.ws !== ws) { try { ws.close(1008, 'session replaced'); } catch (e) {} return; }
     const room = player._room;
     if (!room || checkersRooms.get(room.code) !== room) return;
-    if (m.t === 'move') {
-      if (room.phase !== 'playing' || room.winner) return;
+    if (m.t === 'start') {
+      if (room.hostCid !== player.cid) { fail('HOST_ONLY', '只有房主可以开始对局'); return; }
+      if (!checkersHumansOnline(room)) { fail('PLAYERS_NOT_READY', '请等待双方进入房间并保持在线'); return; }
+      if (startCheckersRoom(room)) broadcastCheckersState(room);
+    } else if (m.t === 'opening_ready') {
+      if (room.phase !== 'opening' || Number(m.round) !== room.round) return;
+      room.openingReady.add(player.cid);
+      if (checkersHumansOnline(room) && room.seats.every(function (seat) { return seat.isBot || room.openingReady.has(seat.cid); })) {
+        room.phase = 'playing'; room.lastActivityAt = Date.now();
+        broadcastCheckersState(room);
+      }
+    } else if (m.t === 'move') {
+      if (room.phase !== 'playing' || room.winner) { fail('ROUND_NOT_STARTED', '请等待房主开始并完成开幕式'); return; }
       const humanOffline = room.seats.some(function (seat) {
         if (seat.isBot) return false;
         const seatPlayer = seat.cid ? room.players.get(seat.cid) : null;
@@ -1643,6 +1672,7 @@ checkersWss.on('connection', function (ws, req) {
       if (room.phase !== 'done') return;
       room.lastActivityAt = Date.now();
       resetCheckersRoom(room);
+      startCheckersRoom(room);
       broadcastCheckersState(room);
     } else if (m.t === 'ping') {
       send(ws, { t: 'pong', s: Date.now() });

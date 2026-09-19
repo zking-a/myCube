@@ -7,12 +7,12 @@
   <meta name="description" content="沉浸式中国跳棋棋局。">
   <title>中国跳棋 · 对局</title>
   <link rel="stylesheet" href="../ui-foundation.css?v=d47fcd10d2e3">
-  <link rel="stylesheet" href="checkers.css?v=959e78937dbb">
+  <link rel="stylesheet" href="checkers.css?v=fc259a2be3e6">
   <link rel="stylesheet" href="checkers-birthday.css?v=b9fbb16be0ae">
   <script src="checkers_core.js?v=933c2131eda6" defer></script>
   <script src="checkers_ai_engine.js?v=f378864c7134" defer></script>
-  <script src="checkers.js?v=2ff295931d70" defer></script>
-  <script src="birthday-checkers.js?v=fade94c006c2" defer></script>
+  <script src="checkers.js?v=b2d06a81c07f" defer></script>
+  <script src="birthday-checkers.js?v=b96b3978c392" defer></script>
 </head>
 <body class="play-page">
   <main class="game-shell">
@@ -52,7 +52,7 @@
 
         <div class="board-frame">
           <div class="ck-board" id="board" data-view="3d" role="group" aria-label="中国跳棋棋盘，红方视角"></div>
-          <div class="board-wait" id="boardWait" hidden><span><i class="ui-icon ui-icon--earth-asia" aria-hidden="true"></i></span><strong>等待对手加入</strong><small>复制邀请链接发给朋友即可开始</small></div>
+          <div class="board-wait" id="boardWait" hidden><span><i class="ui-icon ui-icon--earth-asia" aria-hidden="true"></i></span><strong>等待对手加入</strong><small>复制邀请链接发给朋友，到齐后由房主开始</small><button type="button" class="ui-button ui-button--primary" id="startOnlineBtn" hidden>开始对局</button></div>
         </div>
         <div class="board-legend"><span><i class="step-dot"></i>相邻移动</span><span><i class="jump-dot"></i>跳跃落点</span><span><i class="route-line"></i>上一步路线</span></div>
         <p class="board-tip" id="boardTip">点击己方棋子，再点击高亮位置移动。</p>

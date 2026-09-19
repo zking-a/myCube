@@ -23,7 +23,12 @@ test('Six-seat room: server workers play every bot color and broadcast legal mov
     const frames = [];
     for (const cid of ['STAGE-HOST', 'STAGE-GUEST']) {
       const ws = new WebSocket(`ws://127.0.0.1:${port}/checkers-ws`); sockets.push(ws);
-      ws.on('message', data => { if (cid === 'STAGE-HOST') frames.push(JSON.parse(data)); });
+      ws.on('message', data => {
+        const message=JSON.parse(data);
+        if (cid === 'STAGE-HOST') frames.push(message);
+        if (message.t==='state' && message.phase==='waiting' && message.players.length===2 && cid==='STAGE-HOST') ws.send(JSON.stringify({t:'start'}));
+        if (message.t==='state' && message.phase==='opening') ws.send(JSON.stringify({t:'opening_ready',round:message.round}));
+      });
       await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
       ws.send(JSON.stringify({ t: 'join', room: 'STAGE', nick: cid, cid,
         intent: cid === 'STAGE-HOST' ? 'create' : 'join', bots: 4, level: 'hard' }));
@@ -96,4 +101,26 @@ test('Turn rotation skips a blocked seat using all of that color’s pieces', ()
   const expected = colors.slice(1).find(c => Core.listMoves(pieces,c).length);
   assert.ok(expected); assert.notEqual(expected,'blue');
   assert.equal(next({pieces,seats:colors.map(color=>({color}))},'red'),expected);
+});
+
+test('Rematch preserves colors and advances opening round, clearing previous readiness', () => {
+  const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
+  const names=['planCheckersSeats','createCheckersRoom','checkersHumansOnline','resetCheckersRoom','clearCheckersBotTimer','startCheckersRoom'];
+  const code=names.map(name=>source.match(new RegExp('function '+name+'\\([\\s\\S]*?\\n\\}'))[0]).join('\n');
+  const context=vm.createContext({CheckersCore:Core,checkersRooms:new Map(),clearTimeout});
+  vm.runInContext(code,context);
+  for(let bots=0;bots<=4;bots++) {
+    const room=context.createCheckersRoom('ROOM'+bots,'127.0.0.1',bots,'easy');
+    for(const seat of room.seats.filter(s=>!s.isBot)) {
+      seat.cid=seat.color==='blue'?'host':'guest';room.players.set(seat.cid,{online:true,color:seat.color});
+    }
+    assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,1);
+    room.openingReady.add('host');room.openingReady.add('guest');room.phase='done';
+    context.resetCheckersRoom(room);
+    assert.equal(room.phase,'waiting');assert.equal(room.openingReady.size,0);
+    assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,2);
+    assert.equal(room.turn,'red');
+    assert.equal(room.seats.find(s=>s.cid==='host').color,'blue');
+    assert.equal(room.seats.find(s=>s.cid==='guest').color,'red');
+  }
 });

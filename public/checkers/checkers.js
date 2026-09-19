@@ -87,6 +87,7 @@ const online = {
   active: false, ws: null, room: '', cid: '', token: '', color: '', phase: 'idle',
   host: '', seats: [], players: [], intent: 'join', nick: '', intentionalClose: false,
   bots: 0, botLevel: 'normal',
+  round: 0, openingRound: 0, readyRound: 0, startPending: false,
   reconnectTimer: null, retryAttempt: 0, retryDelay: 0
 };
 
@@ -961,10 +962,12 @@ function onlineStatusText() {
     const humans = online.seats.filter(function (seat) { return !seat.isBot; });
     if (humans.length > 1) {
       const seated = humans.filter(function (seat) { return seat.online; }).length;
-      return seated < humans.length ? '等待好友加入（' + seated + '/' + humans.length + '）' : '正在准备开局';
+      return seated < humans.length ? '等待好友加入（' + seated + '/' + humans.length + '）' :
+        (online.host === online.cid ? '双方已到齐，点击开始对局' : '双方已到齐，等待房主开始');
     }
     return '等待另一位玩家加入';
   }
+  if (online.phase === 'opening') return birthdayOpening() ? '开幕式进行中' : '等待另一位玩家完成开幕式';
   if (online.phase === 'playing') {
     if (online.seats.some(function (seat) { return !seat.isBot && !seat.online; })) return '对手已离线，等待其自动重连';
     const actor = onlinePlayer(turn);
@@ -987,6 +990,7 @@ function updateLastMoveBar() {
 }
 
 function updateStatus() {
+  if (document.body && document.body.dataset) document.body.dataset.roomPhase = mode === 'online' ? online.phase : '';
   const selfTurn = mode === 'online' && online.color === turn;
   if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，固定视角');
   $('turnPiece').className = 'turn-piece ' + turn;
@@ -1018,8 +1022,15 @@ function updateStatus() {
   $('boardWait').hidden = !showWait;
   if (showWait) {
     const reconnecting = online.phase === 'connecting' || online.phase === 'reconnecting';
-    $('boardWait').querySelector('strong').textContent = reconnecting ? '正在恢复联机' : (opponentOffline ? '对手暂时离线' : '等待好友加入');
-    $('boardWait').querySelector('small').textContent = reconnecting ? onlineStatusText() : (opponentOffline ? '已保留其阵营，重连后继续当前棋局' : '复制邀请链接发给朋友即可开始');
+    const bothHere = online.seats.filter(function (seat) { return !seat.isBot && seat.online; }).length === 2;
+    $('boardWait').querySelector('strong').textContent = reconnecting ? '正在恢复联机' : (opponentOffline ? '对手暂时离线' : (bothHere ? '朋友到齐了' : '等待好友加入'));
+    $('boardWait').querySelector('small').textContent = reconnecting ? onlineStatusText() : (opponentOffline ? '已保留其阵营，重连后继续当前棋局' : (bothHere ? onlineStatusText() : '房主执蓝，好友执红；到齐后由房主开始'));
+  }
+  const start = $('startOnlineBtn');
+  if (start) {
+    start.hidden = mode !== 'online' || online.phase !== 'waiting' || online.host !== online.cid;
+    start.disabled = online.startPending || online.seats.filter(function (seat) { return !seat.isBot && seat.online; }).length !== 2;
+    start.textContent = online.startPending ? '正在开始…' : '开始对局';
   }
   if (mode === 'online') $('onlineStatus').textContent = onlineStatusText();
   $('boardTip').textContent = selectedKey
@@ -1191,6 +1202,15 @@ function toggleSound() {
 
 function websocketUrl() { return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/checkers-ws'; }
 function sendOnline(message) { if (!online.ws || online.ws.readyState !== WebSocket.OPEN) return false; try { online.ws.send(JSON.stringify(message)); return true; } catch (e) { return false; } }
+function acknowledgeOpening() {
+  if (online.phase !== 'opening' || birthdayOpening() || online.readyRound === online.round) return;
+  if (sendOnline({ t: 'opening_ready', round: online.round })) online.readyRound = online.round;
+}
+function startOnlineGame() {
+  if (mode !== 'online' || online.phase !== 'waiting' || online.host !== online.cid || online.startPending) return;
+  online.startPending = sendOnline({ t: 'start' });
+  updateStatus();
+}
 
 function reconnectDelayForAttempt(attempt, random) {
   const safeAttempt = Math.max(1, Math.floor(Number(attempt) || 1));
@@ -1229,6 +1249,7 @@ function connectOnline(intent) {
   online.ws = ws;
   ws.addEventListener('open', function () {
     if (online.ws !== ws) return;
+    online.readyRound = 0;
     const payload = { t: 'join', room: online.room, nick: online.nick, cid: online.cid, token: online.token, intent: online.intent };
     if (online.intent === 'create' && online.bots > 0) { payload.bots = online.bots; payload.level = online.botLevel; }
     sendOnline(payload);
@@ -1245,10 +1266,10 @@ function connectOnline(intent) {
       const rawSeats = Array.isArray(message.seats) && message.seats.length ? message.seats
         : (Array.isArray(message.players) ? message.players : null);
       if (!clean || message.room !== online.room || !rawSeats) return;
-      const birthdayRestart = !!gameOver && !clean.winner && clean.moveNumber === 1;
       if (clean.moveNumber !== moveNumber || Core.positionKey(clean.pieces) !== Core.positionKey(pieces)) cancelAnimations();
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
-      online.phase = ['waiting','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
+      online.phase = ['waiting','opening','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
+      online.round = Math.max(0, Math.floor(Number(message.round) || 0)); online.startPending = false;
       online.seats = rawSeats.map(function (seat) {
         const color = Core.COLORS.indexOf(seat.color) >= 0 ? seat.color : 'red';
         return { cid: String(seat.cid || '').slice(0, 32), nick: String(seat.nick || '').slice(0, 16), color: color, online: !!seat.online, isBot: !!seat.isBot };
@@ -1264,12 +1285,19 @@ function connectOnline(intent) {
       const badge = $('modeBadge'); if (badge) badge.textContent = '好友对战' + (botCount ? ' · ' + botCount + ' 电脑' : '');
       online.retryAttempt = 0; online.retryDelay = 0; online.intent = 'join';
       if (!gameOver) closeWinner();
-      if (birthdayRestart) presentationEvent('checkers:newgame');
+      if (online.phase === 'opening') {
+        if (online.openingRound !== online.round) {
+          online.openingRound = online.round;
+          presentationEvent('checkers:room-opening', { round: online.round });
+        }
+        acknowledgeOpening();
+      }
       render();
       if (gameOver && !animating) showWinner(gameOver);
       return;
     }
     if (message.t === 'err') {
+      online.startPending = false; updateStatus();
       const errorMessage = String(message.msg || '联机操作失败').slice(0, 80);
       showToast(errorMessage);
       if (['ROOM_NOT_FOUND','ROOM_FULL','ROOM_EXISTS','SERVER_FULL','SESSION_INVALID','IP_ROOM_LIMIT','CREATE_RATE_LIMIT'].includes(message.code)) {
@@ -1442,7 +1470,8 @@ function init() {
 
   bindBoardInput();
   applyBoardModeLayout(boardView);
-  if (document.addEventListener) document.addEventListener('checkers:opening-end', function () { updateStatus(); scheduleAiMove(); });
+  if (document.addEventListener) document.addEventListener('checkers:opening-end', function () { acknowledgeOpening(); updateStatus(); scheduleAiMove(); });
+  if ($('startOnlineBtn')) $('startOnlineBtn').addEventListener('click', startOnlineGame);
   $('undoBtn').addEventListener('click', undoMove); $('newGameBtn').addEventListener('click', function () { resetGame(false); }); $('winnerNewBtn').addEventListener('click', function () { resetGame(true); });
   $('soundBtn').addEventListener('click', toggleSound); $('exitBtn').addEventListener('click', exitToLobby); $('copyInviteBtn').addEventListener('click', copyInvite); $('leaveRoomBtn').addEventListener('click', exitToLobby);
   window.addEventListener('beforeunload', function () { cancelAiSearch(true); cancelAnimations(); if (online.active) sendOnline({ t: 'ping' }); });

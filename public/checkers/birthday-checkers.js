@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   if (!window.__checkersBirthday || !window.__checkersBirthday.active) return;
-  let intro, openingTimer, blowTimer, musicTimer, audioContext, playing = false, musicEpoch = 0;
+  let intro, openingTimer, autoOpeningTimer, blowTimer, musicTimer, audioContext, playing = false, musicEpoch = 0;
   let cake, blowButton, musicButton, status, result, shown = false, blown = false, blowing = false;
   const voices = new Map(), particles = new Map();
   const preference = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -13,6 +13,7 @@
   function finishOpening(restoreFocus) {
     if (!intro || !window.__checkersBirthday.opening) return;
     clearTimeout(openingTimer);
+    clearTimeout(autoOpeningTimer);
     window.__checkersBirthday.opening = false;
     if (intro.open) intro.close();
     document.documentElement.classList.remove('bd-reveal');
@@ -29,13 +30,19 @@
     document.documentElement.classList.add('bd-reveal');
     openingTimer = setTimeout(function () { finishOpening(true); }, 2300);
   }
-  function showOpening() {
+  function showOpening(options) {
     if (!intro || $('winnerOverlay').classList.contains('active')) return;
+    const automatic = !!(options && options.automatic);
+    $('birthdayStartBtn').hidden = automatic;
     intro.classList.remove('is-opening');
     window.__checkersBirthday.opening = true;
     if (typeof intro.showModal === 'function') {
       if (!intro.open) intro.showModal();
-      $('birthdayStartBtn').focus();
+      (automatic ? $('birthdaySkipBtn') : $('birthdayStartBtn')).focus();
+      if (automatic) {
+        if (reduced()) finishOpening(true);
+        else autoOpeningTimer = setTimeout(openCurtains, 650);
+      }
     } else window.__checkersBirthday.opening = false;
   }
 
@@ -232,19 +239,22 @@
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     });
     $('soundBtn').addEventListener('click', function () { if (typeof soundEnabled !== 'undefined' && !soundEnabled) stopMusic(); });
-    document.addEventListener('visibilitychange', function () { if (document.hidden) stopMusic(); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) { stopMusic(); finishOpening(false); } });
     document.addEventListener('checkers:winner', function (event) { presentWinner(event.detail); });
     document.addEventListener('checkers:winner-close', dismissWinner);
-    document.addEventListener('checkers:newgame', showOpening);
+    document.addEventListener('checkers:newgame', function () { showOpening(); });
+    document.addEventListener('checkers:room-opening', function () {
+      if (!document.hidden) showOpening({ automatic: true });
+    });
     if (preference && preference.addEventListener) preference.addEventListener('change', function () {
       if (reduced()) { clearConfetti(); if (intro.classList.contains('is-opening')) finishOpening(true); if (blowing) finishBlowing(); }
     });
     window.addEventListener('beforeunload', function () {
-      clearTimeout(openingTimer); clearTimeout(blowTimer); stopMusic(); clearConfetti();
+      clearTimeout(openingTimer); clearTimeout(autoOpeningTimer); clearTimeout(blowTimer); stopMusic(); clearConfetti();
       if (audioContext) audioContext.close().catch(function () {});
     });
     if (overlay.classList.contains('active')) presentWinner();
-    else showOpening();
+    else if (window.__checkersTest.mode !== 'online') showOpening();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();

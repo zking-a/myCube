@@ -460,7 +460,7 @@ ok('本地对战支持 2-6 人选择与 0-5 电脑补位',
   /id="localSeatHint"/.test(lobbyHtml) &&
   /SEAT_LAYOUTS\[playerCount\]/.test(source) && /requestAiMove\(seat.color/.test(source) &&
   /ensurePlayerRows\(\)/.test(source) && /seatsFromSave/.test(source));
-ok('联机建房可选 0-4 个电脑并自选强度，好友加入即开局',
+ok('联机建房可选 0-4 个电脑并自选强度，到齐后由房主开始',
   /data-bots="4"/.test(lobbyHtml) && /data-bot-level="hard"/.test(lobbyHtml) &&
   /id="onlineBotHint"/.test(lobbyHtml) &&
   /selectOnlineBots/.test(lobbySource) && /params\.bots = onlineBots/.test(lobbySource) &&
@@ -481,7 +481,7 @@ ok('服务器按 2 真人 + N 电脑规划席位，真人固定红蓝对家',
       if (planned[0].isBot || planned[0].color !== 'red') return false;
       const humans = planned.filter(function (seat) { return !seat.isBot; });
       if (humans.length !== 2) return false;
-      if (bots !== 1 && humans[1].color !== 'blue') return false;
+      if (humans[1].color !== 'blue') return false;
     }
     return planFn(1).every(function (seat) {
       return !seat.isBot || (seat.color !== 'red' && seat.color !== 'blue');

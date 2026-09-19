@@ -120,6 +120,29 @@ function check(name, value) { assert.ok(value, name); passed++; console.log('PAS
     check('恢复已结束存档直接显示蛋糕，帷幕不遮挡结局',await savedPage.evaluate(()=>!birthdayOpening()&&!document.querySelector('.bd-intro').open&&document.getElementById('winnerTitle').textContent.includes('生日快乐')));
     await resumed.close();
 
+    const hostContext=await browser.newContext(), guestContext=await browser.newContext();
+    const hostPage=await hostContext.newPage(), guestPage=await guestContext.newPage();
+    hostPage.on('pageerror',e=>errors.push(e.message)); guestPage.on('pageerror',e=>errors.push(e.message));
+    await hostPage.goto(base+'/checkers/play.html?mode=online&intent=create&room=PARTY&birthday=1');
+    await hostPage.waitForFunction(()=>online.phase==='waiting');
+    check('建房时不开幕、隐藏棋盘，一人时开始按钮禁用',await hostPage.evaluate(()=>!birthdayOpening()&&!document.querySelector('.bd-intro').open&&getComputedStyle(document.getElementById('board')).visibility==='hidden'&&document.getElementById('startOnlineBtn').disabled));
+    await guestPage.goto(base+'/checkers/play.html?mode=online&intent=join&room=PARTY&birthday=1');
+    await hostPage.waitForFunction(()=>online.seats.filter(s=>!s.isBot&&s.online).length===2);
+    await guestPage.waitForFunction(()=>online.phase==='waiting');
+    check('到齐后只有房主可开始，房主蓝客人红且各自朝下',await hostPage.evaluate(()=>online.phase==='waiting'&&!document.getElementById('startOnlineBtn').disabled&&online.color==='blue'&&viewPlayer==='blue')&&await guestPage.evaluate(()=>document.getElementById('startOnlineBtn').hidden&&online.color==='red'&&viewPlayer==='red'&&!birthdayOpening()));
+    await hostPage.setViewportSize({width:375,height:800});
+    check('手机等待房间无横向溢出，开始按钮足够大',await hostPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth&&document.getElementById('startOnlineBtn').getBoundingClientRect().height>=44));
+    await hostPage.screenshot({path:path.join(output,'online-waiting.png')});
+    await hostPage.locator('#startOnlineBtn').click();
+    await Promise.all([hostPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening()),guestPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening())]);
+    check('房主开始后双方自动开幕，无需各点一次拉幕',await hostPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct())&&await guestPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct()));
+    await Promise.all([hostPage.waitForFunction(()=>online.phase==='playing'),guestPage.waitForFunction(()=>online.phase==='playing')]);
+    check('开幕结束后红方客人先行，蓝方房主等待',await hostPage.evaluate(()=>!birthdayOpening()&&!canAct())&&await guestPage.evaluate(()=>!birthdayOpening()&&canAct()));
+    await guestPage.reload();
+    await guestPage.waitForFunction(()=>online.phase==='playing');
+    check('对局中重连不重播开幕，仍为红方',await guestPage.evaluate(()=>online.color==='red'&&!birthdayOpening()&&!document.querySelector('.bd-intro').open));
+    await hostContext.close(); await guestContext.close();
+
     await page.goto(base+'/checkers/play.html?mode=local&birthday=0&intent=new');
     await page.evaluate(()=>{gameOver='red';showWinner('red');});
     check('普通模式保留原获胜弹窗，没有帷幕、蛋糕或音乐', await page.evaluate(()=>!document.querySelector('.bd-intro')&&!document.querySelector('.bd-cake')&&document.getElementById('winnerTitle').textContent==='红方获胜！'));

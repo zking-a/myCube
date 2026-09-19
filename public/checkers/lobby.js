@@ -115,8 +115,8 @@ function refreshOnlineBotUi() {
   if (hint) {
     hint.textContent = onlineBots
       ? '创建后房间共 ' + (2 + onlineBots) + ' 席：你们两位真人 + ' + onlineBots + ' 个电脑（' +
-        ({ easy: '轻松', normal: '标准', hard: '困难' }[onlineBotLevel]) + '），好友加入即开局。'
-      : '不加电脑则为经典双人房，好友加入后开局。';
+        ({ easy: '轻松', normal: '标准', hard: '困难' }[onlineBotLevel]) + '），好友到齐后由房主开始。'
+      : '房主执蓝、好友执红；双方到齐后由房主开始。';
   }
 }
 
