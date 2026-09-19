@@ -161,6 +161,7 @@ function createCheckersRoom(code, creatorIp, botCount, botLevel) {
     phase: 'waiting',       // waiting | opening | playing | done
     round: 0,
     openingReady: new Set(),
+    initiative: null,
     seats: seats,
     botLevel: ['easy', 'normal', 'hard'].indexOf(botLevel) >= 0 ? botLevel : 'normal',
     pieces: CheckersCore.createInitialPiecesForSeats(seats.map(function (seat) { return seat.camp; })),
@@ -191,6 +192,7 @@ function checkersHumansOnline(room) {
 function resetCheckersRoom(room) {
   clearCheckersBotTimer(room);
   room.openingReady.clear();
+  room.initiative = null;
   room.pieces = CheckersCore.createInitialPiecesForSeats(room.seats.map(function (seat) { return seat.camp; }));
   room.turn = room.seats[0].color;
   room.moveNumber = 1;
@@ -200,9 +202,21 @@ function resetCheckersRoom(room) {
   room.lastActivityAt = Date.now();
 }
 
+function rollCheckersInitiative(randomInt) {
+  const roll = randomInt || crypto.randomInt;
+  let red, blue, rerolls = 0;
+  do {
+    red = roll(1, 7); blue = roll(1, 7);
+    if (red === blue) rerolls++;
+  } while (red === blue);
+  return { red: red, blue: blue, first: red > blue ? 'red' : 'blue', rerolls: rerolls };
+}
+
 function startCheckersRoom(room) {
   if (room.phase !== 'waiting' || !checkersHumansOnline(room)) return false;
   room.round++;
+  room.initiative = rollCheckersInitiative();
+  room.turn = room.initiative.first;
   room.openingReady.clear();
   room.phase = 'opening';
   room.lastActivityAt = Date.now();
@@ -650,6 +664,7 @@ function broadcastCheckersState(room) {
     room: room.code,
     phase: room.phase,
     round: room.round,
+    initiative: room.initiative,
     pieces: room.pieces,
     turn: room.turn,
     moveNumber: room.moveNumber,

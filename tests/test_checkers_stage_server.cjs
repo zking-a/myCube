@@ -43,6 +43,7 @@ test('Six-seat room: server workers play every bot color and broadcast legal mov
       throw new Error('Timed out waiting for move ' + sequence);
     }
     let state = await stateAfter(1);
+    const firstPlayer = state.turn;
     assert.equal(state.seats.length, 6);
     const botColors = [];
     for (let sequence = 1; sequence <= 6; sequence++) {
@@ -58,7 +59,7 @@ test('Six-seat room: server workers play every bot color and broadcast legal mov
       state = next;
     }
     assert.deepEqual(new Set(botColors), new Set(['green', 'yellow', 'purple', 'orange']));
-    assert.equal(state.turn, 'red');
+    assert.equal(state.turn, firstPlayer);
   } finally {
     sockets.forEach(ws => ws.terminate()); server.kill();
   }
@@ -105,9 +106,10 @@ test('Turn rotation skips a blocked seat using all of that color’s pieces', ()
 
 test('Rematch preserves colors and advances opening round, clearing previous readiness', () => {
   const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
-  const names=['planCheckersSeats','createCheckersRoom','checkersHumansOnline','resetCheckersRoom','clearCheckersBotTimer','startCheckersRoom'];
+  const names=['planCheckersSeats','createCheckersRoom','checkersHumansOnline','resetCheckersRoom','clearCheckersBotTimer','rollCheckersInitiative','startCheckersRoom'];
   const code=names.map(name=>source.match(new RegExp('function '+name+'\\([\\s\\S]*?\\n\\}'))[0]).join('\n');
-  const context=vm.createContext({CheckersCore:Core,checkersRooms:new Map(),clearTimeout});
+  let rollNumber=0;
+  const context=vm.createContext({CheckersCore:Core,checkersRooms:new Map(),clearTimeout,crypto:{randomInt:()=>[6,1,2,5][rollNumber++%4]}});
   vm.runInContext(code,context);
   for(let bots=0;bots<=4;bots++) {
     const room=context.createCheckersRoom('ROOM'+bots,'127.0.0.1',bots,'easy');
@@ -115,12 +117,25 @@ test('Rematch preserves colors and advances opening round, clearing previous rea
       seat.cid=seat.color==='blue'?'host':'guest';room.players.set(seat.cid,{online:true,color:seat.color});
     }
     assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,1);
+    assert.equal(room.turn,'red');
+    const firstResult=room.initiative;
+    assert.equal(context.startCheckersRoom(room),false);assert.equal(room.initiative,firstResult);
     room.openingReady.add('host');room.openingReady.add('guest');room.phase='done';
     context.resetCheckersRoom(room);
-    assert.equal(room.phase,'waiting');assert.equal(room.openingReady.size,0);
+    assert.equal(room.phase,'waiting');assert.equal(room.openingReady.size,0);assert.equal(room.initiative,null);
     assert.equal(context.startCheckersRoom(room),true);assert.equal(room.round,2);
-    assert.equal(room.turn,'red');
+    assert.equal(room.turn,'blue');
     assert.equal(room.seats.find(s=>s.cid==='host').color,'blue');
     assert.equal(room.seats.find(s=>s.cid==='guest').color,'red');
   }
+});
+
+test('Dice compare both colors fairly and automatically reroll ties',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'../server.js'),'utf8');
+  const roll=vm.runInNewContext('('+source.match(/function rollCheckersInitiative\([\s\S]*?\n\}/)[0]+')');
+  const values=[3,3,5,5,2,6];
+  const blue=roll((min,max)=>{assert.equal(min,1);assert.equal(max,7);return values.shift();});
+  assert.equal(blue.first,'blue');assert.equal(blue.rerolls,2);assert.equal(blue.blue,6);assert.equal(blue.red,2);
+  const redValues=[6,1], red=roll(()=>redValues.shift());
+  assert.equal(red.first,'red');assert.equal(red.rerolls,0);assert.equal(red.red,6);assert.equal(red.blue,1);
 });

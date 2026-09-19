@@ -88,6 +88,7 @@ const online = {
   host: '', seats: [], players: [], intent: 'join', nick: '', intentionalClose: false,
   bots: 0, botLevel: 'normal',
   round: 0, openingRound: 0, readyRound: 0, startPending: false,
+  initiative: null, diceRoundShown: 0,
   reconnectTimer: null, retryAttempt: 0, retryDelay: 0
 };
 
@@ -989,7 +990,30 @@ function updateLastMoveBar() {
   $('lastMoveKind').textContent = lastMove.kind === 'jump' ? (jumps > 1 ? '连续跳跃' : '跳跃') : '相邻移动';
 }
 
+function updateInitiative() {
+  const bar = $('initiativeBar'), roll = online.initiative;
+  if (!bar) return;
+  bar.hidden = mode !== 'online' || !roll || ['waiting','connecting'].includes(online.phase);
+  if (bar.hidden) return;
+  ['red', 'blue'].forEach(function (color) {
+    const die = $(color + 'InitiativeDie');
+    if (!die.children.length) {
+      for (let i = 0; i < 9; i++) { const pip = document.createElement('i'); pip.setAttribute('aria-hidden','true'); die.appendChild(pip); }
+    }
+    die.dataset.value = String(roll[color]);
+    die.setAttribute('aria-label', playerLabel(color) + '掷出 ' + roll[color] + ' 点');
+  });
+  $('initiativeResult').textContent = playerLabel(roll.first) + '先手';
+  $('initiativeTies').textContent = roll.rerolls ? '平点重掷 ' + roll.rerolls + ' 次' : '大点先走';
+  if (online.phase === 'playing' && online.diceRoundShown !== online.round) {
+    online.diceRoundShown = online.round;
+    bar.classList.add('is-rolling');
+    bar.addEventListener('animationend', function () { bar.classList.remove('is-rolling'); }, { once: true });
+  }
+}
+
 function updateStatus() {
+  updateInitiative();
   if (document.body && document.body.dataset) document.body.dataset.roomPhase = mode === 'online' ? online.phase : '';
   const selfTurn = mode === 'online' && online.color === turn;
   if ($('board')) $('board').setAttribute('aria-label', '中国跳棋棋盘，固定视角');
@@ -1270,6 +1294,10 @@ function connectOnline(intent) {
       pieces = clean.pieces; turn = clean.turn; moveNumber = clean.moveNumber; gameOver = clean.winner; lastMove = clean.lastMove;
       online.phase = ['waiting','opening','playing','done'].includes(message.phase) ? message.phase : 'waiting'; online.host = typeof message.host === 'string' ? message.host : '';
       online.round = Math.max(0, Math.floor(Number(message.round) || 0)); online.startPending = false;
+      const roll = message.initiative;
+      online.initiative = roll && Number.isInteger(roll.red) && Number.isInteger(roll.blue) &&
+        roll.red >= 1 && roll.red <= 6 && roll.blue >= 1 && roll.blue <= 6 && roll.red !== roll.blue &&
+        roll.first === (roll.red > roll.blue ? 'red' : 'blue') ? roll : null;
       online.seats = rawSeats.map(function (seat) {
         const color = Core.COLORS.indexOf(seat.color) >= 0 ? seat.color : 'red';
         return { cid: String(seat.cid || '').slice(0, 32), nick: String(seat.nick || '').slice(0, 16), color: color, online: !!seat.online, isBot: !!seat.isBot };

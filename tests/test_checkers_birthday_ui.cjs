@@ -47,7 +47,7 @@ function check(name, value) { assert.ok(value, name); passed++; console.log('PAS
     await page.setViewportSize({width:1024,height:800});
     await page.screenshot({path:path.join(output,'curtain.png')});
     await page.locator('#birthdayStartBtn').click();
-    await page.waitForTimeout(900);
+    await page.waitForTimeout(1800);
     await page.screenshot({path:path.join(output,'curtain-opening.png')});
     await page.waitForFunction(()=>!window.__checkersBirthday.opening);
     check('拉开帷幕后恢复棋盘操作', await page.evaluate(()=>canAct()&&!document.querySelector('.bd-intro').open));
@@ -137,10 +137,18 @@ function check(name, value) { assert.ok(value, name); passed++; console.log('PAS
     await Promise.all([hostPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening()),guestPage.waitForFunction(()=>online.phase==='opening'&&birthdayOpening())]);
     check('房主开始后双方自动开幕，无需各点一次拉幕',await hostPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct())&&await guestPage.evaluate(()=>document.getElementById('birthdayStartBtn').hidden&&!canAct()));
     await Promise.all([hostPage.waitForFunction(()=>online.phase==='playing'),guestPage.waitForFunction(()=>online.phase==='playing')]);
-    check('开幕结束后红方客人先行，蓝方房主等待',await hostPage.evaluate(()=>!birthdayOpening()&&!canAct())&&await guestPage.evaluate(()=>!birthdayOpening()&&canAct()));
+    check('开幕结束后按骰子决定先手，双方操作权限与结果一致',await hostPage.evaluate(()=>!birthdayOpening()&&canAct()===(online.initiative.first===online.color))&&await guestPage.evaluate(()=>!birthdayOpening()&&canAct()===(online.initiative.first===online.color)));
+    const hostRoll=await hostPage.evaluate(()=>online.initiative), guestRoll=await guestPage.evaluate(()=>online.initiative);
+    check('双方显示同一组骰点与先手，点阵数量正确',JSON.stringify(hostRoll)===JSON.stringify(guestRoll)&&await hostPage.evaluate(()=>['red','blue'].every(color=>{
+      const die=document.getElementById(color+'InitiativeDie');
+      return [...die.children].filter(p=>getComputedStyle(p).visibility==='visible').length===online.initiative[color];
+    })));
+    await hostPage.waitForTimeout(650);
+    check('手机骰子结果栏完整显示且无横向溢出',await hostPage.evaluate(()=>!document.getElementById('initiativeBar').hidden&&document.documentElement.scrollWidth<=innerWidth));
+    await hostPage.screenshot({path:path.join(output,'online-dice.png')});
     await guestPage.reload();
     await guestPage.waitForFunction(()=>online.phase==='playing');
-    check('对局中重连不重播开幕，仍为红方',await guestPage.evaluate(()=>online.color==='red'&&!birthdayOpening()&&!document.querySelector('.bd-intro').open));
+    check('对局中重连不重播开幕或重掷骰子，仍为红方',await guestPage.evaluate(()=>online.color==='red'&&!birthdayOpening()&&!document.querySelector('.bd-intro').open)&&JSON.stringify(await guestPage.evaluate(()=>online.initiative))===JSON.stringify(guestRoll));
     await hostContext.close(); await guestContext.close();
 
     await page.goto(base+'/checkers/play.html?mode=local&birthday=0&intent=new');

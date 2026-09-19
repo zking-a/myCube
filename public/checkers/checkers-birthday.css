@@ -45,14 +45,14 @@ html.birthday-mode .board-tip{
 html.birthday-mode .bd-board-wish{margin:14px 0 8px;text-align:center;color:#8d425c;font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 html.birthday-mode .bd-intro{--ui-focus-ring:#f0d09b;position:fixed;inset:0;width:100%;max-width:none;height:100%;height:100dvh;max-height:none;margin:0;padding:0;border:0;background:transparent;color:#fff0d7;overflow:hidden}
 html.birthday-mode .bd-intro[open]{display:grid;place-items:center}
-html.birthday-mode .bd-intro::backdrop{background:#280f1c;transition:background 1.6s .3s ease}
+html.birthday-mode .bd-intro::backdrop{background:#280f1c;transition:background 3.3s .3s ease}
 html.birthday-mode .bd-intro.is-opening::backdrop{background:transparent}
-html.birthday-mode .bd-curtain{position:absolute;inset:0 auto 0 0;width:50.6%;background:repeating-linear-gradient(90deg,#1e091c66 0,rgba(245,160,162,.09) 4%,#1f071b77 9%,rgba(236,140,157,.08) 13%),linear-gradient(180deg,#733247,#44162e 70%,#672740);box-shadow:inset -16px 0 35px #08000880,0 20px 50px #1d071b;transform-origin:left center;transition:transform 1.9s .16s cubic-bezier(.57,.04,.18,1);pointer-events:none}
+html.birthday-mode .bd-curtain{position:absolute;inset:0 auto 0 0;width:50.6%;background:repeating-linear-gradient(90deg,#1e091c66 0,rgba(245,160,162,.09) 4%,#1f071b77 9%,rgba(236,140,157,.08) 13%),linear-gradient(180deg,#733247,#44162e 70%,#672740);box-shadow:inset -16px 0 35px #08000880,0 20px 50px #1d071b;transform-origin:left center;transition:transform 3.6s .16s cubic-bezier(.57,.04,.18,1);pointer-events:none}
 html.birthday-mode .bd-curtain::after{position:absolute;inset:auto 0 8%;height:3px;background:#d9ae72;box-shadow:0 7px 0 #9e704d;content:""}
 html.birthday-mode .bd-curtain-right{left:auto;right:0;transform-origin:right center;box-shadow:inset 16px 0 35px #08000880}
 html.birthday-mode .is-opening .bd-curtain-left{transform:translateX(-104%) scaleX(.84)}
 html.birthday-mode .is-opening .bd-curtain-right{transform:translateX(104%) scaleX(.84)}
-html.birthday-mode .bd-invitation{position:relative;z-index:1;width:min(680px,100%);padding:50px 24px;text-align:center;transition:opacity .4s,transform .6s;box-sizing:border-box}
+html.birthday-mode .bd-invitation{position:relative;z-index:1;width:min(680px,100%);padding:50px 24px;text-align:center;transition:opacity .65s,transform 1s;box-sizing:border-box}
 html.birthday-mode .is-opening .bd-invitation{opacity:0;transform:scale(1.06);pointer-events:none}
 html.birthday-mode .bd-eyebrow{font-size:11px;font-weight:600;letter-spacing:3px;line-height:1.8;color:#e7be92}
 html.birthday-mode .bd-star{display:block;margin:24px 0 12px;font-size:52px;color:#f0d09b}
@@ -63,7 +63,7 @@ html.birthday-mode .bd-start span{margin-left:20px}
 html.birthday-mode .bd-invitation-foot{margin:24px 0 0;font-size:13px;color:#dcb5b7;letter-spacing:1px}
 html.birthday-mode .bd-skip{position:absolute;z-index:3;right:max(20px,env(safe-area-inset-right));top:max(16px,env(safe-area-inset-top));min-height:44px;padding:8px 15px;border:1px solid #c69493;border-radius:999px;background:#381323;color:#f4d9d0;font-size:14px;cursor:pointer}
 html.birthday-mode .bd-intro button:focus-visible,html.birthday-mode .winner-card button:focus-visible{outline:3px solid #b07721;outline-offset:4px}
-html.birthday-mode.bd-reveal .board-frame{animation:bd-board-arrive 1.65s .3s both}
+html.birthday-mode.bd-reveal .board-frame{animation:bd-board-arrive 3.2s .3s both}
 @keyframes bd-board-arrive{from{opacity:.25;transform:translateY(12px) scale(.965)}to{opacity:1;transform:translateY(0) scale(1)}}
 
 /* ===== Candle ceremony ===== */
@@ -102,10 +102,10 @@ html.birthday-mode .bd-confetti{position:fixed;z-index:220;width:6px;height:11px
   html.birthday-mode .bd-curtain,html.birthday-mode .bd-invitation,html.birthday-mode .bd-intro::backdrop{transition:none}
 }
 /* Light and upper drapery move once, leaving the board unobstructed. */
-html.birthday-mode .bd-valance{position:absolute;z-index:2;top:-35px;left:0;width:100%;height:108px;border-bottom:2px solid #cba572;border-radius:0 0 50% 50% / 0 0 32% 32%;background:repeating-linear-gradient(90deg,#220b1e66 0,#a5646322 4%,#20091d77 9%,#a5646322 13%),linear-gradient(#7b394d,#4d172f);box-shadow:0 12px 30px #17081355;pointer-events:none;transition:transform .8s .4s ease,opacity .8s .4s ease}
+html.birthday-mode .bd-valance{position:absolute;z-index:2;top:-35px;left:0;width:100%;height:108px;border-bottom:2px solid #cba572;border-radius:0 0 50% 50% / 0 0 32% 32%;background:repeating-linear-gradient(90deg,#220b1e66 0,#a5646322 4%,#20091d77 9%,#a5646322 13%),linear-gradient(#7b394d,#4d172f);box-shadow:0 12px 30px #17081355;pointer-events:none;transition:transform 1.4s .7s ease,opacity 1.4s .7s ease}
 html.birthday-mode .is-opening .bd-valance{transform:translateY(-105%);opacity:0}
 html.birthday-mode .bd-stage-light{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 35%,#fff1d499,transparent 65%);opacity:0;pointer-events:none}
-html.birthday-mode .is-opening .bd-stage-light{animation:bd-stage-light 1.5s .2s both}
+html.birthday-mode .is-opening .bd-stage-light{animation:bd-stage-light 3s .2s both}
 @keyframes bd-stage-light{0%,100%{opacity:0}38%{opacity:.6}}
 html.birthday-mode .bd-cake-art{position:absolute;z-index:1;bottom:0;left:0;display:block;width:100%;height:auto;filter:drop-shadow(0 9px 8px #c183791c)}
 html.birthday-mode .bd-cake-halo{position:absolute;z-index:0;inset:0 -8px 15px;border-radius:50%;background:radial-gradient(ellipse at 50% 30%,#ffe8ab80,transparent 67%);opacity:.7;transition:opacity .8s ease}

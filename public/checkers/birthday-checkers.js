@@ -28,7 +28,8 @@
     if (reduced()) { finishOpening(true); return; }
     intro.classList.add('is-opening');
     document.documentElement.classList.add('bd-reveal');
-    openingTimer = setTimeout(function () { finishOpening(true); }, 2300);
+    // 帘幕过渡为 3.6 秒 + 0.16 秒延迟；兜底计时留出余量，正常由 transitionend 结束。
+    openingTimer = setTimeout(function () { finishOpening(true); }, 4200);
   }
   function showOpening(options) {
     if (!intro || $('winnerOverlay').classList.contains('active')) return;

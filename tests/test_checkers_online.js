@@ -134,30 +134,35 @@ function ok(name, condition) {
     B.send({ t:'opening_ready', round:openingB.round });
     const stateA = await A.waitFor(function (m) { return m.t === 'state' && m.phase === 'playing'; });
     const stateB = await B.waitFor(function (m) { return m.t === 'state' && m.phase === 'playing'; });
-    ok('双方开幕结束后才进入对局，由红方客人先行', stateA.players.length === 2 && stateB.players.length === 2 && stateA.turn === 'red');
+    ok('双方开幕结束后才进入对局，由掷骰较大的一方先行', stateA.players.length === 2 && stateB.players.length === 2 && stateA.turn === stateA.initiative.first);
+    ok('双方收到相同的有效骰点与先手结果', JSON.stringify(stateA.initiative) === JSON.stringify(stateB.initiative) &&
+      stateA.initiative.red >= 1 && stateA.initiative.red <= 6 && stateA.initiative.blue >= 1 && stateA.initiative.blue <= 6 &&
+      stateA.initiative.red !== stateA.initiative.blue && stateA.turn === (stateA.initiative.red > stateA.initiative.blue ? 'red' : 'blue'));
     ok('服务器固定分配房主蓝方、客人红方',
       stateA.players.find(p => p.cid === 'CHECKERS-A').color === 'blue' &&
       stateA.players.find(p => p.cid === 'CHECKERS-B').color === 'red');
     ok('私密重连令牌分别签发且不会广播',
       aSession.token && bSession.token && aSession.token !== bSession.token && !stateA.players.some(p => p.token));
 
-    const redMove = Core.listMoves(stateA.pieces, 'red')[0];
-    B.send({ t: 'move', from: redMove.from, target: redMove.target, seq: stateA.moveNumber });
+    const firstColor = stateA.turn, secondColor = firstColor === 'red' ? 'blue' : 'red';
+    const firstClient = firstColor === 'red' ? B : A, secondClient = firstColor === 'red' ? A : B;
+    const redMove = Core.listMoves(stateA.pieces, firstColor)[0];
+    firstClient.send({ t: 'move', from: redMove.from, target: redMove.target, seq: stateA.moveNumber });
     const afterRedA = await A.waitFor(function (m) { return m.t === 'state' && m.moveNumber === 2; });
     const afterRedB = await B.waitFor(function (m) { return m.t === 'state' && m.moveNumber === 2; });
-    ok('红方合法走棋由服务器执行并同步给双方',
-      afterRedA.turn === 'blue' && afterRedB.pieces[redMove.target] === 'red' && !afterRedB.pieces[redMove.from]);
+    ok('先手合法走棋由服务器执行，随后切换另一方',
+      afterRedA.turn === secondColor && afterRedB.pieces[redMove.target] === firstColor && !afterRedB.pieces[redMove.from]);
     ok('服务器把上一步来源、落点和路线权威同步给双方',
       afterRedA.lastMove && afterRedB.lastMove &&
       afterRedA.lastMove.from === redMove.from && afterRedB.lastMove.target === redMove.target &&
       Array.isArray(afterRedB.lastMove.path) && afterRedB.lastMove.path[0] === redMove.from &&
       afterRedB.lastMove.path[afterRedB.lastMove.path.length - 1] === redMove.target);
 
-    B.send({ t: 'move', from: redMove.target, target: redMove.from, seq: 2 });
-    await B.waitFor(function (m) { return m.t === 'err' && m.code === 'NOT_YOUR_TURN'; });
+    firstClient.send({ t: 'move', from: redMove.target, target: redMove.from, seq: 2 });
+    await firstClient.waitFor(function (m) { return m.t === 'err' && m.code === 'NOT_YOUR_TURN'; });
     ok('服务端拒绝连续抢走和伪造回合', true);
-    A.send({ t: 'move', from: '16:0', target: '0:0', seq: 2 });
-    await A.waitFor(function (m) { return m.t === 'err' && m.code === 'ILLEGAL_MOVE'; });
+    secondClient.send({ t: 'move', from: '16:0', target: '0:0', seq: 2 });
+    await secondClient.waitFor(function (m) { return m.t === 'err' && m.code === 'ILLEGAL_MOVE'; });
     ok('服务端拒绝不符合规则的落点', true);
 
     await A.close();
@@ -172,7 +177,7 @@ function ok(name, condition) {
     await A2.waitFor(function (m) { return m.t === 'session'; });
     const resumed = await A2.waitFor(function (m) { return m.t === 'state' && m.moveNumber === 2; });
     ok('持有效令牌重连后保留蓝方房主、当前棋盘及轮次',
-      resumed.players.find(p => p.cid === 'CHECKERS-A').color === 'blue' && resumed.pieces[redMove.target] === 'red' && resumed.round === stateA.round && resumed.phase === 'playing');
+      resumed.players.find(p => p.cid === 'CHECKERS-A').color === 'blue' && resumed.pieces[redMove.target] === firstColor && resumed.round === stateA.round && resumed.phase === 'playing' && JSON.stringify(resumed.initiative) === JSON.stringify(stateA.initiative));
 
     const impostor = client(); await impostor.open();
     impostor.send({ t: 'join', room: 'CHESS', nick: '冒用者', cid: 'CHECKERS-A', intent: 'join' });

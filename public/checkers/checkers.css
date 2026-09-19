@@ -145,3 +145,15 @@ body[data-room-phase="waiting"] .board-wait small,body[data-room-phase="connecti
 #startOnlineBtn{min-height:48px;padding:12px 26px;margin-top:12px;font-size:15px;cursor:pointer}
 #startOnlineBtn:disabled{opacity:.5;cursor:default}
 body[data-room-phase="waiting"] .bd-board-wish,body[data-room-phase="connecting"] .bd-board-wish{display:none}
+
+.initiative-bar{display:flex;align-items:center;justify-content:space-around;gap:10px;margin:12px 0;padding:12px 10px;border:1px solid #e3dce5;border-radius:16px;background:#fffaf8}
+.initiative-bar>div{display:flex;align-items:center;gap:8px;font-size:11px;color:#726479}
+.initiative-bar .initiative-result{flex-direction:column;gap:3px;text-align:center}
+.initiative-result small{font-size:10px;color:#92828d}.initiative-result strong{font-size:14px;color:#74526a}.initiative-result>span{font-size:10px}
+.initiative-die{display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:3px;flex-shrink:0;width:42px;height:42px;padding:7px;border:1px solid #d8cfdc;border-radius:10px;background:#fff;box-shadow:0 3px 0 #ded6df;box-sizing:border-box}
+.initiative-die i{border-radius:50%;background:currentColor;visibility:hidden}.initiative-blue .initiative-die{color:#5573d3}.initiative-red .initiative-die{color:#cf5978}
+.initiative-die[data-value="1"] i:nth-child(5),.initiative-die[data-value="2"] i:nth-child(1),.initiative-die[data-value="2"] i:nth-child(9),.initiative-die[data-value="3"] i:nth-child(1),.initiative-die[data-value="3"] i:nth-child(5),.initiative-die[data-value="3"] i:nth-child(9),.initiative-die[data-value="4"] i:nth-child(1),.initiative-die[data-value="4"] i:nth-child(3),.initiative-die[data-value="4"] i:nth-child(7),.initiative-die[data-value="4"] i:nth-child(9),.initiative-die[data-value="5"] i:nth-child(1),.initiative-die[data-value="5"] i:nth-child(3),.initiative-die[data-value="5"] i:nth-child(5),.initiative-die[data-value="5"] i:nth-child(7),.initiative-die[data-value="5"] i:nth-child(9),.initiative-die[data-value="6"] i:nth-child(1),.initiative-die[data-value="6"] i:nth-child(3),.initiative-die[data-value="6"] i:nth-child(4),.initiative-die[data-value="6"] i:nth-child(6),.initiative-die[data-value="6"] i:nth-child(7),.initiative-die[data-value="6"] i:nth-child(9){visibility:visible}
+.initiative-bar.is-rolling .initiative-die{animation:initiative-roll .6s ease-out}
+@keyframes initiative-roll{0%{transform:translateY(-8px) rotate(-18deg) scale(.9)}65%{transform:translateY(1px) rotate(5deg)}100%{transform:none}}
+@media(max-width:420px){.initiative-bar>div:not(.initiative-result){flex-direction:column;gap:5px}}
+@media(prefers-reduced-motion:reduce){.initiative-bar.is-rolling .initiative-die{animation:none}}
