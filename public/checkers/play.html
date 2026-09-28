@@ -40,24 +40,24 @@
       <div class="board-card">
         <div class="turn-banner" id="turnBanner" aria-live="polite">
           <span class="turn-piece red" id="turnPiece" aria-hidden="true"></span>
-          <div><small id="turnKicker">你的视角 · 红方在下</small><strong id="turnText">你的回合</strong></div>
+          <div><small id="turnKicker">你的视角 · 黄方在下</small><strong id="turnText">你的回合</strong></div>
           <span class="move-count" id="moveCount">第 1 手</span>
         </div>
 
         <div class="last-move-bar" id="lastMoveBar" hidden>
           <span class="last-move-piece red" id="lastMovePiece" aria-hidden="true"></span>
-          <div><small>上一步</small><strong id="lastMoveText">红方移动了一枚棋子</strong></div>
+          <div><small>上一步</small><strong id="lastMoveText">黄方移动了一枚棋子</strong></div>
           <span id="lastMoveKind">移动</span>
         </div>
 
         <section class="initiative-bar" id="initiativeBar" aria-label="本局掷骰先手" hidden>
           <div class="initiative-blue"><span class="initiative-die" id="blueInitiativeDie" role="img"></span><span>房主 · 蓝方</span></div>
           <div class="initiative-result"><small>掷骰定先手</small><strong id="initiativeResult"></strong><span id="initiativeTies"></span><button type="button" class="initiative-roll-button" id="rollDiceBtn" hidden>投骰子</button></div>
-          <div class="initiative-red"><span class="initiative-die" id="redInitiativeDie" role="img"></span><span>好友 · 红方</span></div>
+          <div class="initiative-red"><span class="initiative-die" id="redInitiativeDie" role="img"></span><span>好友 · 黄方</span></div>
         </section>
 
         <div class="board-frame">
-          <div class="ck-board" id="board" data-view="3d" role="group" aria-label="中国跳棋棋盘，红方视角"></div>
+          <div class="ck-board" id="board" data-view="3d" role="group" aria-label="中国跳棋棋盘，黄方视角"></div>
           <div class="board-wait" id="boardWait" hidden><span><i class="ui-icon ui-icon--earth-asia" aria-hidden="true"></i></span><strong>等待对手加入</strong><small>复制邀请链接发给朋友，到齐后由房主开始</small><button type="button" class="ui-button ui-button--primary" id="startOnlineBtn" hidden>开始对局</button></div>
         </div>
         <div class="board-legend"><span><i class="step-dot"></i>相邻移动</span><span><i class="jump-dot"></i>跳跃落点</span><span><i class="route-line"></i>上一步路线</span></div>
@@ -69,12 +69,12 @@
           <div class="panel-label">本局对阵</div>
           <div class="player-row active" id="redPlayer">
             <span class="player-piece red" aria-hidden="true"></span>
-            <div><strong id="redName">你 · 红方</strong><small>向蓝方营地前进</small></div><b id="redProgress">0/10</b>
+            <div><strong id="redName">你 · 黄方</strong><small>向蓝方营地前进</small></div><b id="redProgress">0/10</b>
           </div>
           <div class="versus"><span></span><b>VS</b><span></span></div>
           <div class="player-row" id="bluePlayer">
             <span class="player-piece blue" aria-hidden="true"></span>
-            <div><strong id="blueName">电脑 · 蓝方</strong><small>向红方营地前进</small></div><b id="blueProgress">0/10</b>
+            <div><strong id="blueName">电脑 · 蓝方</strong><small>向黄方营地前进</small></div><b id="blueProgress">0/10</b>
           </div>
         </section>
 
@@ -93,7 +93,7 @@
         <details class="rules-card">
           <summary>玩法与视角说明 <span>⌄</span></summary>
           <ol>
-            <li>本地对局红方先行；联机双方各自点击“投骰子”，大点先行，平点时双方重新投。之后按原座位顺序轮流走棋。</li>
+            <li>本地对局黄方先行；联机双方各自点击“投骰子”，大点先行，平点时双方重新投。之后按原座位顺序轮流走棋。</li>
             <li>联机对战双方都看到己方位于屏幕下方，换手时棋盘不会翻转。</li>
             <li>绿色落点表示相邻移动，橙色落点表示可以跳跃。</li>
             <li>连续跳跃会绘制完整路线，上一步的起点和终点会持续标记。</li>
@@ -110,7 +110,7 @@
   <div class="winner-overlay" id="winnerOverlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="winnerTitle">
     <div class="winner-card ui-modal">
       <span class="winner-piece" id="winnerPiece" aria-hidden="true"></span>
-      <small>本局结束</small><h2 id="winnerTitle">红方获胜</h2>
+      <small>本局结束</small><h2 id="winnerTitle">黄方获胜</h2>
       <p id="winnerText">率先占满了对方营地</p>
       <button type="button" class="ui-button ui-button--primary" id="winnerNewBtn">再来一局</button>
     </div>

@@ -104,8 +104,9 @@ function svgEl(doc, name, attrs) {
 }
 
 /**
- * 六色玻璃珠的渐变参数表。红/蓝两色的渐变数据与旧版逐字节一致（测试钉住），
- * 其余四色按同一结构推导：base 四段、暗侧收影、底缘透光、边缘暗角、描边与花纹实色。
+ * 六色玻璃珠的渐变参数表，参照 Apple 系统色（System Yellow/Blue/Green/Teal/Purple/Orange）微调为宝石玻璃质感。
+ * 联机双人固定「房主执蓝（bottom）、好友执黄（top）」，因此红键 red 实际渲染为黄色（客人偏爱的颜色），
+ * 蓝键 blue 渲染为蓝色，其余四键按色相拉开：green=绿、yellow=青、purple=紫、orange=橙。
  * rings=true 的阵营画圆环纹理（蓝/绿/紫），false 的画斑块纹理（红/黄/橙）。
  */
 // 生日主题配色：六方各用清晰不同的糖果色（草莓/蓝莓/抹茶/柠檬/葡萄/香橙），
@@ -123,12 +124,12 @@ function candyTint(light, mid, deep, edge, outline, pattern) {
   };
 }
 const BIRTHDAY_TINTS = {
-  red: candyTint('#fef3c7', '#fbbf24', '#f59e0b', '#b45309', '#78350f', '#f59e0b'),
-  blue: candyTint('#ede9fe', '#a78bfa', '#8b5cf6', '#6d28d9', '#4c1d95', '#8b5cf6'),
-  green: candyTint('#d1fae5', '#6ee7b7', '#10b981', '#047857', '#064e3b', '#10b981'),
-  yellow: candyTint('#e0f2fe', '#7dd3fc', '#0ea5e9', '#0e7490', '#0c4a5e', '#0ea5e9'),
-  purple: candyTint('#f3e8ff', '#c084fc', '#a855f7', '#7e22ce', '#581c87', '#a855f7'),
-  orange: candyTint('#dbeafe', '#93c5fd', '#3b82f6', '#1e40af', '#1e3a8a', '#3b82f6')
+  red: candyTint('#ffd9e0', '#ff9bb0', '#f25877', '#d62f54', '#b81f43', '#f25877'),
+  blue: candyTint('#e3e8ff', '#9fb0ff', '#5b74f0', '#344ec9', '#243ba8', '#5b74f0'),
+  green: candyTint('#e2f8e6', '#9fe6ad', '#46c46a', '#1f9a47', '#157a37', '#46c46a'),
+  yellow: candyTint('#fff7d6', '#ffe486', '#f7c531', '#d99a0c', '#b87f06', '#f7c531'),
+  purple: candyTint('#f3e0ff', '#cf9df0', '#9b54d6', '#7430b0', '#5e2393', '#9b54d6'),
+  orange: candyTint('#ffe6cc', '#ffb877', '#ff8a32', '#e3620c', '#c44e08', '#ff8a32')
 };
 // 糖针几何：中心半径 ~30，远小于裁剪圆 r=50
 const SPRINKLE_STICKS = [
@@ -143,18 +144,18 @@ function activeTints() {
 
 const PIECE_TINTS = {
   red: {
-    base: [['0%', '#fde68a'], ['38%', '#fbbf24'], ['74%', '#d97706'], ['100%', '#92400e']],
-    shade: [['0%', 'rgba(120,80,0,.46)'], ['100%', 'rgba(120,80,0,0)']],
-    rim: [['0%', 'rgba(254,243,199,.96)'], ['45%', 'rgba(253,230,138,.55)'], ['100%', 'rgba(253,230,138,0)']],
-    vig: [['0%', 'rgba(100,60,0,0)'], ['60%', 'rgba(100,60,0,0)'], ['100%', 'rgba(100,60,0,.4)']],
-    outline: 'rgba(140,90,0,.42)', pattern: '#b45309', rings: false
+    base: [['0%', '#fff1a8'], ['38%', '#ffd60a'], ['74%', '#f2b300'], ['100%', '#c88900']],
+    shade: [['0%', 'rgba(150,100,0,.46)'], ['100%', 'rgba(150,100,0,0)']],
+    rim: [['0%', 'rgba(255,249,205,.96)'], ['45%', 'rgba(255,230,140,.55)'], ['100%', 'rgba(255,230,140,0)']],
+    vig: [['0%', 'rgba(130,90,0,0)'], ['60%', 'rgba(130,90,0,0)'], ['100%', 'rgba(130,90,0,.4)']],
+    outline: 'rgba(150,105,0,.42)', pattern: '#e5a800', rings: false
   },
   blue: {
-    base: [['0%', '#a78bfa'], ['38%', '#8b5cf6'], ['74%', '#7c3aed'], ['100%', '#6d28d9']],
-    shade: [['0%', 'rgba(60,20,120,.46)'], ['100%', 'rgba(60,20,120,0)']],
-    rim: [['0%', 'rgba(221,214,254,.96)'], ['45%', 'rgba(196,181,253,.55)'], ['100%', 'rgba(196,181,253,0)']],
-    vig: [['0%', 'rgba(40,15,90,0)'], ['60%', 'rgba(40,15,90,0)'], ['100%', 'rgba(40,15,90,.4)']],
-    outline: 'rgba(50,20,100,.42)', pattern: '#6d28d9', rings: true
+    base: [['0%', '#a8cbff'], ['38%', '#5ca5ff'], ['74%', '#1a73e8'], ['100%', '#0b4fb8']],
+    shade: [['0%', 'rgba(10,50,120,.46)'], ['100%', 'rgba(10,50,120,0)']],
+    rim: [['0%', 'rgba(208,228,255,.96)'], ['45%', 'rgba(150,190,255,.55)'], ['100%', 'rgba(150,190,255,0)']],
+    vig: [['0%', 'rgba(8,40,100,0)'], ['60%', 'rgba(8,40,100,0)'], ['100%', 'rgba(8,40,100,.4)']],
+    outline: 'rgba(15,60,140,.42)', pattern: '#1a73e8', rings: true
   },
   green: {
     base: [['0%', '#6ee7b7'], ['38%', '#34d399'], ['74%', '#059669'], ['100%', '#047857']],
@@ -164,11 +165,11 @@ const PIECE_TINTS = {
     outline: 'rgba(5,50,30,.42)', pattern: '#047857', rings: true
   },
   yellow: {
-    base: [['0%', '#7dd3fc'], ['38%', '#38bdf8'], ['74%', '#0284c7'], ['100%', '#0e7490']],
-    shade: [['0%', 'rgba(8,80,110,.46)'], ['100%', 'rgba(8,80,110,0)']],
-    rim: [['0%', 'rgba(186,230,253,.96)'], ['45%', 'rgba(125,211,252,.55)'], ['100%', 'rgba(125,211,252,0)']],
-    vig: [['0%', 'rgba(8,60,80,0)'], ['60%', 'rgba(8,60,80,0)'], ['100%', 'rgba(8,60,80,.4)']],
-    outline: 'rgba(10,70,90,.42)', pattern: '#0e7490', rings: false
+    base: [['0%', '#a5f3fc'], ['38%', '#22d3ee'], ['74%', '#0891b2'], ['100%', '#155e75']],
+    shade: [['0%', 'rgba(8,80,100,.46)'], ['100%', 'rgba(8,80,100,0)']],
+    rim: [['0%', 'rgba(207,250,254,.96)'], ['45%', 'rgba(125,211,252,.55)'], ['100%', 'rgba(125,211,252,0)']],
+    vig: [['0%', 'rgba(6,60,80,0)'], ['60%', 'rgba(6,60,80,0)'], ['100%', 'rgba(6,60,80,.4)']],
+    outline: 'rgba(8,70,90,.42)', pattern: '#0891b2', rings: false
   },
   purple: {
     base: [['0%', '#c084fc'], ['38%', '#a855f7'], ['74%', '#9333ea'], ['100%', '#7e22ce']],
@@ -178,11 +179,11 @@ const PIECE_TINTS = {
     outline: 'rgba(70,10,110,.42)', pattern: '#7e22ce', rings: true
   },
   orange: {
-    base: [['0%', '#93c5fd'], ['38%', '#60a5fa'], ['74%', '#2563eb'], ['100%', '#1e40af']],
-    shade: [['0%', 'rgba(15,40,90,.46)'], ['100%', 'rgba(15,40,90,0)']],
-    rim: [['0%', 'rgba(191,219,254,.96)'], ['45%', 'rgba(147,197,253,.55)'], ['100%', 'rgba(147,197,253,0)']],
-    vig: [['0%', 'rgba(10,25,60,0)'], ['60%', 'rgba(10,25,60,0)'], ['100%', 'rgba(10,25,60,.4)']],
-    outline: 'rgba(12,30,70,.42)', pattern: '#1e40af', rings: false
+    base: [['0%', '#ffd9a0'], ['38%', '#ff9f0a'], ['74%', '#f97316'], ['100%', '#c2410c']],
+    shade: [['0%', 'rgba(160,70,10,.46)'], ['100%', 'rgba(160,70,10,0)']],
+    rim: [['0%', 'rgba(255,235,205,.96)'], ['45%', 'rgba(255,190,110,.55)'], ['100%', 'rgba(255,190,110,0)']],
+    vig: [['0%', 'rgba(140,60,8,0)'], ['60%', 'rgba(140,60,8,0)'], ['100%', 'rgba(140,60,8,.4)']],
+    outline: 'rgba(160,70,10,.42)', pattern: '#f97316', rings: false
   }
 };
 
@@ -303,8 +304,11 @@ function buildPieceNode(owner, doc, tints) {
 }
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
-const COLOR_LABELS = { red: '黄方', blue: '蓝方', green: '绿方', yellow: '青方', purple: '紫方', orange: '蓝灰方' };
-function playerLabel(player) { return COLOR_LABELS[player] || '玩家'; }
+const COLOR_LABELS = { red: '黄方', blue: '蓝方', green: '绿方', yellow: '青方', purple: '紫方', orange: '橙方' };
+// 生日糖果主题沿用「诚实」配色（草莓红/柠檬黄等），与普通的黄/青阵营用不同的中文名，避免色与名错位。
+const BIRTHDAY_LABELS = { red: '红方', blue: '蓝方', green: '绿方', yellow: '黄方', purple: '紫方', orange: '橙方' };
+function activeLabels() { return (window.__checkersBirthday && window.__checkersBirthday.active) ? BIRTHDAY_LABELS : COLOR_LABELS; }
+function playerLabel(player) { return activeLabels()[player] || '玩家'; }
 function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
 function seatByColor(color) { return seats.find(function (seat) { return seat.color === color; }) || null; }
 function seatAiCount() { return seats.filter(function (seat) { return seat.isAI; }).length; }
@@ -928,7 +932,7 @@ function localSeatLabel(index, seat) {
 }
 
 function updatePlayerNames() {
-  if (mode === 'ai') { $('redName').textContent = '你 · 红方'; $('blueName').textContent = '电脑 · 蓝方'; return; }
+  if (mode === 'ai') { $('redName').textContent = '你 · 黄方'; $('blueName').textContent = '电脑 · 蓝方'; return; }
   if (mode === 'local') {
     seats.forEach(function (seat, index) {
       const nameNode = $(seat.color + 'Name');
@@ -1029,7 +1033,7 @@ function updateStatus() {
   $('turnPiece').className = 'turn-piece ' + turn;
   let title = playerLabel(turn) + '回合'; let kicker = playerLabel(viewPlayer) + '固定视角 · 己方在下';
   if (gameOver) { title = playerLabel(gameOver) + '获胜'; kicker = '本局已经结束'; }
-  else if (mode === 'ai') { title = aiThinking || turn === 'blue' ? '电脑思考中…' : '你的回合'; kicker = '你的视角 · 红方始终在下'; }
+  else if (mode === 'ai') { title = aiThinking || turn === 'blue' ? '电脑思考中…' : '你的回合'; kicker = '你的视角 · 黄方始终在下'; }
   else if (mode === 'local') kicker = '固定视角 · 换手不翻转棋盘';
   else if (!online.color) { title = onlineStatusText(); kicker = '加入房间后由服务器分配阵营'; }
   else {

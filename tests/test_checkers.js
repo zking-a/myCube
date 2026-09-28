@@ -311,11 +311,11 @@ ok('六色棋子渐变、暗角与裁剪滤镜全站只注入一份 defs，棋�
 ok('棋子内嵌 SVG 正确创建，颜色写死在渐变里而不是依赖属性中的 var()',
   pieceSvg && pieceSvg.getAttribute('viewBox') === '0 0 100 100' &&
   collectAttrs(pieceSvg, ['fill']).some(function (value) { return value.indexOf('url(#ckg-red-base)') === 0; }) &&
-  collectAttrs(pieceSvg, ['fill']).some(function (value) { return value.indexOf('#a51228') === 0; }) &&
+  collectAttrs(pieceSvg, ['fill']).some(function (value) { return value.indexOf('#e5a800') === 0; }) &&
   collectAttrs(pieceSvg, ['filter']).some(function (value) { return value.indexOf('url(#ckg-soft)') === 0; }) &&
   collectAttrs(pieceSvg, ['stop-color']).every(function (value) { return value.indexOf('var(') !== 0; }) &&
-  collectAttrs(pieceSvg, ['stroke']).some(function (value) { return value.indexOf('rgba(112,8,24') === 0; }) &&
-  collectAttrs(pieceSvg, ['stroke']).every(function (value) { return value.indexOf('rgba(30,10,4') !== 0; }));
+  collectAttrs(pieceSvg, ['stroke']).some(function (value) { return value.indexOf('rgba(150,105,0') === 0; }) &&
+  collectAttrs(pieceSvg, ['stroke']).every(function (value) { return value.indexOf('rgba(112,8,24') !== 0; }));
 
 (readyHandlers.DOMContentLoaded || []).forEach(function (handler) { handler(); });
 const firstCell = holeLayer.children[0];
@@ -324,7 +324,7 @@ ok('页面初始化走通整条渲染链路并写入无障碍标签',
   pieceNodes.length === 20 &&
   /中国跳棋棋盘/.test(boardNodes.board.getAttribute('aria-label')) &&
   /第 \d+ 行/.test(firstCell.getAttribute('aria-label')) &&
-  boardNodes.turnText.textContent.length > 0 && boardNodes.redName.textContent === '你 · 红方');
+  boardNodes.turnText.textContent.length > 0 && boardNodes.redName.textContent === '你 · 黄方');
 ok('初始化后只有一个孔位进入 Tab 序列，配合方向键完成键盘导航',
   holeLayer.children.filter(function (node) { return node.getAttribute('tabindex') === '0'; }).length === 1);
 

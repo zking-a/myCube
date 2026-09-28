@@ -175,7 +175,7 @@ function check(name, value) { assert.ok(value, name); passed++; console.log('PAS
 
     await page.goto(base+'/checkers/play.html?mode=local&birthday=0&intent=new');
     await page.evaluate(()=>{gameOver='red';showWinner('red');});
-    check('普通模式保留原获胜弹窗，没有帷幕、蛋糕或音乐', await page.evaluate(()=>!document.querySelector('.bd-intro')&&!document.querySelector('.bd-cake')&&document.getElementById('winnerTitle').textContent==='红方获胜！'));
+    check('普通模式保留原获胜弹窗，没有帷幕、蛋糕或音乐', await page.evaluate(()=>!document.querySelector('.bd-intro')&&!document.querySelector('.bd-cake')&&document.getElementById('winnerTitle').textContent==='黄方获胜！'));
     check('真实浏览器无脚本异常', errors.length===0);
     console.log('Birthday UI: '+passed+' checks passed. Screenshots: '+output);
   } finally { if(browser) await browser.close();server.kill(); }

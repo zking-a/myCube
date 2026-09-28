@@ -51,21 +51,27 @@ vm.runInContext(src, sandbox, { filename: 'checkers.js' });
 const T = sandbox.__checkersTest;
 
 const FACS = ['red', 'blue', 'green', 'yellow', 'purple', 'orange'];
-const LABELS = { red: '红方', blue: '蓝方', green: '绿方', yellow: '黄方', purple: '紫方', orange: '橙方' };
+const LABELS = { red: '黄方', blue: '蓝方', green: '绿方', yellow: '青方', purple: '紫方', orange: '橙方' };
+const BIRTHDAY_LABELS = { red: '红方', blue: '蓝方', green: '绿方', yellow: '黄方', purple: '紫方', orange: '橙方' };
 
-function rowFor(tints, caption) {
+// 同一文档里两套渐变共用 ckg-* id 时，url(#...) 会全部解析到第一份 defs，导致两行都显示第一套颜色。
+// 给每套主题加前缀，让 defs 与引用一并改名，避免 id 冲突串色。
+function rowFor(tints, caption, prefix, labels) {
   const defsSvg = T.buildPieceDefs(sandbox.document, tints);
   const defsHtml = serialize(defsSvg);
   const cells = FACS.map(function (f) {
     const piece = T.buildPieceNode(f, sandbox.document, tints);
     const pieceHtml = serialize(piece);
-    return '<div class="cell"><div class="piece">' + pieceHtml + '</div><div class="lab">' + LABELS[f] + '</div></div>';
+    return '<div class="cell"><div class="piece">' + pieceHtml + '</div><div class="lab">' + labels[f] + '</div></div>';
   }).join('');
-  return '<h2>' + caption + '</h2><div class="row">' + defsHtml + cells + '</div>';
+  let body = '<div class="row">' + defsHtml + cells + '</div>';
+  // 只需给渐变/滤镜的 ckg-* 加前缀；ckclip-marble 两主题内容相同，共用 id 无妨。
+  if (prefix) body = body.split('ckg-').join(prefix);
+  return '<h2>' + caption + '</h2>' + body;
 }
 
-const candy = rowFor(T.BIRTHDAY_TINTS, '生日主题（?birthday=1 / 9月19日自动开）— 六色分明糖果');
-const glass = rowFor(T.PIECE_TINTS, '普通模式（对照）— 玻璃珠');
+const candy = rowFor(T.BIRTHDAY_TINTS, '生日主题（?birthday=1 / 9月19日自动开）— 六色分明糖果', 'ckg-bd-', BIRTHDAY_LABELS);
+const glass = rowFor(T.PIECE_TINTS, '普通模式 — 玻璃珠（参照 Apple 系统色：黄/蓝/绿/青/紫/橙）', 'ckg-df-', LABELS);
 
 const html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>跳棋棋子预览</title>'
   + '<style>body{font-family:system-ui,"Microsoft YaHei",sans-serif;background:#fff5fb;color:#333;margin:0;padding:28px;}'
@@ -75,7 +81,7 @@ const html = '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><tit
   + '.piece{width:120px;height:120px;} .piece svg{width:100%;height:100%;display:block;}'
   + '.lab{font-size:14px;font-weight:600;}</style></head><body>'
   + '<h1 style="font-size:20px;margin:0 0 4px;">中国跳棋棋子配色预览</h1>'
-  + '<p style="color:#a06;margin:0 0 8px;">生日模式已改为六方各自清晰的糖果色，可一眼区分阵营。</p>'
+  + '<p style="color:#a06;margin:0 0 8px;">普通模式参照 Apple 系统色重调为六方清晰玻璃色，联机好友（客人）为黄色。</p>'
   + candy + glass + '</body></html>';
 
 const out = path.resolve(__dirname, 'preview_pieces.html');
