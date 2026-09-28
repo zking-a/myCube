@@ -20,7 +20,9 @@ function svg(name, attributes) {
   return element;
 }
 function percent(value) { return Number.isFinite(Number(value)) ? Math.round(Number(value) * 100) + '%' : '—'; }
-function winnerText(winner) { return winner === 'red' ? '红方获胜' : (winner === 'blue' ? '蓝方获胜' : '达到训练上限'); }
+// 与主游戏一致：red 键在普通模式即“黄方”，blue 键即“蓝方”（联机房主执蓝、客人执黄）。
+const LAB_LABELS = { red: '黄方', blue: '蓝方' };
+function winnerText(winner) { return LAB_LABELS[winner] ? LAB_LABELS[winner] + '获胜' : '达到训练上限'; }
 function phaseText(phase) {
   if (phase === 'teacher') return '教师采样';
   if (phase === 'self_play' || phase === 'league') return '对手池联赛';
@@ -45,7 +47,7 @@ function renderBoard() {
   const board = $('labBoard');
   board.replaceChildren();
   const defs = svg('defs');
-  defs.innerHTML = '<radialGradient id="labRed" cx="35%" cy="25%"><stop offset="0" stop-color="#ffaaa2"/><stop offset="1" stop-color="#c93648"/></radialGradient><radialGradient id="labBlue" cx="35%" cy="25%"><stop offset="0" stop-color="#9ab2ff"/><stop offset="1" stop-color="#304bc9"/></radialGradient>';
+  defs.innerHTML = '<radialGradient id="labRed" cx="35%" cy="25%"><stop offset="0" stop-color="#fff1a8"/><stop offset="38%" stop-color="#ffd60a"/><stop offset="74%" stop-color="#f2b300"/><stop offset="100%" stop-color="#c88900"/></radialGradient><radialGradient id="labBlue" cx="35%" cy="25%"><stop offset="0" stop-color="#a8cbff"/><stop offset="38%" stop-color="#5ca5ff"/><stop offset="74%" stop-color="#1a73e8"/><stop offset="100%" stop-color="#0b4fb8"/></radialGradient>';
   board.appendChild(defs);
   const pieces = piecesAt(step);
   const cells = Core.BOARD_CELLS;
@@ -70,7 +72,7 @@ function renderBoard() {
   $('replayRange').value = String(step);
   const current = step ? replay.actions[step - 1] : null;
   $('replayDetail').textContent = current
-    ? (current.player === 'red' ? '红方' : '蓝方') + ' · ' + (current.kind === 'jump' ? '跳跃' : '相邻移动') + ' · ' + current.from + ' → ' + current.target
+    ? (LAB_LABELS[current.player] || current.player) + ' · ' + (current.kind === 'jump' ? '跳跃' : '相邻移动') + ' · ' + current.from + ' → ' + current.target
     : (replay.live && replay.active
       ? '训练进行中 · 等待当前对局落子'
       : winnerText(replay.winner) + ' · 共 ' + replay.moves + ' 手');
