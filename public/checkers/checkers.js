@@ -123,11 +123,11 @@ function candyTint(light, mid, deep, edge, outline, pattern) {
   };
 }
 const BIRTHDAY_TINTS = {
-  red: candyTint('#e0f2fe', '#7dd3fc', '#0ea5e9', '#0e7490', '#0c4a5e', '#0ea5e9'),
-  blue: candyTint('#e0e7ff', '#a5b4fc', '#6366f1', '#4338ca', '#312e81', '#6366f1'),
+  red: candyTint('#fef3c7', '#fbbf24', '#f59e0b', '#b45309', '#78350f', '#f59e0b'),
+  blue: candyTint('#ede9fe', '#a78bfa', '#8b5cf6', '#6d28d9', '#4c1d95', '#8b5cf6'),
   green: candyTint('#d1fae5', '#6ee7b7', '#10b981', '#047857', '#064e3b', '#10b981'),
-  yellow: candyTint('#e0e7ff', '#a5b4fc', '#6366f1', '#4338ca', '#312e81', '#6366f1'),
-  purple: candyTint('#f3e8ff', '#c8a2f2', '#a855f7', '#5b2fa8', '#3b0764', '#a855f7'),
+  yellow: candyTint('#e0f2fe', '#7dd3fc', '#0ea5e9', '#0e7490', '#0c4a5e', '#0ea5e9'),
+  purple: candyTint('#f3e8ff', '#c084fc', '#a855f7', '#7e22ce', '#581c87', '#a855f7'),
   orange: candyTint('#dbeafe', '#93c5fd', '#3b82f6', '#1e40af', '#1e3a8a', '#3b82f6')
 };
 // 糖针几何：中心半径 ~30，远小于裁剪圆 r=50
@@ -143,18 +143,18 @@ function activeTints() {
 
 const PIECE_TINTS = {
   red: {
-    base: [['0%', '#7dd3fc'], ['38%', '#38bdf8'], ['74%', '#0284c7'], ['100%', '#0e7490']],
-    shade: [['0%', 'rgba(8,80,110,.46)'], ['100%', 'rgba(8,80,110,0)']],
-    rim: [['0%', 'rgba(186,230,253,.96)'], ['45%', 'rgba(125,211,252,.55)'], ['100%', 'rgba(125,211,252,0)']],
-    vig: [['0%', 'rgba(8,60,80,0)'], ['60%', 'rgba(8,60,80,0)'], ['100%', 'rgba(8,60,80,.4)']],
-    outline: 'rgba(10,70,90,.42)', pattern: '#0e7490', rings: false
+    base: [['0%', '#fde68a'], ['38%', '#fbbf24'], ['74%', '#d97706'], ['100%', '#92400e']],
+    shade: [['0%', 'rgba(120,80,0,.46)'], ['100%', 'rgba(120,80,0,0)']],
+    rim: [['0%', 'rgba(254,243,199,.96)'], ['45%', 'rgba(253,230,138,.55)'], ['100%', 'rgba(253,230,138,0)']],
+    vig: [['0%', 'rgba(100,60,0,0)'], ['60%', 'rgba(100,60,0,0)'], ['100%', 'rgba(100,60,0,.4)']],
+    outline: 'rgba(140,90,0,.42)', pattern: '#b45309', rings: false
   },
   blue: {
-    base: [['0%', '#84a4ff'], ['38%', '#5b74f0'], ['74%', '#344ec9'], ['100%', '#243ba8']],
-    shade: [['0%', 'rgba(20,40,100,.46)'], ['100%', 'rgba(20,40,100,0)']],
-    rim: [['0%', 'rgba(191,219,254,.96)'], ['45%', 'rgba(147,197,253,.55)'], ['100%', 'rgba(147,197,253,0)']],
-    vig: [['0%', 'rgba(10,25,70,0)'], ['60%', 'rgba(10,25,70,0)'], ['100%', 'rgba(10,25,70,.4)']],
-    outline: 'rgba(15,35,90,.42)', pattern: '#304bc9', rings: true
+    base: [['0%', '#a78bfa'], ['38%', '#8b5cf6'], ['74%', '#7c3aed'], ['100%', '#6d28d9']],
+    shade: [['0%', 'rgba(60,20,120,.46)'], ['100%', 'rgba(60,20,120,0)']],
+    rim: [['0%', 'rgba(221,214,254,.96)'], ['45%', 'rgba(196,181,253,.55)'], ['100%', 'rgba(196,181,253,0)']],
+    vig: [['0%', 'rgba(40,15,90,0)'], ['60%', 'rgba(40,15,90,0)'], ['100%', 'rgba(40,15,90,.4)']],
+    outline: 'rgba(50,20,100,.42)', pattern: '#6d28d9', rings: true
   },
   green: {
     base: [['0%', '#6ee7b7'], ['38%', '#34d399'], ['74%', '#059669'], ['100%', '#047857']],
@@ -164,18 +164,18 @@ const PIECE_TINTS = {
     outline: 'rgba(5,50,30,.42)', pattern: '#047857', rings: true
   },
   yellow: {
-    base: [['0%', '#a5b4fc'], ['38%', '#818cf8'], ['74%', '#4f46e5'], ['100%', '#4338ca']],
-    shade: [['0%', 'rgba(40,30,100,.46)'], ['100%', 'rgba(40,30,100,0)']],
-    rim: [['0%', 'rgba(199,210,254,.96)'], ['45%', 'rgba(165,180,252,.55)'], ['100%', 'rgba(165,180,252,0)']],
-    vig: [['0%', 'rgba(30,20,80,0)'], ['60%', 'rgba(30,20,80,0)'], ['100%', 'rgba(30,20,80,.4)']],
-    outline: 'rgba(35,25,90,.42)', pattern: '#4338ca', rings: false
+    base: [['0%', '#7dd3fc'], ['38%', '#38bdf8'], ['74%', '#0284c7'], ['100%', '#0e7490']],
+    shade: [['0%', 'rgba(8,80,110,.46)'], ['100%', 'rgba(8,80,110,0)']],
+    rim: [['0%', 'rgba(186,230,253,.96)'], ['45%', 'rgba(125,211,252,.55)'], ['100%', 'rgba(125,211,252,0)']],
+    vig: [['0%', 'rgba(8,60,80,0)'], ['60%', 'rgba(8,60,80,0)'], ['100%', 'rgba(8,60,80,.4)']],
+    outline: 'rgba(10,70,90,.42)', pattern: '#0e7490', rings: false
   },
   purple: {
-    base: [['0%', '#c8a2f2'], ['38%', '#8f5bd6'], ['74%', '#6a3aa8'], ['100%', '#3f1f6e']],
-    shade: [['0%', 'rgba(52,24,96,.46)'], ['100%', 'rgba(52,24,96,0)']],
-    rim: [['0%', 'rgba(226,200,255,.96)'], ['45%', 'rgba(196,160,250,.55)'], ['100%', 'rgba(196,160,250,0)']],
-    vig: [['0%', 'rgba(40,18,76,0)'], ['60%', 'rgba(40,18,76,0)'], ['100%', 'rgba(40,18,76,.4)']],
-    outline: 'rgba(58,30,110,.42)', pattern: '#5b2fa8', rings: true
+    base: [['0%', '#c084fc'], ['38%', '#a855f7'], ['74%', '#9333ea'], ['100%', '#7e22ce']],
+    shade: [['0%', 'rgba(80,10,120,.46)'], ['100%', 'rgba(80,10,120,0)']],
+    rim: [['0%', 'rgba(243,232,255,.96)'], ['45%', 'rgba(216,180,254,.55)'], ['100%', 'rgba(216,180,254,0)']],
+    vig: [['0%', 'rgba(60,5,100,0)'], ['60%', 'rgba(60,5,100,0)'], ['100%', 'rgba(60,5,100,.4)']],
+    outline: 'rgba(70,10,110,.42)', pattern: '#7e22ce', rings: true
   },
   orange: {
     base: [['0%', '#93c5fd'], ['38%', '#60a5fa'], ['74%', '#2563eb'], ['100%', '#1e40af']],
@@ -303,7 +303,7 @@ function buildPieceNode(owner, doc, tints) {
 }
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
-const COLOR_LABELS = { red: '红方', blue: '蓝方', green: '绿方', yellow: '黄方', purple: '紫方', orange: '橙方' };
+const COLOR_LABELS = { red: '黄方', blue: '蓝方', green: '绿方', yellow: '青方', purple: '紫方', orange: '蓝灰方' };
 function playerLabel(player) { return COLOR_LABELS[player] || '玩家'; }
 function opposite(player) { return player === 'red' ? 'blue' : 'red'; }
 function seatByColor(color) { return seats.find(function (seat) { return seat.color === color; }) || null; }
